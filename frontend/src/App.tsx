@@ -205,9 +205,9 @@ function App() {
             <img
               src="/rabbit_oligool.png"
               alt="Oligool Logo"
-              className={`absolute h-96 w-auto object-contain z-10 pointer-events-none hidden lg:block opacity-90 transition-all duration-500 ${step === 'done'
-                ? 'top-[-158px] left-[calc(100%+40px)]'
-                : 'top-[-178px] left-[calc(100%+40px)]'
+              className={`absolute h-96 w-auto object-contain z-10 pointer-events-none hidden lg:block opacity-90 transition-all duration-500 xl:left-[calc(100%+40px)] lg:left-[calc(100%-80px)] ${step === 'done'
+                ? 'top-[-154px]'
+                : 'top-[-174px]'
                 }`}
             />
           </div>
@@ -324,6 +324,14 @@ function App() {
                     className="px-4 py-2 text-sm font-medium rounded-lg border border-slate-300 text-slate-600 hover:bg-slate-50 transition-colors"
                   >
                     Reset
+                  </button>
+                )}
+                {step === 'input' && blastHits.length > 0 && (
+                  <button
+                    onClick={() => setStep('done')}
+                    className="px-4 py-2 text-sm font-medium rounded-lg border border-slate-300 text-slate-600 hover:bg-slate-50 transition-colors"
+                  >
+                    Go Back
                   </button>
                 )}
                 <button

@@ -9,20 +9,13 @@ interface ParsedSequence {
     seq: string;
 }
 
-/* ── colour palette ───────────────────────────────────── */
-const NT_COLORS: Record<string, { bg: string; fg: string }> = {
-    A: { bg: '#fee2e2', fg: '#991b1b' },
-    T: { bg: '#dbeafe', fg: '#1e40af' },
-    G: { bg: '#fef9c3', fg: '#854d0e' },
-    C: { bg: '#dcfce7', fg: '#166534' },
-    '-': { bg: '#f3f4f6', fg: '#9ca3af' },
-};
+
 
 /* ── constants ────────────────────────────────────────── */
 const LABEL_WIDTH = 140;
 const RULER_HEIGHT = 24;
 const ROW_HEIGHT = 18;
-const VIEWER_HEIGHT = 500;
+const MAX_VIEWER_HEIGHT = 500;
 const BP_THRESHOLD = 100;
 const HYSTERESIS = 15;
 const MINIMAP_GC_H = 40;
@@ -42,6 +35,7 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment }) => {
     const [viewFraction, setViewFraction] = useState(1);
     const [viewMode, setViewMode] = useState<'bars' | 'letters'>('bars');
     const [copyFeedback, setCopyFeedback] = useState('');
+    const [selectionRange, setSelectionRange] = useState<{ start: number; end: number } | null>(null);
 
     /* ── parse FASTA ────────────────────────────────────── */
     const sequences = useMemo<ParsedSequence[]>(() => {
@@ -260,54 +254,94 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment }) => {
             for (let col = 0; col < seqLen; col++) {
                 const ch = (s.seq[col] || '-').toUpperCase();
                 const qch = (querySeq[col] || '-').toUpperCase();
-                if (ch === '-') continue;
-                if (ch !== qch && qch !== '-') {
-                    const x = LABEL_WIDTH + (col / seqLen) * mmSeqW;
+
+                const x = LABEL_WIDTH + (col / seqLen) * mmSeqW;
+                const w = Math.max(1, mmSeqW / seqLen);
+                const h = Math.max(1, rowH - 0.5);
+
+                // Violet for:
+                // 1) Insertion vs Query (qch == '-')
+                // 2) Internal Deletion (ch == '-' inside start/end)
+                const isInternalDeletion = !isQuery && ch === '-' && col >= sStart && col <= sEnd;
+                const isInsertion = !isQuery && qch === '-' && ch !== '-';
+
+                if (isInternalDeletion || isInsertion) {
+                    ctx.fillStyle = '#9333ea';
+                    ctx.fillRect(x, y, w, h);
+                } else if (!isQuery && ch !== '-' && ch !== qch && qch !== '-') {
+                    // Mismatch vs Query (Red)
                     ctx.fillStyle = '#dc2626';
-                    ctx.fillRect(x, y, Math.max(1, mmSeqW / seqLen), Math.max(1, rowH - 0.5));
+                    ctx.fillRect(x, y, w, h);
                 }
             }
         }
 
-        // ── viewport highlight (blue) ──
-        const selX = Math.floor(LABEL_WIDTH + startFrac * mmSeqW) + 0.5;
-        const selW = Math.max(1, Math.floor((endFrac - startFrac) * mmSeqW));
+        // ── viewport highlight (blue) or selection (green) ──
 
-        // dim areas outside selection
-        ctx.fillStyle = 'rgba(255,255,255,0.6)';
-        ctx.fillRect(LABEL_WIDTH, rowsTop, selX - LABEL_WIDTH - 0.5, rowAreaH);
-        ctx.fillRect(selX + selW, rowsTop, availableWidth - (selX + selW), rowAreaH);
+        // 1) Draw Selection (Green) if active
+        if (selectionRange) {
+            const s = Math.min(selectionRange.start, selectionRange.end);
+            const e = Math.max(selectionRange.start, selectionRange.end);
+            const selX = Math.floor(LABEL_WIDTH + s * mmSeqW) + 0.5;
+            const selW = Math.max(1, Math.floor((e - s) * mmSeqW));
 
-        // selection border (Sharp 1px via +0.5 offset)
-        ctx.strokeStyle = '#3b82f6';
-        ctx.lineWidth = 1;
-        ctx.strokeRect(selX, rowsTop, selW, rowAreaH);
+            ctx.fillStyle = 'rgba(74, 222, 128, 0.4)'; // Pastel Green
+            ctx.fillRect(selX, rowsTop, selW, rowAreaH);
 
-        // selection fill
-        ctx.fillStyle = 'rgba(59, 130, 246, 0.08)';
-        ctx.fillRect(selX, rowsTop, selW, rowAreaH);
+            ctx.strokeStyle = '#22c55e'; // Green border
+            ctx.lineWidth = 1;
+            ctx.strokeRect(selX, rowsTop, selW, rowAreaH);
+        }
 
-        // ── small bottom handle ──
-        const handleColor = '#3b82f6';
-        ctx.fillStyle = handleColor;
+        // 2) Draw Viewport (Blue) ONLY if zoomed in (viewFraction < 0.99)
+        // If we are fully zoomed out, we hide the blue box as requested.
+        if (viewFraction < 0.99) {
+            const selX = Math.floor(LABEL_WIDTH + startFrac * mmSeqW) + 0.5;
+            const selW = Math.max(1, Math.floor((endFrac - startFrac) * mmSeqW));
 
-        // Ensure handle has minimum visual width (16px) so it is visible even if selection is 1px
-        const minHandleW = 16;
-        const handleDrawW = Math.max(selW, minHandleW);
+            // dim areas outside viewport (only if NO selection is ongoing, for clarity?)
+            // actually, standard minimap dims outside viewport usually.
+            // But user said "User would see just the empty bar".
+            // Let's keep the dimming only if blue box is visible, or maybe always?
+            // "User would see just the empty bar" suggests NO dimming initially either.
+            // So if > 0.99, we draw nothing extra.
 
-        // Center the handle on the selection
-        let handleX = selX + selW / 2 - handleDrawW / 2;
+            // dim areas outside selection
+            ctx.fillStyle = 'rgba(255,255,255,0.6)';
+            ctx.fillRect(LABEL_WIDTH, rowsTop, selX - LABEL_WIDTH - 0.5, rowAreaH);
+            ctx.fillRect(selX + selW, rowsTop, availableWidth - (selX + selW), rowAreaH);
 
-        // Clamp to minimap bounds so it doesn't leave the area
-        handleX = Math.max(LABEL_WIDTH, Math.min(LABEL_WIDTH + mmSeqW - handleDrawW, handleX));
+            // selection border (Sharp 1px via +0.5 offset)
+            ctx.strokeStyle = '#3b82f6';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(selX, rowsTop, selW, rowAreaH);
 
-        // Draw handle rect crisp
-        ctx.fillRect(Math.floor(handleX), rowsTop + rowAreaH, handleDrawW, MINIMAP_HANDLE_H - 1);
+            // selection fill
+            ctx.fillStyle = 'rgba(59, 130, 246, 0.08)';
+            ctx.fillRect(selX, rowsTop, selW, rowAreaH);
+
+            // ── small bottom handle ──
+            const handleColor = '#3b82f6';
+            ctx.fillStyle = handleColor;
+
+            // Ensure handle has minimum visual width (16px) so it is visible even if selection is 1px
+            const minHandleW = 16;
+            const handleDrawW = Math.max(selW, minHandleW);
+
+            // Center the handle on the selection
+            let handleX = selX + selW / 2 - handleDrawW / 2;
+
+            // Clamp to minimap bounds so it doesn't leave the area
+            handleX = Math.max(LABEL_WIDTH, Math.min(LABEL_WIDTH + mmSeqW - handleDrawW, handleX));
+
+            // Draw handle rect crisp
+            ctx.fillRect(Math.floor(handleX), rowsTop + rowAreaH, handleDrawW, MINIMAP_HANDLE_H - 1);
+        }
 
         // label divider
         ctx.fillStyle = '#cbd5e1';
         ctx.fillRect(LABEL_WIDTH - 1, 0, 1, MINIMAP_HEIGHT);
-    }, [sequences, querySeq, seqLen, availableWidth, startFrac, endFrac, gcContent]);
+    }, [sequences, querySeq, seqLen, availableWidth, startFrac, endFrac, gcContent, viewFraction, selectionRange]);
 
     useEffect(() => { drawMinimap(); }, [drawMinimap]);
 
@@ -319,65 +353,70 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment }) => {
         if (!canvas) return;
         const rect = canvas.getBoundingClientRect();
         const mmSeqW = rect.width - LABEL_WIDTH;
-        const mouseXFrac = (e.clientX - rect.left - LABEL_WIDTH) / mmSeqW;
+        const mouseXFrac = Math.max(0, Math.min(1, (e.clientX - rect.left - LABEL_WIDTH) / mmSeqW));
 
         // Capture current viewport
         const curSeqAreaW = availableWidth - LABEL_WIDTH;
-        const curTotalVW = curSeqAreaW / viewFraction;
-        const curStart = scrollLeft / curTotalVW;
+        // const curTotalVW = curSeqAreaW / viewFraction; // unused in select mode
+        const curStart = scrollLeft / (curSeqAreaW / viewFraction);
         const curEnd = curStart + viewFraction;
         const handleZone = 10 / mmSeqW; // 10px side handle zone
 
-        let dragType: 'pan' | 'left' | 'right';
+        let dragType: 'select' | 'left' | 'right';
 
-        // Check for center handle hit (widened zone if viewport is small)
-        const center = (curStart + curEnd) / 2;
+        // Check for handles ONLY if blue box is visible
+        const blueBoxVisible = viewFraction < 0.99;
 
-        // Minimum handle width in fraction of total width
-        const minHandleWFrac = 40 / mmSeqW;
-
-        // The effective handle width is roughly the larger of viewport width fraction or minHandleWFrac
-        // If viewport is smaller than minHandleWFrac, we use minHandleWFrac for the hit zone
-        const effectiveHandleWFrac = Math.max(curEnd - curStart, minHandleWFrac);
-
-        // Because the handle is centered, the hit zone is center +/- half the effective width
-        const isCenterHit = Math.abs(mouseXFrac - center) < effectiveHandleWFrac / 2;
-
-        if (Math.abs(mouseXFrac - curStart) < handleZone && mouseXFrac < curEnd) {
-            dragType = 'left';
-        } else if (Math.abs(mouseXFrac - curEnd) < handleZone && mouseXFrac > curStart) {
-            dragType = 'right';
-        } else if ((mouseXFrac >= curStart && mouseXFrac <= curEnd) || isCenterHit) {
-            dragType = 'pan';
+        if (blueBoxVisible) {
+            if (Math.abs(mouseXFrac - curStart) < handleZone && mouseXFrac < curEnd) {
+                dragType = 'left';
+            } else if (Math.abs(mouseXFrac - curEnd) < handleZone && mouseXFrac > curStart) {
+                dragType = 'right';
+            } else {
+                dragType = 'select';
+            }
         } else {
-            // Click outside → jump viewport center, then pan
-            const halfVF = viewFraction / 2;
-            const jumpStart = Math.max(0, Math.min(1 - viewFraction, mouseXFrac - halfVF));
-            const jumpSL = jumpStart * curTotalVW;
-            setScrollLeft(jumpSL);
-            targetScrollRef.current = jumpSL;
-            dragType = 'pan';
-            // Update origin for drag
-            const startClientX = e.clientX;
-            const onMove = makeMoveHandler('pan', startClientX, jumpStart, jumpStart + viewFraction, curSeqAreaW, mmSeqW);
-            const onUp = () => {
-                isDragging.current = false;
-                document.removeEventListener('mousemove', onMove);
-                document.removeEventListener('mouseup', onUp);
-            };
-            isDragging.current = true;
-            document.addEventListener('mousemove', onMove);
-            document.addEventListener('mouseup', onUp);
-            e.preventDefault();
-            return;
+            dragType = 'select';
+        }
+
+        if (dragType === 'select') {
+            // Init selection
+            setSelectionRange({ start: mouseXFrac, end: mouseXFrac });
+            // No need to set scroll/view yet
         }
 
         const startClientX = e.clientX;
-        const onMove = makeMoveHandler(dragType, startClientX, curStart, curEnd, curSeqAreaW, mmSeqW);
+        const onMove = makeMoveHandler(dragType, startClientX, curStart, curEnd, curSeqAreaW, mmSeqW, mouseXFrac);
+
         const onUp = () => {
             isDragging.current = false;
             document.removeEventListener('mousemove', onMove);
             document.removeEventListener('mouseup', onUp);
+
+            // Finalize selection logic
+            if (dragType === 'select') {
+                setSelectionRange((prev) => {
+                    if (!prev) return null;
+                    const s = Math.min(prev.start, prev.end);
+                    const e = Math.max(prev.start, prev.end);
+                    // If selection is tiny (click), maybe just ignore or zoom in a bit?
+                    // Let's enforce a minimum 0.5% width to avoid accidental clicks
+                    if (e - s < 0.005) {
+                        return null; // Cancel
+                    }
+
+                    // Apply zoom
+                    const newVF = e - s;
+                    const newTotalW = curSeqAreaW / newVF;
+                    const newSL = s * newTotalW;
+
+                    setViewFraction(newVF);
+                    setScrollLeft(newSL);
+                    targetScrollRef.current = newSL;
+
+                    return null; // Clear selection rectangle
+                });
+            }
         };
         isDragging.current = true;
         document.addEventListener('mousemove', onMove);
@@ -386,26 +425,28 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment }) => {
     }, [availableWidth, viewFraction, scrollLeft, seqAreaW]);
 
     const makeMoveHandler = useCallback((
-        dragType: 'pan' | 'left' | 'right',
+        dragType: 'select' | 'left' | 'right',
         startClientX: number,
         origStart: number,
         origEnd: number,
         curSeqAreaW: number,
         mmSeqW: number,
+        origMouseFrac: number
     ) => {
         return (ev: MouseEvent) => {
             const deltaFrac = (ev.clientX - startClientX) / mmSeqW;
+
+            if (dragType === 'select') {
+                const currentMouseFrac = Math.max(0, Math.min(1, origMouseFrac + deltaFrac));
+                setSelectionRange({ start: origMouseFrac, end: currentMouseFrac });
+                return;
+            }
+
+            // Standard Resize Logic
             let newStart = origStart;
             let newEnd = origEnd;
 
-            if (dragType === 'pan') {
-                const shift = deltaFrac;
-                newStart = origStart + shift;
-                newEnd = origEnd + shift;
-                const width = origEnd - origStart;
-                if (newStart < 0) { newStart = 0; newEnd = width; }
-                if (newEnd > 1) { newEnd = 1; newStart = 1 - width; }
-            } else if (dragType === 'left') {
+            if (dragType === 'left') {
                 newStart = Math.max(0, Math.min(origEnd - 0.005, origStart + deltaFrac));
             } else {
                 newEnd = Math.min(1, Math.max(origStart + 0.005, origEnd + deltaFrac));
@@ -428,19 +469,25 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment }) => {
         const rect = canvas.getBoundingClientRect();
         const mmSeqW = rect.width - LABEL_WIDTH;
         const mouseXFrac = (e.clientX - rect.left - LABEL_WIDTH) / mmSeqW;
-        const curTotalVW = seqAreaW / viewFraction;
+
+        const curSeqAreaW = availableWidth - LABEL_WIDTH;
+        const curTotalVW = curSeqAreaW / viewFraction;
         const curStart = scrollLeft / curTotalVW;
         const curEnd = curStart + viewFraction;
         const handleZone = 10 / mmSeqW;
 
-        if (Math.abs(mouseXFrac - curStart) < handleZone || Math.abs(mouseXFrac - curEnd) < handleZone) {
-            canvas.style.cursor = 'ew-resize';
-        } else if (mouseXFrac >= curStart && mouseXFrac <= curEnd) {
-            canvas.style.cursor = 'grab';
+        const blueBoxVisible = viewFraction < 0.99;
+
+        if (blueBoxVisible) {
+            if (Math.abs(mouseXFrac - curStart) < handleZone || Math.abs(mouseXFrac - curEnd) < handleZone) {
+                canvas.style.cursor = 'ew-resize';
+            } else {
+                canvas.style.cursor = 'crosshair'; // Selecting is default inside or out
+            }
         } else {
-            canvas.style.cursor = 'pointer';
+            canvas.style.cursor = 'crosshair'; // Always selecting if full view
         }
-    }, [seqAreaW, viewFraction, scrollLeft]);
+    }, [seqAreaW, viewFraction, scrollLeft, availableWidth]);
 
     /* ══════════════════════════════════════════════════════
        MAIN CANVAS DRAWING
@@ -501,14 +548,53 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment }) => {
             const y = RULER_HEIGHT + row * ROW_HEIGHT;
             const isQuery = row === 0;
 
+            const sStart = seqStart(s.seq);
+            const sEnd = seqEnd(s.seq);
+
             if (viewMode === 'letters') {
                 for (let col = firstCol; col <= lastCol; col++) {
                     const ch = (s.seq[col] || '-').toUpperCase();
+                    const qch = (querySeq[col] || '-').toUpperCase();
+
                     const x = LABEL_WIDTH + col * cellW - scrollLeft;
-                    const c = NT_COLORS[ch] || { bg: '#fff', fg: '#374151' };
-                    ctx.fillStyle = c.bg;
+
+                    let bg = '#f3f4f6'; // default/match gray
+                    let fg = '#374151';
+
+                    // Determine sequence boundaries for internal/external gap logic
+                    // We can optimize by calculating sStart/sEnd outside the loop if needed, 
+                    // but doing it per row is fine (seqStart is fast).
+                    // Actually, let's hoist it out of the column loop for the row.
+
+                    // (Hoisted above loop)
+
+                    if (ch === '-') {
+                        if (!isQuery && col >= sStart && col <= sEnd) {
+                            // Internal Deletion (Violet)
+                            bg = '#f3e8ff';
+                            fg = '#7e22ce';
+                        } else {
+                            // External Deletion (Gray)
+                            bg = '#f3f4f6';
+                            fg = '#9ca3af';
+                        }
+                    } else if (!isQuery && qch === '-' && ch !== '-') {
+                        // Insertion vs Query (Violet)
+                        bg = '#f3e8ff';
+                        fg = '#7e22ce';
+                    } else if (!isQuery && ch !== qch && qch !== '-') {
+                        // Mismatch (Red)
+                        bg = '#fee2e2';
+                        fg = '#b91c1c';
+                    } else {
+                        // Match or Query
+                        bg = '#f3f4f6';
+                        fg = '#374151';
+                    }
+
+                    ctx.fillStyle = bg;
                     ctx.fillRect(x, y, cellW + 0.5, ROW_HEIGHT);
-                    ctx.fillStyle = c.fg;
+                    ctx.fillStyle = fg;
                     const fs = Math.min(13, Math.max(8, cellW * 0.8));
                     ctx.font = `${fs}px ui-monospace, SFMono-Regular, monospace`;
                     ctx.textAlign = 'center';
@@ -530,8 +616,18 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment }) => {
                     const ch = (s.seq[col] || '-').toUpperCase();
                     const qch = (querySeq[col] || '-').toUpperCase();
                     if (ch === '-') continue;
-                    if (ch !== qch && qch !== '-') {
-                        const x = LABEL_WIDTH + col * cellW - scrollLeft;
+
+                    const x = LABEL_WIDTH + col * cellW - scrollLeft;
+
+                    const isInternalDeletion = !isQuery && ch === '-' && col >= sStart && col <= sEnd;
+                    const isInsertion = !isQuery && qch === '-' && ch !== '-';
+
+                    if (isInternalDeletion || isInsertion) {
+                        // Violet (Stronger for bars)
+                        ctx.fillStyle = '#9333ea';
+                        ctx.fillRect(x, y + 2, Math.max(1, cellW), ROW_HEIGHT - 4);
+                    } else if (!isQuery && ch !== '-' && ch !== qch && qch !== '-') {
+                        // Mismatch vs Query (Red)
                         ctx.fillStyle = '#dc2626';
                         ctx.fillRect(x, y + 2, Math.max(1, cellW), ROW_HEIGHT - 4);
                     }
@@ -577,7 +673,36 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment }) => {
         if (e.ctrlKey || e.metaKey) {
             e.preventDefault();
             const factor = e.deltaY > 0 ? 1.15 : 0.87;
-            setViewFraction((p) => Math.max(0.005, Math.min(1, p * factor)));
+
+            // Calculate mouse position relative to the sequence view
+            const rect = scrollRef.current?.getBoundingClientRect();
+            if (!rect) return;
+
+            const offsetX = e.clientX - rect.left - LABEL_WIDTH;
+            const seqAreaWidth = rect.width - LABEL_WIDTH; // Should match seqAreaW effectively
+
+            // If mouse is over labels, just zoom center or left? Let's assume clamping to 0 if < 0.
+            const validOffsetX = Math.max(0, Math.min(seqAreaWidth, offsetX));
+
+            // Current global fraction under mouse
+            const currentTotalVirtualW = seqAreaWidth / viewFraction;
+            const mouseFracGlobal = (scrollLeft + validOffsetX) / currentTotalVirtualW;
+
+            // Apply new zoom
+            const newVF = Math.max(0.005, Math.min(1, viewFraction * factor));
+
+            // Calculate new ScrollLeft to keep mouseFracGlobal at validOffsetX
+            const newTotalVirtualW = seqAreaWidth / newVF;
+            let newSL = mouseFracGlobal * newTotalVirtualW - validOffsetX;
+
+            // Clamp scroll
+            newSL = Math.max(0, Math.min(newTotalVirtualW - seqAreaWidth, newSL));
+
+            setViewFraction(newVF);
+            setScrollLeft(newSL);
+
+            // Sync with ref if needed, though we updated state directly
+            if (scrollRef.current) scrollRef.current.scrollLeft = newSL;
         }
     };
 
@@ -673,7 +798,7 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment }) => {
                             title="Zoom in"
                         >+</button>
                     </div>
-                    <span className="text-xs text-slate-400 font-mono w-12 text-right">{Math.round(visibleBases)} bp</span>
+                    <span className="text-xs text-slate-400 font-mono w-20 text-right">{Math.round(visibleBases)} bp</span>
                 </div>
             </div>
 
@@ -681,7 +806,7 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment }) => {
             <div className="border-b border-slate-200 bg-slate-50">
                 <canvas
                     ref={minimapRef}
-                    style={{ display: 'block', cursor: 'grab' }}
+                    style={{ display: 'block', cursor: 'crosshair' }}
                     onMouseDown={handleMinimapMouseDown}
                     onMouseMove={handleMinimapMouseMove}
                 />
@@ -689,40 +814,28 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment }) => {
 
             {/* ── legend ── */}
             <div className="px-5 py-1.5 border-b border-slate-100 bg-white flex items-center gap-4 text-xs text-slate-500">
-                {viewMode === 'letters' ? (
-                    <>
-                        {Object.entries({ A: '#fee2e2', T: '#dbeafe', G: '#fef9c3', C: '#dcfce7' }).map(
-                            ([nt, bg]) => (
-                                <span key={nt} className="flex items-center gap-1">
-                                    <span className="inline-block w-3 h-3 rounded-sm" style={{ background: bg }} />{nt}
-                                </span>
-                            ),
-                        )}
-                        <span className="flex items-center gap-1">
-                            <span className="inline-block w-3 h-3 rounded-sm" style={{ background: '#f3f4f6' }} />Gap
-                        </span>
-                        <span className="ml-auto italic text-slate-400">Click a row to copy its sequence</span>
-                    </>
-                ) : (
-                    <>
-                        <span className="flex items-center gap-1">
-                            <span className="inline-block w-3 h-3 rounded-sm" style={{ background: '#e2e8f0' }} />
-                            Sequence
-                        </span>
-                        <span className="flex items-center gap-1">
-                            <span className="inline-block w-3 h-3 rounded-sm" style={{ background: '#dc2626' }} />
-                            Mismatch vs query
-                        </span>
-                        <span className="ml-auto italic">Ctrl/⌘ + scroll to zoom · Drag minimap to navigate</span>
-                    </>
-                )}
+                <span className="flex items-center gap-1">
+                    <span className="inline-block w-3 h-3 rounded-sm" style={{ background: '#f3f4f6' }} />
+                    Sequence / Match
+                </span>
+                <span className="flex items-center gap-1">
+                    <span className="inline-block w-3 h-3 rounded-sm" style={{ background: '#fee2e2' }} />
+                    Mismatch
+                </span>
+                <span className="flex items-center gap-1">
+                    <span className="inline-block w-3 h-3 rounded-sm" style={{ background: '#9333ea' }} />
+                    Insertion / Deletion
+                </span>
+                <span className="ml-auto italic text-slate-400">
+                    {viewMode === 'letters' ? 'Click a row to copy' : 'Drag minimap to zoom/select · Ctrl/⌘ + scroll to zoom'}
+                </span>
             </div>
 
             {/* ── scrollable canvas area ── */}
             <div
                 ref={scrollRef}
-                className="overflow-x-auto overflow-y-auto"
-                style={{ height: `${VIEWER_HEIGHT}px` }}
+                className="overflow-x-auto overflow-y-auto overscroll-contain"
+                style={{ height: `${Math.min(totalH, MAX_VIEWER_HEIGHT)}px` }}
                 onScroll={handleScroll}
                 onWheel={handleWheel}
             >
@@ -735,22 +848,24 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment }) => {
             </div>
 
             {/* ── selection stats footer ── */}
-            {selectionStats && (
-                <div className="bg-slate-50 border-t border-slate-200 px-5 py-2 text-xs text-slate-600 font-mono flex items-center justify-between">
-                    <div className="flex items-center gap-4">
-                        <span className="font-semibold text-slate-700">Visible Range: {startCol + 1}–{endCol + 1}</span>
-                        <span>Length: {selectionStats.total} bp</span>
-                        <span className="text-emerald-700 font-medium">GC: {selectionStats.gcPct.toFixed(1)}%</span>
+            {
+                selectionStats && (
+                    <div className="bg-slate-50 border-t border-slate-200 px-5 py-2 text-xs text-slate-600 font-mono flex items-center justify-between">
+                        <div className="flex items-center gap-4">
+                            <span className="font-semibold text-slate-700">Visible Range: {startCol + 1}–{endCol + 1}</span>
+                            <span>Length: {selectionStats.total} bp</span>
+                            <span className="text-emerald-700 font-medium">GC: {selectionStats.gcPct.toFixed(1)}%</span>
+                        </div>
+                        <div className="flex items-center gap-3 text-slate-500">
+                            <span>A: {selectionStats.a}</span>
+                            <span>T: {selectionStats.t}</span>
+                            <span>G: {selectionStats.g}</span>
+                            <span>C: {selectionStats.c}</span>
+                        </div>
                     </div>
-                    <div className="flex items-center gap-3 text-slate-500">
-                        <span>A: {selectionStats.a}</span>
-                        <span>T: {selectionStats.t}</span>
-                        <span>G: {selectionStats.g}</span>
-                        <span>C: {selectionStats.c}</span>
-                    </div>
-                </div>
-            )}
-        </div>
+                )
+            }
+        </div >
     );
 };
 
