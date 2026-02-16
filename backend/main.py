@@ -328,5 +328,129 @@ async def moligize_sequence(request: MoligizeRequest):
     }
 
 
+class IdtAuthRequest(BaseModel):
+    client_id: str
+    client_secret: str
+    username: Optional[str] = None
+    password: Optional[str] = None
+
+
+class IdtAnalyzeRequest(BaseModel):
+    p1_seq: str
+    p2_seq: str
+    token: str
+
+
+@app.post("/idt/token")
+async def get_idt_token(request: IdtAuthRequest):
+    import json
+    import base64
+    from urllib import request as url_request, parse, error as url_error
+    
+    # Verified working endpoint from user's script
+    url = "https://eu.idtdna.com/IdentityServer/connect/token"
+    
+    try:
+        # Construct Authorization header exactly as in working script
+        auth_bytes = f"{request.client_id}:{request.client_secret}".encode("utf-8")
+        auth_string = base64.b64encode(auth_bytes).decode("ascii")
+
+        headers = {
+            "Content-Type": "application/x-www-form-urlencoded",
+            "Authorization": "Basic " + auth_string,
+        }
+
+        # Data exactly as in working script
+        data_dict = {
+            "grant_type": "password",
+            "scope": "test",
+            "username": request.username,
+            "password": request.password,
+        }
+        
+        request_data = parse.urlencode(data_dict).encode("utf-8")
+
+        post_request = url_request.Request(
+            url,
+            data=request_data,
+            headers=headers,
+            method="POST",
+        )
+
+        with url_request.urlopen(post_request, timeout=10) as resp:
+            body = resp.read().decode("utf-8", errors="replace")
+            return json.loads(body)
+
+    except url_error.HTTPError as e:
+        body = e.read().decode("utf-8", errors="replace")
+        raise HTTPException(status_code=e.code, detail=f"IDT Auth Error: {body}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/idt/analyze")
+async def analyze_idt_oligos(request: IdtAnalyzeRequest):
+    import requests
+    headers = {
+        "Authorization": f"Bearer {request.token}",
+        "Content-Type": "application/json"
+    }
+    # User confirmed: use EU API host for actual calls
+    base_url = "https://eu.idtdna.com/restapi/v1/OligoAnalyzer"
+
+    def hit_idt(endpoint, seq1, seq2=None):
+        url = f"{base_url}/{endpoint}"
+        params = {}
+        # EU Swagger uses dNTPsConc (lowercase d)
+        payload = {
+            "NaConc": 50.0,
+            "MgConc": 1.5,
+            "dNTPsConc": 0.2,
+            "OligoConc": 0.25,
+            "NucleotideType": "DNA"
+        }
+
+        if endpoint == "HeteroDimer":
+            # For HeteroDimer, sequences MUST be in query parameters
+            params = {"primary": seq1, "secondary": seq2}
+        else:
+            # For Analyze (Hairpin/SelfDimer), sequence is in the body
+            payload["Sequence"] = seq1
+            
+        try:
+            # Send both just in case, though Swagger says Analyze=Body, HeteroDimer=Query
+            response = requests.post(url, json=payload, params=params, headers=headers, timeout=10)
+            if not response.ok:
+                return {"error": f"IDT {endpoint} Error: {response.status_code} - {response.text}"}
+            return response.json()
+        except Exception as e:
+            return {"error": str(e)}
+
+    # Analyze endpoint provides a comprehensive result (Hairpin, SelfDimer)
+    # for a single sequence. HeteroDimer is for the pair.
+    m1_data = hit_idt("Analyze", request.p1_seq)
+    m2_data = hit_idt("Analyze", request.p2_seq)
+    hetero = hit_idt("HeteroDimer", request.p1_seq, request.p2_seq)
+
+    # We map the Analyze response back to our frontend's expected format
+    # The Analyze response usually contains Hairpin and SelfDimer objects
+    def extract_dg(data, key):
+        if not data or "error" in data: return data
+        return data.get(key, data)
+
+    return {
+        "m1": {
+            "hairpin": extract_dg(m1_data, "Hairpin"),
+            "self_dimer": extract_dg(m1_data, "SelfDimer")
+        },
+        "m2": {
+            "hairpin": extract_dg(m2_data, "Hairpin"),
+            "self_dimer": extract_dg(m2_data, "SelfDimer")
+        },
+        "pairwise": hetero
+    }
+
+
 if __name__ == "__main__":
+    import uvicorn
     uvicorn.run("backend.main:app", host="0.0.0.0", port=8000, reload=True)

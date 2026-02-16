@@ -1,9 +1,21 @@
 import React, { useState, useEffect } from 'react';
 
 interface QueryViewerProps {
-    data: { id: string; seq: string; start: number; end: number } | null;
+    data: { id: string; seq: string; start: number; end: number };
     jobName: string;
     onPrimersUpdate: (primers: { p1: { start: number, end: number }, p2: { start: number, end: number } } | null) => void;
+    idtCredentials?: {
+        clientId: string;
+        clientSecret: string;
+        username?: string;
+        password?: string;
+    };
+}
+
+interface IdtData {
+    m1: { hairpin: any; self_dimer: any };
+    m2: { hairpin: any; self_dimer: any };
+    pairwise: any;
 }
 
 interface Primer {
@@ -22,17 +34,19 @@ interface MoligizeResponse {
     params_not_met?: boolean;
 }
 
-const QueryViewer: React.FC<QueryViewerProps> = ({ data, jobName, onPrimersUpdate }) => {
+export default function QueryViewer({ data, jobName, onPrimersUpdate, idtCredentials }: QueryViewerProps) {
     const [copyFeedback, setCopyFeedback] = useState('');
     const [showMoligizer, setShowMoligizer] = useState(false);
+
+    // IDT Analysis State
+    const [isIdtLoading, setIsIdtLoading] = useState(false);
+    const [idtResults, setIdtResults] = useState<IdtData | null>(null);
+    const [idtError, setIdtError] = useState<string | null>(null);
 
     // Controls - Shift Logic
     const [moligoShift, setMoligoShift] = useState(0);
     const [moligo1Len, setMoligo1Len] = useState(50);
     const [moligo2Len, setMoligo2Len] = useState(50);
-
-    // Derived split for visualization only (backend calculates actual split)
-    const [splitIdx, setSplitIdx] = useState<number | null>(null);
 
     const [primers, setPrimers] = useState<MoligizeResponse | null>(null);
     const [loading, setLoading] = useState(false);
@@ -58,24 +72,15 @@ const QueryViewer: React.FC<QueryViewerProps> = ({ data, jobName, onPrimersUpdat
     // Initialize/Reset state when data changes
     useEffect(() => {
         if (data) {
-            const raw = data.seq.replace(/-/g, '');
-            // When data changes, reset state
-            setSplitIdx(Math.floor(raw.length / 2));
             setMoligoShift(0);
             setMoligo1Len(50);
             setMoligo2Len(50);
             setPrimers(null);
+            setIdtResults(null);
+            setIdtError(null);
             onPrimersUpdate(null);
         }
     }, [data?.id, data?.seq]);
-
-    // Start with splitIdx centered if null (initial load)
-    useEffect(() => {
-        if (data && splitIdx === null) {
-            const raw = data.seq.replace(/-/g, '');
-            setSplitIdx(Math.floor(raw.length / 2));
-        }
-    }, [data, splitIdx]);
 
     // Coordinate Mapping Helper: Ungapped Index -> Gapped Index (Relative to slice)
     const mapUngappedToGapped = (ungappedIdx: number, gappedSeq: string): number => {
@@ -155,36 +160,89 @@ const QueryViewer: React.FC<QueryViewerProps> = ({ data, jobName, onPrimersUpdat
 
             } catch (err: any) {
                 setError(err.message || 'Failed to generate moligos');
-                // Don't clear primers on error to prevent layout jump, 
-                // but we should probably clear on initial data change reset.
             } finally {
                 setLoading(false);
             }
         };
 
-        const debounce = setTimeout(fetchPrimers, 200); // Faster debounce as calculation is cheap
+        const debounce = setTimeout(fetchPrimers, 200);
         return () => clearTimeout(debounce);
     }, [data, showMoligizer, moligoShift, showParams, searchParams, moligo1Len, moligo2Len]);
 
     if (!data) return null;
     const rawSeq = data.seq.replace(/-/g, '');
 
-    // Visualization
     const renderSequence = () => {
         if (!primers) return rawSeq;
         const chars = rawSeq.split('');
         return chars.map((char, i) => {
             let className = '';
-            // P1 (Right/3' - Green): [p1.start, p1.end)
             if (i >= primers.p1.start && i < primers.p1.end) {
                 className = 'bg-green-200 dark:bg-green-900/40 text-green-900 dark:text-green-300 font-bold';
             }
-            // P2 (Left/5' - Yellow): [p2.start, p2.end)
             else if (i >= primers.p2.start && i < primers.p2.end) {
                 className = 'bg-amber-200 dark:bg-amber-900/40 text-amber-900 dark:text-amber-300 font-bold';
             }
             return <span key={i} className={className}>{char}</span>;
         });
+    };
+
+    const runIdtAnalysis = async () => {
+        if (!idtCredentials || !primers) return;
+        setIsIdtLoading(true);
+        setIdtError(null);
+        try {
+            const tRes = await fetch('http://localhost:8000/idt/token', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    client_id: idtCredentials.clientId,
+                    client_secret: idtCredentials.clientSecret,
+                    username: idtCredentials.username,
+                    password: idtCredentials.password
+                })
+            });
+            if (!tRes.ok) {
+                const errorData = await tRes.json();
+                throw new Error(errorData.detail || "IDT Auth Failed");
+            }
+            const { access_token } = await tRes.json();
+
+            const aRes = await fetch('http://localhost:8000/idt/analyze', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    p1_seq: primers.p1.seq,
+                    p2_seq: primers.p2.seq,
+                    token: access_token
+                })
+            });
+            if (!aRes.ok) throw new Error("IDT Analysis Failed");
+            const results = await aRes.json();
+            setIdtResults(results);
+        } catch (err: any) {
+            setIdtError(err.message);
+        } finally {
+            setIsIdtLoading(false);
+        }
+    };
+
+    const getIdtStatusColor = (dg: number | undefined) => {
+        if (dg === undefined) return 'text-slate-400';
+        if (dg < -9) return 'text-red-500 font-bold';
+        if (dg < -6) return 'text-amber-500 font-bold';
+        return 'text-emerald-500 font-bold';
+    };
+
+    const renderIdtCard = (title: string, data: any) => {
+        if (!data || data.error) return <div className="text-[10px] text-red-400">{data?.error || 'N/A'}</div>;
+        const dg = data.DeltaG;
+        return (
+            <div className="flex justify-between items-center text-[10px]">
+                <span className="text-slate-500">{title}:</span>
+                <span className={getIdtStatusColor(dg)}>{dg !== undefined ? `${dg.toFixed(2)}` : 'N/A'}</span>
+            </div>
+        );
     };
 
     return (
@@ -248,76 +306,74 @@ const QueryViewer: React.FC<QueryViewerProps> = ({ data, jobName, onPrimersUpdat
                 </div>
             </div>
 
-            {/* Moligizer Panel */}
-            {showMoligizer && (
-                <div className="bg-purple-50/50 dark:bg-purple-900/5 border-b border-purple-100 dark:border-purple-900/20 p-4 font-sans min-h-[140px] relative">
-                    {showParams && (
-                        <div className="mb-4 p-3 bg-white dark:bg-slate-800 rounded-lg border border-amber-200 dark:border-amber-900/30 shadow-sm grid grid-cols-2 md:grid-cols-5 gap-3">
-                            <div className="flex flex-col gap-1">
-                                <label className="text-[10px] font-bold text-slate-400 uppercase">Min Len</label>
-                                <input
-                                    type="number"
-                                    value={searchParams.min_len}
-                                    onChange={e => setSearchParams({ ...searchParams, min_len: parseInt(e.target.value) })}
-                                    className="px-2 py-1 text-xs border border-slate-200 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-900"
-                                />
+            <div className="p-0">
+                {showMoligizer && (
+                    <div className="bg-purple-50/50 dark:bg-purple-900/5 border-b border-purple-100 dark:border-purple-900/20 p-4 font-sans relative">
+                        {showParams && (
+                            <div className="mb-4 p-3 bg-white dark:bg-slate-800 rounded-lg border border-amber-200 dark:border-amber-900/30 shadow-sm grid grid-cols-2 md:grid-cols-5 gap-3">
+                                <div className="flex flex-col gap-1">
+                                    <label className="text-[10px] font-bold text-slate-400 uppercase">Min Len</label>
+                                    <input
+                                        type="number"
+                                        value={searchParams.min_len}
+                                        onChange={e => setSearchParams({ ...searchParams, min_len: parseInt(e.target.value) })}
+                                        className="px-2 py-1 text-xs border border-slate-200 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-900"
+                                    />
+                                </div>
+                                <div className="flex flex-col gap-1">
+                                    <label className="text-[10px] font-bold text-slate-400 uppercase">Max Len</label>
+                                    <input
+                                        type="number"
+                                        value={searchParams.max_l}
+                                        onChange={e => setSearchParams({ ...searchParams, max_l: parseInt(e.target.value) })}
+                                        className="px-2 py-1 text-xs border border-slate-200 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-900"
+                                    />
+                                </div>
+                                <div className="flex flex-col gap-1">
+                                    <label className="text-[10px] font-bold text-slate-400 uppercase">Tm Min</label>
+                                    <input
+                                        type="number"
+                                        step="0.1"
+                                        value={searchParams.tm_min}
+                                        onChange={e => setSearchParams({ ...searchParams, tm_min: parseFloat(e.target.value) })}
+                                        className="px-2 py-1 text-xs border border-slate-200 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-900"
+                                    />
+                                </div>
+                                <div className="flex flex-col gap-1">
+                                    <label className="text-[10px] font-bold text-slate-400 uppercase">Tm Max</label>
+                                    <input
+                                        type="number"
+                                        step="0.1"
+                                        value={searchParams.tm_max}
+                                        onChange={e => setSearchParams({ ...searchParams, tm_max: parseFloat(e.target.value) })}
+                                        className="px-2 py-1 text-xs border border-slate-200 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-900"
+                                    />
+                                </div>
+                                <div className="flex flex-col gap-1">
+                                    <label className="text-[10px] font-bold text-slate-400 uppercase">Tm Diff</label>
+                                    <input
+                                        type="number"
+                                        step="0.1"
+                                        value={searchParams.tm_diff}
+                                        onChange={e => setSearchParams({ ...searchParams, tm_diff: parseFloat(e.target.value) })}
+                                        className="px-2 py-1 text-xs border border-slate-200 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-900"
+                                    />
+                                </div>
                             </div>
-                            <div className="flex flex-col gap-1">
-                                <label className="text-[10px] font-bold text-slate-400 uppercase">Max Len</label>
-                                <input
-                                    type="number"
-                                    value={searchParams.max_l}
-                                    onChange={e => setSearchParams({ ...searchParams, max_l: parseInt(e.target.value) })}
-                                    className="px-2 py-1 text-xs border border-slate-200 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-900"
-                                />
-                            </div>
-                            <div className="flex flex-col gap-1">
-                                <label className="text-[10px] font-bold text-slate-400 uppercase">Tm Min</label>
-                                <input
-                                    type="number"
-                                    step="0.1"
-                                    value={searchParams.tm_min}
-                                    onChange={e => setSearchParams({ ...searchParams, tm_min: parseFloat(e.target.value) })}
-                                    className="px-2 py-1 text-xs border border-slate-200 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-900"
-                                />
-                            </div>
-                            <div className="flex flex-col gap-1">
-                                <label className="text-[10px] font-bold text-slate-400 uppercase">Tm Max</label>
-                                <input
-                                    type="number"
-                                    step="0.1"
-                                    value={searchParams.tm_max}
-                                    onChange={e => setSearchParams({ ...searchParams, tm_max: parseFloat(e.target.value) })}
-                                    className="px-2 py-1 text-xs border border-slate-200 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-900"
-                                />
-                            </div>
-                            <div className="flex flex-col gap-1">
-                                <label className="text-[10px] font-bold text-slate-400 uppercase">Tm Diff</label>
-                                <input
-                                    type="number"
-                                    step="0.1"
-                                    value={searchParams.tm_diff}
-                                    onChange={e => setSearchParams({ ...searchParams, tm_diff: parseFloat(e.target.value) })}
-                                    className="px-2 py-1 text-xs border border-slate-200 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-900"
-                                />
-                            </div>
-                        </div>
-                    )}
+                        )}
 
-                    {paramsNotMet && (
-                        <div className="mb-4 px-3 py-2 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/50 rounded-md text-amber-700 dark:text-amber-400 text-xs flex items-center gap-2">
-                            <span className="text-sm">⚠️</span>
-                            <b>Params too strict, no moligos found.</b> Showing default center-split oligos instead.
-                        </div>
-                    )}
+                        {paramsNotMet && (
+                            <div className="mb-4 px-3 py-2 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/50 rounded-md text-amber-700 dark:text-amber-400 text-xs flex items-center gap-2">
+                                <span className="text-sm">⚠️</span>
+                                <b>Params too strict, no moligos found.</b> Showing default center-split oligos instead.
+                            </div>
+                        )}
 
-                    {error && <div className="text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 p-2 rounded mb-4 border border-red-100 dark:border-red-900/30">{error}</div>}
+                        {error && <div className="text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 p-2 rounded mb-4 border border-red-100 dark:border-red-900/30">{error}</div>}
 
-                    {
-                        primers ? (
+                        {primers ? (
                             <div className={`grid grid-cols-1 md:grid-cols-2 gap-4 transition-opacity duration-200 ${loading ? 'opacity-60 pointer-events-none' : 'opacity-100'}`}>
-                                {/* MOLigo 2 (Left - Yellow/Peachy) */}
-                                <div className="bg-white dark:bg-slate-800 rounded-lg border-amber-200 dark:border-amber-900/30 p-3 shadow-sm relative group flex flex-col justify-between border">
+                                <div className="bg-white dark:bg-slate-800 rounded-lg border border-amber-200 dark:border-amber-900/30 p-3 shadow-sm relative group flex flex-col justify-between">
                                     <div>
                                         <div className="flex justify-between items-start mb-2">
                                             <div className="text-xs font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wider">MOLigo 2 (Left / 5')</div>
@@ -330,28 +386,18 @@ const QueryViewer: React.FC<QueryViewerProps> = ({ data, jobName, onPrimersUpdat
                                         </div>
                                         <div className="font-mono text-sm text-slate-700 dark:text-slate-300 break-all bg-amber-50/50 dark:bg-amber-900/10 p-2 rounded line-clamp-2 min-h-[3rem] flex items-center">{primers.p2.seq}</div>
                                     </div>
-
                                     <div className="mt-3 flex items-center justify-between border-t border-slate-100 dark:border-slate-700 pt-2">
                                         <div className="flex gap-3 text-xs text-slate-500 dark:text-slate-400">
                                             <span>Len: <b className="text-slate-700 dark:text-slate-200">{primers.p2.len}</b></span>
                                             <span>Tm: <b className="text-slate-700 dark:text-slate-200">{primers.p2.tm}°C</b></span>
                                         </div>
                                         <div className="flex bg-slate-100 dark:bg-slate-700 rounded border border-slate-200 dark:border-slate-600 overflow-hidden shadow-sm">
-                                            <button
-                                                onClick={() => setMoligo2Len(prev => Math.max(10, prev - 1))}
-                                                className="w-8 h-7 flex items-center justify-center hover:bg-white dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition-colors font-bold border-r border-slate-200 dark:border-slate-600"
-                                                title="Decrease length"
-                                            >-</button>
-                                            <button
-                                                onClick={() => setMoligo2Len(prev => Math.min(60, prev + 1))}
-                                                className="w-8 h-7 flex items-center justify-center hover:bg-white dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition-colors font-bold"
-                                                title="Increase length to left"
-                                            >+</button>
+                                            <button onClick={() => setMoligo2Len(prev => Math.max(10, prev - 1))} className="w-8 h-7 flex items-center justify-center hover:bg-white dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition-colors font-bold border-r border-slate-200 dark:border-slate-600">-</button>
+                                            <button onClick={() => setMoligo2Len(prev => Math.min(60, prev + 1))} className="w-8 h-7 flex items-center justify-center hover:bg-white dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition-colors font-bold">+</button>
                                         </div>
                                     </div>
                                 </div>
 
-                                {/* MOLigo 1 (Right - Green) */}
                                 <div className="bg-white dark:bg-slate-800 rounded-lg border border-green-200 dark:border-green-900/30 p-3 shadow-sm relative group flex flex-col justify-between">
                                     <div>
                                         <div className="flex justify-between items-start mb-2">
@@ -365,46 +411,62 @@ const QueryViewer: React.FC<QueryViewerProps> = ({ data, jobName, onPrimersUpdat
                                         </div>
                                         <div className="font-mono text-sm text-slate-700 dark:text-slate-300 break-all bg-green-50/50 dark:bg-green-900/10 p-2 rounded line-clamp-2 min-h-[3rem] flex items-center">{primers.p1.seq}</div>
                                     </div>
-
                                     <div className="mt-3 flex items-center justify-between border-t border-slate-100 dark:border-slate-700 pt-2">
                                         <div className="flex gap-3 text-xs text-slate-500 dark:text-slate-400">
                                             <span>Len: <b className="text-slate-700 dark:text-slate-200">{primers.p1.len}</b></span>
                                             <span>Tm: <b className="text-slate-700 dark:text-slate-200">{primers.p1.tm}°C</b></span>
                                         </div>
                                         <div className="flex bg-slate-100 dark:bg-slate-700 rounded border border-slate-200 dark:border-slate-600 overflow-hidden shadow-sm">
-                                            <button
-                                                onClick={() => setMoligo1Len(prev => Math.max(10, prev - 1))}
-                                                className="w-8 h-7 flex items-center justify-center hover:bg-white dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition-colors font-bold border-r border-slate-200 dark:border-slate-600"
-                                                title="Decrease length"
-                                            >-</button>
-                                            <button
-                                                onClick={() => setMoligo1Len(prev => Math.min(60, prev + 1))}
-                                                className="w-8 h-7 flex items-center justify-center hover:bg-white dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition-colors font-bold"
-                                                title="Increase length to right"
-                                            >+</button>
+                                            <button onClick={() => setMoligo1Len(prev => Math.max(10, prev - 1))} className="w-8 h-7 flex items-center justify-center hover:bg-white dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition-colors font-bold border-r border-slate-200 dark:border-slate-600">-</button>
+                                            <button onClick={() => setMoligo1Len(prev => Math.min(60, prev + 1))} className="w-8 h-7 flex items-center justify-center hover:bg-white dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition-colors font-bold">+</button>
                                         </div>
                                     </div>
                                 </div>
                             </div>
                         ) : (
-                            showMoligizer && !error && (
-                                <div className="flex items-center justify-center p-8">
-                                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600"></div>
-                                </div>
-                            )
-                        )
-                    }
-                </div >
-            )
-            }
+                            loading && <div className="flex items-center justify-center p-8"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600"></div></div>
+                        )}
 
-            <div className="p-5 bg-slate-50/50 dark:bg-slate-900/50">
-                <div className="font-mono text-xs text-slate-600 dark:text-slate-400 break-all leading-relaxed max-h-60 overflow-y-auto p-4 bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 shadow-inner">
-                    {showMoligizer ? renderSequence() : rawSeq}
+                        {primers && idtCredentials && (
+                            <div className="mt-4 border-t border-slate-100 dark:border-slate-700 pt-4">
+                                <div className="flex items-center justify-between mb-3">
+                                    <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">IDT OligoAnalyzer Results</h4>
+                                    {!idtResults && !isIdtLoading && (
+                                        <button onClick={runIdtAnalysis} className="text-[10px] font-bold bg-indigo-50 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-400 px-3 py-1 rounded hover:bg-indigo-100 transition-colors border border-indigo-200 dark:border-indigo-800">Run Full IDT Analysis</button>
+                                    )}
+                                    {isIdtLoading && <div className="animate-pulse text-[10px] text-indigo-500 font-medium">Analyzing with IDT API...</div>}
+                                </div>
+                                {idtError && <div className="text-[10px] text-red-500 bg-red-50 dark:bg-red-900/20 p-2 rounded mb-3 border border-red-100 dark:border-red-900/30">Error: {idtError}</div>}
+                                {idtResults && (
+                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                        <div className="bg-slate-50 dark:bg-slate-900/40 p-2 rounded border border-slate-100 dark:border-slate-800">
+                                            <div className="text-[9px] font-bold text-slate-500 uppercase mb-1">MOLigo 2 Stability</div>
+                                            {renderIdtCard("Hairpin ΔG", idtResults.m2.hairpin)}
+                                            {renderIdtCard("Self-Dimer ΔG", idtResults.m2.self_dimer)}
+                                        </div>
+                                        <div className="bg-slate-50 dark:bg-slate-900/40 p-2 rounded border border-slate-100 dark:border-slate-800">
+                                            <div className="text-[9px] font-bold text-slate-500 uppercase mb-1">MOLigo 1 Stability</div>
+                                            {renderIdtCard("Hairpin ΔG", idtResults.m1.hairpin)}
+                                            {renderIdtCard("Self-Dimer ΔG", idtResults.m1.self_dimer)}
+                                        </div>
+                                        <div className="bg-indigo-50/30 dark:bg-indigo-900/20 p-2 rounded border border-indigo-100/50 dark:border-indigo-900/30">
+                                            <div className="text-[9px] font-bold text-indigo-500 uppercase mb-1">Cross-Dimer Pairwise</div>
+                                            {renderIdtCard("Hetero-Dimer ΔG", idtResults.pairwise)}
+                                            <div className="text-[8px] text-slate-400 mt-1 italic">kcal/mole</div>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                    </div>
+                )}
+
+                <div className="p-5 bg-slate-50/50 dark:bg-slate-900/50">
+                    <div className="font-mono text-xs text-slate-600 dark:text-slate-400 break-all leading-relaxed max-h-60 overflow-y-auto p-4 bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 shadow-inner">
+                        {showMoligizer ? renderSequence() : rawSeq}
+                    </div>
                 </div>
             </div>
-        </div >
+        </div>
     );
-};
-
-export default QueryViewer;
+}

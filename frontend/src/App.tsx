@@ -22,6 +22,10 @@ function App() {
   const [selectedSequence, setSelectedSequence] = useState<{ id: string; seq: string; start: number; end: number } | null>(null);
   const [error, setError] = useState('');
   const [apiKey, setApiKey] = useState(() => localStorage.getItem('ncbi_api_key') || '');
+  const [idtClientId, setIdtClientId] = useState(() => localStorage.getItem('idt_client_id') || '');
+  const [idtClientSecret, setIdtClientSecret] = useState(() => localStorage.getItem('idt_client_secret') || '');
+  const [idtUsername, setIdtUsername] = useState(() => localStorage.getItem('idt_username') || '');
+  const [idtPassword, setIdtPassword] = useState(() => localStorage.getItem('idt_password') || '');
   const [showSettings, setShowSettings] = useState(!localStorage.getItem('ncbi_api_key'));
   const [maxHitsPreset, setMaxHitsPreset] = useState('50');
   const [customHits, setCustomHits] = useState('');
@@ -58,6 +62,42 @@ function App() {
       localStorage.setItem('ncbi_api_key', val.trim());
     } else {
       localStorage.removeItem('ncbi_api_key');
+    }
+  };
+
+  const handleIdtIdChange = (val: string) => {
+    setIdtClientId(val);
+    if (val.trim()) {
+      localStorage.setItem('idt_client_id', val.trim());
+    } else {
+      localStorage.removeItem('idt_client_id');
+    }
+  };
+
+  const handleIdtSecretChange = (val: string) => {
+    setIdtClientSecret(val);
+    if (val.trim()) {
+      localStorage.setItem('idt_client_secret', val.trim());
+    } else {
+      localStorage.removeItem('idt_client_secret');
+    }
+  };
+
+  const handleIdtUsernameChange = (val: string) => {
+    setIdtUsername(val);
+    if (val.trim()) {
+      localStorage.setItem('idt_username', val.trim());
+    } else {
+      localStorage.removeItem('idt_username');
+    }
+  };
+
+  const handleIdtPasswordChange = (val: string) => {
+    setIdtPassword(val);
+    if (val.trim()) {
+      localStorage.setItem('idt_password', val.trim());
+    } else {
+      localStorage.removeItem('idt_password');
     }
   };
 
@@ -199,37 +239,80 @@ function App() {
 
         {/* NCBI API Key Settings */}
         {showSettings && (
-          <div className="mb-6 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-sm p-4">
-            <div className="flex items-center gap-3">
-              <label className="text-sm font-medium text-slate-700 dark:text-slate-300 whitespace-nowrap">
-                NCBI API Key
-              </label>
-              <input
-                type="password"
-                value={apiKey}
-                onChange={(e) => handleApiKeyChange(e.target.value)}
-                placeholder="Enter your NCBI API key for faster searches"
-                className="flex-1 rounded-lg border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm p-2 border font-mono"
-              />
-              {apiKey && (
-                <span className="text-xs text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-1">
-                  <span className="inline-block w-2 h-2 rounded-full bg-emerald-500" />
-                  Saved
-                </span>
-              )}
+          <div className="mb-6 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-sm p-4 animate-in fade-in slide-in-from-top-2 duration-300">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-3">
+                <div className="flex items-center gap-3">
+                  <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase w-24">
+                    NCBI Key
+                  </label>
+                  <input
+                    type="password"
+                    value={apiKey}
+                    onChange={(e) => handleApiKeyChange(e.target.value)}
+                    placeholder="NCBI API key"
+                    className="flex-1 rounded-lg border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-xs p-2 border font-mono"
+                  />
+                </div>
+                <p className="text-[10px] text-slate-400 dark:text-slate-500">
+                  Increases BLAST rate limit (3 → 10 req/s). Get from <a href="https://www.ncbi.nlm.nih.gov/account/settings/" target="_blank" rel="noopener noreferrer" className="text-indigo-500 underline">NCBI Settings</a>.
+                </p>
+              </div>
+
+              <div className="space-y-3">
+                <div className="flex items-center gap-3">
+                  <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase w-24">
+                    IDT Client ID
+                  </label>
+                  <input
+                    type="password"
+                    value={idtClientId}
+                    onChange={(e) => handleIdtIdChange(e.target.value)}
+                    placeholder="OligoAnalyzer Client ID"
+                    className="flex-1 rounded-lg border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-xs p-2 border font-mono"
+                  />
+                </div>
+                <div className="flex items-center gap-3">
+                  <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase w-24">
+                    IDT Secret
+                  </label>
+                  <input
+                    type="password"
+                    value={idtClientSecret}
+                    onChange={(e) => handleIdtSecretChange(e.target.value)}
+                    placeholder="OligoAnalyzer Client Secret"
+                    className="flex-1 rounded-lg border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-xs p-2 border font-mono"
+                  />
+                </div>
+                <div className="flex items-center gap-3">
+                  <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase w-24">
+                    IDT User
+                  </label>
+                  <input
+                    type="text"
+                    value={idtUsername}
+                    onChange={(e) => handleIdtUsernameChange(e.target.value)}
+                    placeholder="IDT Account Email"
+                    className="flex-1 rounded-lg border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-xs p-2 border font-mono"
+                  />
+                </div>
+                <div className="flex items-center gap-3">
+                  <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase w-24">
+                    IDT Pass
+                  </label>
+                  <input
+                    type="password"
+                    value={idtPassword}
+                    onChange={(e) => handleIdtPasswordChange(e.target.value)}
+                    placeholder="IDT Account Password"
+                    className="flex-1 rounded-lg border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-xs p-2 border font-mono"
+                  />
+                </div>
+                <p className="text-[10px] text-slate-400 dark:text-slate-500">
+                  Required for IDT OligoAnalyzer features. Obtain from <a href="https://www.idtdna.com/pages/scitools/plus-api" target="_blank" rel="noopener noreferrer" className="text-indigo-500 underline">IDT SciTools Plus API</a>.
+                </p>
+              </div>
             </div>
-            <p className="mt-2 text-xs text-slate-400 dark:text-slate-500">
-              Get a free API key from{' '}
-              <a
-                href="https://www.ncbi.nlm.nih.gov/account/settings/"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-indigo-500 hover:text-indigo-400 underline"
-              >
-                NCBI Account Settings
-              </a>
-              {' '}→ API Key Management. This increases your BLAST rate limit from 3 to 10 req/s and improves queue priority.
-            </p>
           </div>
         )}
 
@@ -503,11 +586,19 @@ function App() {
                 primers={selectedPrimers}
                 isDarkMode={isDarkMode}
               />
-              <QueryViewer
-                data={selectedSequence}
-                jobName={jobName}
-                onPrimersUpdate={setSelectedPrimers}
-              />
+              {step === 'done' && selectedSequence && (
+                <QueryViewer
+                  data={selectedSequence}
+                  jobName={jobName}
+                  onPrimersUpdate={setSelectedPrimers}
+                  idtCredentials={idtClientId && idtClientSecret ? {
+                    clientId: idtClientId,
+                    clientSecret: idtClientSecret,
+                    username: idtUsername,
+                    password: idtPassword
+                  } : undefined}
+                />
+              )}
             </>
           )}
         </main>
