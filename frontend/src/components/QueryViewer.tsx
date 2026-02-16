@@ -26,8 +26,7 @@ const QueryViewer: React.FC<QueryViewerProps> = ({ data, jobName, onPrimersUpdat
     const [showMoligizer, setShowMoligizer] = useState(false);
 
     // Controls - Shift Logic
-    const [moligo1Shift, setMoligo1Shift] = useState(0); // Right/3'
-    const [moligo2Shift, setMoligo2Shift] = useState(0); // Left/5'
+    const [moligoShift, setMoligoShift] = useState(0);
 
     // Derived split for visualization only (backend calculates actual split)
     const [splitIdx, setSplitIdx] = useState<number | null>(null);
@@ -49,8 +48,7 @@ const QueryViewer: React.FC<QueryViewerProps> = ({ data, jobName, onPrimersUpdat
             const raw = data.seq.replace(/-/g, '');
             // When data changes, reset state
             setSplitIdx(Math.floor(raw.length / 2));
-            setMoligo1Shift(0);
-            setMoligo2Shift(0);
+            setMoligoShift(0);
             setPrimers(null);
             onPrimersUpdate(null);
         }
@@ -95,8 +93,8 @@ const QueryViewer: React.FC<QueryViewerProps> = ({ data, jobName, onPrimersUpdat
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         sequence: raw,
-                        moligo1_shift: moligo1Shift,
-                        moligo2_shift: moligo2Shift,
+                        moligo1_shift: moligoShift,
+                        moligo2_shift: moligoShift,
                         // split_idx is optional, let backend default to center
                     })
                 });
@@ -132,8 +130,8 @@ const QueryViewer: React.FC<QueryViewerProps> = ({ data, jobName, onPrimersUpdat
 
             } catch (err: any) {
                 setError(err.message || 'Failed to generate moligos');
-                setPrimers(null);
-                onPrimersUpdate(null);
+                // Don't clear primers on error to prevent layout jump, 
+                // but we should probably clear on initial data change reset.
             } finally {
                 setLoading(false);
             }
@@ -141,19 +139,10 @@ const QueryViewer: React.FC<QueryViewerProps> = ({ data, jobName, onPrimersUpdat
 
         const debounce = setTimeout(fetchPrimers, 200); // Faster debounce as calculation is cheap
         return () => clearTimeout(debounce);
-    }, [data, showMoligizer, moligo1Shift, moligo2Shift]);
+    }, [data, showMoligizer, moligoShift]);
 
     if (!data) return null;
     const rawSeq = data.seq.replace(/-/g, '');
-
-    // Helper to adjust shift
-    const adjustShift = (moligo: 'm1' | 'm2', delta: number) => {
-        if (moligo === 'm1') {
-            setMoligo1Shift(prev => prev + delta);
-        } else {
-            setMoligo2Shift(prev => prev + delta);
-        }
-    };
 
     // Visualization
     const renderSequence = () => {
@@ -165,9 +154,9 @@ const QueryViewer: React.FC<QueryViewerProps> = ({ data, jobName, onPrimersUpdat
             if (i >= primers.p1.start && i < primers.p1.end) {
                 className = 'bg-green-200 dark:bg-green-900/40 text-green-900 dark:text-green-300 font-bold';
             }
-            // P2 (Left/5' - Blue): [p2.start, p2.end)
+            // P2 (Left/5' - Yellow): [p2.start, p2.end)
             else if (i >= primers.p2.start && i < primers.p2.end) {
-                className = 'bg-blue-200 dark:bg-blue-900/40 text-blue-900 dark:text-blue-300 font-bold';
+                className = 'bg-amber-200 dark:bg-amber-900/40 text-amber-900 dark:text-amber-300 font-bold';
             }
             return <span key={i} className={className}>{char}</span>;
         });
@@ -192,6 +181,24 @@ const QueryViewer: React.FC<QueryViewerProps> = ({ data, jobName, onPrimersUpdat
                     >
                         ⚡ Moligize!
                     </button>
+
+                    {showMoligizer && (
+                        <div className="flex items-center gap-1 ml-4 bg-white dark:bg-slate-700 border border-purple-200 dark:border-purple-800 rounded-lg px-2 py-0.5 shadow-sm">
+                            <span className="text-[10px] uppercase text-slate-400 font-bold mr-1">Shift Both</span>
+                            <button
+                                onClick={() => setMoligoShift(prev => prev - 1)}
+                                className={`w-7 h-7 flex items-center justify-center bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-900 rounded text-slate-600 dark:text-slate-400 font-bold text-sm transition-colors ${loading ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                title="Move All Left"
+                                disabled={loading}
+                            >&lt;</button>
+                            <button
+                                onClick={() => setMoligoShift(prev => prev + 1)}
+                                className={`w-7 h-7 flex items-center justify-center bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-900 rounded text-slate-600 dark:text-slate-400 font-bold text-sm transition-colors ${loading ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                title="Move All Right"
+                                disabled={loading}
+                            >&gt;</button>
+                        </div>
+                    )}
                 </div>
                 <div className="flex items-center gap-3">
                     {copyFeedback && (
@@ -208,14 +215,12 @@ const QueryViewer: React.FC<QueryViewerProps> = ({ data, jobName, onPrimersUpdat
 
             {/* Moligizer Panel */}
             {showMoligizer && (
-                <div className="bg-purple-50/50 dark:bg-purple-900/10 border-b border-purple-100 dark:border-purple-900/30 p-4 font-sans">
-
-                    {loading && <div className="text-sm text-purple-600 dark:text-purple-400 animate-pulse mb-2">Generating MOLigos...</div>}
-                    {error && <div className="text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 p-2 rounded mb-2 border border-red-100 dark:border-red-900/30">{error}</div>}
+                <div className="bg-purple-50/50 dark:bg-purple-900/5 border-b border-purple-100 dark:border-purple-900/20 p-4 font-sans min-h-[140px] relative">
+                    {error && <div className="text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 p-2 rounded mb-4 border border-red-100 dark:border-red-900/30">{error}</div>}
 
                     {
-                        primers && !loading && (
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        primers ? (
+                            <div className={`grid grid-cols-1 md:grid-cols-2 gap-4 transition-opacity duration-200 ${loading ? 'opacity-60 pointer-events-none' : 'opacity-100'}`}>
                                 {/* MOLigo 2 (Left - Yellow/Peachy) */}
                                 <div className="bg-white dark:bg-slate-800 rounded-lg border-amber-200 dark:border-amber-900/30 p-3 shadow-sm relative group flex flex-col justify-between border">
                                     <div>
@@ -228,7 +233,7 @@ const QueryViewer: React.FC<QueryViewerProps> = ({ data, jobName, onPrimersUpdat
                                                 Copy
                                             </button>
                                         </div>
-                                        <div className="font-mono text-sm text-slate-700 dark:text-slate-300 break-all bg-amber-50/50 dark:bg-amber-900/10 p-2 rounded">{primers.p2.seq}</div>
+                                        <div className="font-mono text-sm text-slate-700 dark:text-slate-300 break-all bg-amber-50/50 dark:bg-amber-900/10 p-2 rounded line-clamp-2 min-h-[3rem] flex items-center">{primers.p2.seq}</div>
                                     </div>
 
                                     <div className="mt-3 flex items-center justify-between border-t border-slate-100 dark:border-slate-700 pt-2">
@@ -236,18 +241,10 @@ const QueryViewer: React.FC<QueryViewerProps> = ({ data, jobName, onPrimersUpdat
                                             <span>Len: <b className="text-slate-700 dark:text-slate-200">{primers.p2.len}</b></span>
                                             <span>Tm: <b className="text-slate-700 dark:text-slate-200">{primers.p2.tm}°C</b></span>
                                         </div>
-                                        {/* Shift Component */}
-                                        <div className="flex items-center gap-1">
-                                            <span className="text-[10px] uppercase text-slate-400 font-bold mr-1">Shift</span>
-                                            <button onClick={() => adjustShift('m2', -1)} className="w-6 h-6 flex items-center justify-center bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 rounded text-slate-600 dark:text-slate-400 font-bold text-xs" title="Move Left">&lt;</button>
-                                            <button onClick={() => adjustShift('m2', 1)} className="w-6 h-6 flex items-center justify-center bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 rounded text-slate-600 dark:text-slate-400 font-bold text-xs" title="Move Right">&gt;</button>
-                                        </div>
                                     </div>
                                 </div>
 
-                                {/* MOLigo 1 (Right - Green - Was Primer 1 color logic) 
-                                    Backend: "p1": get_stats(moligo1_final), # Right side (MOLigo 1)
-                                */}
+                                {/* MOLigo 1 (Right - Green) */}
                                 <div className="bg-white dark:bg-slate-800 rounded-lg border border-green-200 dark:border-green-900/30 p-3 shadow-sm relative group flex flex-col justify-between">
                                     <div>
                                         <div className="flex justify-between items-start mb-2">
@@ -259,7 +256,7 @@ const QueryViewer: React.FC<QueryViewerProps> = ({ data, jobName, onPrimersUpdat
                                                 Copy
                                             </button>
                                         </div>
-                                        <div className="font-mono text-sm text-slate-700 dark:text-slate-300 break-all bg-green-50/50 dark:bg-green-900/10 p-2 rounded">{primers.p1.seq}</div>
+                                        <div className="font-mono text-sm text-slate-700 dark:text-slate-300 break-all bg-green-50/50 dark:bg-green-900/10 p-2 rounded line-clamp-2 min-h-[3rem] flex items-center">{primers.p1.seq}</div>
                                     </div>
 
                                     <div className="mt-3 flex items-center justify-between border-t border-slate-100 dark:border-slate-700 pt-2">
@@ -267,15 +264,15 @@ const QueryViewer: React.FC<QueryViewerProps> = ({ data, jobName, onPrimersUpdat
                                             <span>Len: <b className="text-slate-700 dark:text-slate-200">{primers.p1.len}</b></span>
                                             <span>Tm: <b className="text-slate-700 dark:text-slate-200">{primers.p1.tm}°C</b></span>
                                         </div>
-                                        {/* Shift Component */}
-                                        <div className="flex items-center gap-1">
-                                            <span className="text-[10px] uppercase text-slate-400 font-bold mr-1">Shift</span>
-                                            <button onClick={() => adjustShift('m1', -1)} className="w-6 h-6 flex items-center justify-center bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 rounded text-slate-600 dark:text-slate-400 font-bold text-xs" title="Move Left">&lt;</button>
-                                            <button onClick={() => adjustShift('m1', 1)} className="w-6 h-6 flex items-center justify-center bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 rounded text-slate-600 dark:text-slate-400 font-bold text-xs" title="Move Right">&gt;</button>
-                                        </div>
                                     </div>
                                 </div>
                             </div>
+                        ) : (
+                            showMoligizer && !error && (
+                                <div className="flex items-center justify-center p-8">
+                                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600"></div>
+                                </div>
+                            )
                         )
                     }
                 </div >
