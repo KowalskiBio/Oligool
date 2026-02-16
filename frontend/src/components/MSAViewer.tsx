@@ -10,6 +10,7 @@ interface MSAViewerProps {
     onVisibleQueryChange?: (data: { id: string; seq: string; start: number; end: number }) => void;
     jobName?: string;
     primers?: { p1: { start: number, end: number }, p2: { start: number, end: number } } | null;
+    isDarkMode?: boolean;
 }
 
 /* ── constants ────────────────────────────────────────── */
@@ -24,7 +25,7 @@ const MINIMAP_RULER_H = 14;
 const MINIMAP_HANDLE_H = 8;
 const MINIMAP_HEIGHT = MINIMAP_GC_H + MINIMAP_RULER_H + 50 + MINIMAP_HANDLE_H;
 
-const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, jobName, primers }) => {
+const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, primers, isDarkMode }) => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const minimapRef = useRef<HTMLCanvasElement>(null);
     const scrollRef = useRef<HTMLDivElement>(null);
@@ -129,6 +130,8 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
         setTimeout(() => setCopyFeedback(''), 2000);
     };
 
+    const isDark = isDarkMode ?? document.documentElement.classList.contains('dark');
+
     const copySequence = (seq: ParsedSequence) => {
         const raw = seq.seq.replace(/-/g, '');
         navigator.clipboard.writeText(raw).then(() => {
@@ -208,12 +211,14 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
         const rowAreaH = MINIMAP_HEIGHT - rowsTop - MINIMAP_HANDLE_H; // subtract handle height
         const rowH = Math.max(1, Math.min(3, rowAreaH / sequences.length));
 
+        // We use the isDark defined at the component level
+
         // background
-        ctx.fillStyle = '#f8fafc';
+        ctx.fillStyle = isDark ? '#0f172a' : '#f8fafc';
         ctx.fillRect(0, 0, availableWidth, MINIMAP_HEIGHT);
 
         // ── GC content bar ──
-        ctx.fillStyle = '#94a3b8';
+        ctx.fillStyle = isDark ? '#94a3b8' : '#94a3b8'; // Keep same or slightly lighter?
         ctx.font = '7px ui-monospace, SFMono-Regular, monospace';
         ctx.textAlign = 'right';
         ctx.textBaseline = 'middle';
@@ -231,7 +236,7 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
             ctx.fillRect(x, MINIMAP_GC_H - barH, w, barH);
         }
         // separator below GC bar
-        ctx.fillStyle = '#e2e8f0';
+        ctx.fillStyle = isDark ? '#334155' : '#e2e8f0';
         ctx.fillRect(LABEL_WIDTH, MINIMAP_GC_H - 0.5, mmSeqW, 0.5);
 
         // ── ruler ticks ──
@@ -243,7 +248,7 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
         for (let col = 0; col < seqLen; col++) {
             if ((col + 1) % tickInt === 0) {
                 const x = LABEL_WIDTH + ((col + 0.5) / seqLen) * mmSeqW;
-                ctx.fillStyle = '#cbd5e1';
+                ctx.fillStyle = isDark ? '#334155' : '#cbd5e1';
                 ctx.fillRect(x, MINIMAP_GC_H + MINIMAP_RULER_H - 4, 1, 4);
                 ctx.fillStyle = '#94a3b8';
                 ctx.fillText(String(col + 1), x, MINIMAP_GC_H + MINIMAP_RULER_H - 5);
@@ -251,7 +256,7 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
         }
 
         // separator line below ruler
-        ctx.fillStyle = '#e2e8f0';
+        ctx.fillStyle = isDark ? '#334155' : '#e2e8f0';
         ctx.fillRect(LABEL_WIDTH, rowsTop - 0.5, mmSeqW, 0.5);
 
         // sequence overview rows
@@ -265,7 +270,9 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
             if (sStart <= sEnd) {
                 const x1 = LABEL_WIDTH + (sStart / seqLen) * mmSeqW;
                 const x2 = LABEL_WIDTH + ((sEnd + 1) / seqLen) * mmSeqW;
-                ctx.fillStyle = isQuery ? '#bfdbfe' : '#d1d5db';
+                ctx.fillStyle = isQuery
+                    ? (isDark ? '#1e3a8a' : '#bfdbfe')
+                    : (isDark ? '#334155' : '#d1d5db');
                 ctx.fillRect(x1, y, x2 - x1, Math.max(1, rowH - 0.5));
             }
 
@@ -325,7 +332,7 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
             // So if > 0.99, we draw nothing extra.
 
             // dim areas outside selection
-            ctx.fillStyle = 'rgba(255,255,255,0.6)';
+            ctx.fillStyle = isDark ? 'rgba(15, 23, 42, 0.6)' : 'rgba(255,255,255,0.6)';
             ctx.fillRect(LABEL_WIDTH, rowsTop, selX - LABEL_WIDTH - 0.5, rowAreaH);
             ctx.fillRect(selX + selW, rowsTop, availableWidth - (selX + selW), rowAreaH);
 
@@ -335,7 +342,7 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
             ctx.strokeRect(selX, rowsTop, selW, rowAreaH);
 
             // selection fill
-            ctx.fillStyle = 'rgba(59, 130, 246, 0.08)';
+            ctx.fillStyle = isDark ? 'rgba(59, 130, 246, 0.2)' : 'rgba(59, 130, 246, 0.08)';
             ctx.fillRect(selX, rowsTop, selW, rowAreaH);
 
             // ── small bottom handle ──
@@ -374,10 +381,9 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
             ctx.fillRect(p2x, y, p2w, h);
         }
 
-        // label divider
-        ctx.fillStyle = '#cbd5e1';
+        ctx.fillStyle = isDark ? '#334155' : '#cbd5e1';
         ctx.fillRect(LABEL_WIDTH - 1, 0, 1, MINIMAP_HEIGHT);
-    }, [sequences, querySeq, seqLen, availableWidth, startFrac, endFrac, gcContent, viewFraction, selectionRange, primers]);
+    }, [sequences, querySeq, seqLen, availableWidth, startFrac, endFrac, gcContent, viewFraction, selectionRange, primers, isDarkMode]);
 
     useEffect(() => { drawMinimap(); }, [drawMinimap]);
 
@@ -541,7 +547,7 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
         cvs.style.height = `${totalH}px`;
         ctx.scale(dpr, dpr);
 
-        ctx.fillStyle = '#ffffff';
+        ctx.fillStyle = isDark ? '#0f172a' : '#ffffff';
         ctx.fillRect(0, 0, availableWidth, totalH);
 
         const firstCol = Math.max(0, Math.floor(scrollLeft / cellW));
@@ -554,9 +560,9 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
         ctx.clip();
 
         /* ── ruler ── */
-        ctx.fillStyle = '#f8fafc';
+        ctx.fillStyle = isDark ? '#1e293b' : '#f8fafc';
         ctx.fillRect(LABEL_WIDTH, 0, seqAreaW, RULER_HEIGHT);
-        ctx.strokeStyle = '#e2e8f0';
+        ctx.strokeStyle = isDark ? '#334155' : '#e2e8f0';
         ctx.lineWidth = 1;
         ctx.beginPath();
         ctx.moveTo(LABEL_WIDTH, RULER_HEIGHT - 0.5);
@@ -571,7 +577,7 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
         for (let col = firstCol; col <= lastCol; col++) {
             if ((col + 1) % tickInterval === 0) {
                 const x = LABEL_WIDTH + col * cellW - scrollLeft;
-                ctx.fillStyle = '#cbd5e1';
+                ctx.fillStyle = isDark ? '#334155' : '#cbd5e1';
                 ctx.fillRect(x, RULER_HEIGHT - 6, 1, 6);
                 ctx.fillStyle = '#94a3b8';
                 ctx.fillText(String(col + 1), x, RULER_HEIGHT - 7);
@@ -607,34 +613,34 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
                     if (ch === '-') {
                         if (!isQuery && col >= sStart && col <= sEnd) {
                             // Internal Deletion (Violet)
-                            bg = '#f3e8ff';
-                            fg = '#7e22ce';
+                            bg = isDark ? '#3b0764' : '#f3e8ff';
+                            fg = isDark ? '#d8b4fe' : '#7e22ce';
                         } else {
                             // External Deletion (Gray)
-                            bg = '#f3f4f6';
-                            fg = '#9ca3af';
+                            bg = isDark ? '#0f172a' : '#f3f4f6';
+                            fg = isDark ? '#475569' : '#9ca3af';
                         }
                     } else if (!isQuery && qch === '-' && ch !== '-') {
                         // Insertion vs Query (Violet)
-                        bg = '#f3e8ff';
-                        fg = '#7e22ce';
+                        bg = isDark ? '#3b0764' : '#f3e8ff';
+                        fg = isDark ? '#d8b4fe' : '#7e22ce';
                     } else if (!isQuery && ch !== qch && qch !== '-') {
                         // Mismatch (Red)
-                        bg = '#fee2e2';
-                        fg = '#b91c1c';
+                        bg = isDark ? '#7f1d1d' : '#fee2e2';
+                        fg = isDark ? '#fecaca' : '#b91c1c';
                     } else {
                         // Match or Query
-                        bg = '#f3f4f6';
-                        fg = '#374151';
+                        bg = isDark ? '#1e293b' : '#f3f4f6';
+                        fg = isDark ? '#cbd5e1' : '#374151';
 
                         // Check for Primers on Query
                         if (isQuery && primers) {
                             if (col >= primers.p1.start && col < primers.p1.end) {
-                                bg = '#bbf7d0'; // Green-200
-                                fg = '#14532d'; // Green-900
+                                bg = isDark ? '#064e3b' : '#bbf7d0'; // Green
+                                fg = isDark ? '#6ee7b7' : '#14532d';
                             } else if (col >= primers.p2.start && col < primers.p2.end) {
-                                bg = '#bfdbfe'; // Blue-200
-                                fg = '#1e3a8a'; // Blue-900
+                                bg = isDark ? '#1e3a8a' : '#bfdbfe'; // Blue
+                                fg = isDark ? '#93c5fd' : '#1e3a8a';
                             }
                         }
                     }
@@ -648,14 +654,17 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
                     ctx.textBaseline = 'middle';
                     ctx.fillText(ch, x + cellW / 2, y + ROW_HEIGHT / 2);
                 }
-            } else {
+            }
+            else {
                 const sStart = seqStart(s.seq);
                 const sEnd = seqEnd(s.seq);
                 if (sStart <= sEnd) {
                     const barX1 = Math.max(LABEL_WIDTH, LABEL_WIDTH + sStart * cellW - scrollLeft);
                     const barX2 = Math.min(LABEL_WIDTH + seqAreaW, LABEL_WIDTH + (sEnd + 1) * cellW - scrollLeft);
                     if (barX2 > barX1) {
-                        ctx.fillStyle = isQuery ? '#bfdbfe' : '#e2e8f0';
+                        ctx.fillStyle = isQuery
+                            ? (isDark ? '#1e3a8a' : '#bfdbfe')
+                            : (isDark ? '#334155' : '#e2e8f0');
                         ctx.fillRect(barX1, y + 3, barX2 - barX1, ROW_HEIGHT - 6);
                     }
                 }
@@ -690,7 +699,7 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
                 }
             }
 
-            ctx.fillStyle = '#f1f5f9';
+            ctx.fillStyle = isDark ? '#1e293b' : '#f1f5f9';
             ctx.fillRect(LABEL_WIDTH, y + ROW_HEIGHT - 0.5, seqAreaW, 0.5);
         }
 
@@ -714,9 +723,9 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
             ctx.fillText(lbl, LABEL_WIDTH - 6, y + ROW_HEIGHT / 2);
         }
 
-        ctx.fillStyle = '#cbd5e1';
+        ctx.fillStyle = isDark ? '#334155' : '#cbd5e1';
         ctx.fillRect(LABEL_WIDTH - 1, 0, 1, totalH);
-    }, [sequences, querySeq, scrollLeft, cellW, seqAreaW, availableWidth, totalH, seqLen, viewMode, primers]);
+    }, [sequences, querySeq, scrollLeft, cellW, seqAreaW, availableWidth, totalH, seqLen, viewMode, primers, isDarkMode]);
 
     useEffect(() => { draw(); }, [draw]);
 
@@ -789,40 +798,40 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
     if (!alignment || sequences.length === 0) return null;
 
     return (
-        <div ref={containerRef} className="mt-6 border border-slate-200 rounded-xl shadow-sm overflow-hidden bg-white">
+        <div ref={containerRef} className="mt-6 border border-slate-200 dark:border-slate-700 rounded-xl shadow-sm overflow-hidden bg-white dark:bg-slate-800 transition-colors">
             {/* ── header ── */}
-            <div className="px-5 py-3 bg-gradient-to-r from-slate-50 to-indigo-50/50 border-b border-slate-200 flex items-center justify-between flex-wrap gap-2">
+            <div className="px-5 py-3 bg-gradient-to-r from-slate-50 to-indigo-50/50 dark:from-slate-800 dark:to-indigo-900/20 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between flex-wrap gap-2">
                 <div className="flex items-center gap-3 flex-wrap">
-                    <h2 className="text-lg font-semibold text-slate-800">
-                        Multiple sequence alignment <span className="text-sm font-normal text-slate-500">({sequences.length} seq, {seqLen} bp)</span>
+                    <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-200">
+                        Multiple sequence alignment <span className="text-sm font-normal text-slate-500 dark:text-slate-400">({sequences.length} seq, {seqLen} bp)</span>
                     </h2>
                     <div className="flex items-center gap-1.5">
                         <button
                             onClick={copyAllFasta}
-                            className="px-2 py-1 text-xs font-medium rounded-md border border-slate-300 text-slate-500 hover:bg-slate-100 hover:text-slate-700 transition-colors flex items-center gap-1"
+                            className="px-2 py-1 text-xs font-medium rounded-md border border-slate-300 dark:border-slate-600 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 hover:text-slate-700 dark:hover:text-slate-200 transition-colors flex items-center gap-1"
                             title="Copy full alignment as FASTA"
                         >
                             <ClipboardIcon /> FASTA
                         </button>
                         <button
                             onClick={copySelection}
-                            className="px-2 py-1 text-xs font-medium rounded-md border border-indigo-300 text-indigo-600 hover:bg-indigo-50 transition-colors flex items-center gap-1"
+                            className="px-2 py-1 text-xs font-medium rounded-md border border-indigo-300 dark:border-indigo-800 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-colors flex items-center gap-1"
                             title={`Copy visible selection (pos ${startCol + 1}–${endCol + 1})`}
                         >
                             <ClipboardIcon /> {startCol + 1}–{endCol + 1}
                         </button>
                     </div>
                     {copyFeedback && (
-                        <span className="text-xs text-emerald-600 font-medium animate-pulse">{copyFeedback}</span>
+                        <span className="text-xs text-emerald-600 dark:text-emerald-400 font-medium animate-pulse">{copyFeedback}</span>
                     )}
                 </div>
                 <div className="flex items-center gap-3">
-                    <div className="flex rounded-md overflow-hidden border border-slate-300">
+                    <div className="flex rounded-md overflow-hidden border border-slate-300 dark:border-slate-600">
                         <button
                             onClick={() => { setViewMode('bars'); setViewFraction(1); setScrollLeft(0); targetScrollRef.current = 0; }}
                             className={`px-3 py-1 text-xs font-medium transition-colors ${viewMode === 'bars'
                                 ? 'bg-indigo-500 text-white'
-                                : 'bg-white text-slate-600 hover:bg-slate-50'
+                                : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700'
                                 }`}
                         >
                             Overview
@@ -835,9 +844,9 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
                                 setScrollLeft(0);
                                 targetScrollRef.current = 0;
                             }}
-                            className={`px-3 py-1 text-xs font-medium transition-colors border-l border-slate-300 ${viewMode === 'letters'
+                            className={`px-3 py-1 text-xs font-medium transition-colors border-l border-slate-300 dark:border-slate-600 ${viewMode === 'letters'
                                 ? 'bg-indigo-500 text-white'
-                                : 'bg-white text-slate-600 hover:bg-slate-50'
+                                : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700'
                                 }`}
                         >
                             Sequence

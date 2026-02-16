@@ -4,8 +4,17 @@
   --color-primary: #3b82f6;
   --color-secondary: #64748b;
   --font-mono: "Fira Code", monospace;
+  --dark-mode: selector;
+}
+
+@variant dark (&:where(.dark, .dark *));
+
+@layer base {
+  * {
+    @apply transition-colors duration-200;
+  }
 }
 
 body {
-  @apply bg-slate-50 text-slate-900;
+  @apply bg-slate-50 text-slate-900 dark:bg-slate-900 dark:text-slate-100 transition-colors duration-300;
 }
