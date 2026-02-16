@@ -2,8 +2,8 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional
-from .alignment import run_msa
-from .blast import run_blast
+from backend.alignment import run_msa
+from backend.blast import run_blast
 import uvicorn
 
 app = FastAPI()
@@ -127,15 +127,8 @@ async def align_sequences(request: AlignmentRequest):
 
 class MoligizeRequest(BaseModel):
     sequence: str
-    target_tm: float = 60.0
-    tm_tolerance: float = 0.5
-    # strict_tm removed, logic is now always strict based on tolerance
-    min_len: int = 18
-    max_len: int = 30  # Added max_len
-    desired_len: Optional[int] = None
-    p1_len: Optional[int] = None
-    p2_len: Optional[int] = None
-    split_idx: Optional[int] = None # 0-based index relative to sequence
+    moligo1_shift: int = 0 # Shift for Right/3' oligo (MOLigo 1)
+    moligo2_shift: int = 0 # Shift for Left/5' oligo (MOLigo 2)
 
 @app.post("/moligize")
 async def moligize_sequence(request: MoligizeRequest):
@@ -149,122 +142,85 @@ async def moligize_sequence(request: MoligizeRequest):
     if not seq:
         raise HTTPException(status_code=400, detail="Sequence is empty.")
 
-    # Determine Split Index
-    if request.split_idx is not None:
-        split_idx = request.split_idx
-    else:
-        split_idx = len(seq) // 2
+    # 1. Windowing: Center 100bp (or full if shorter)
+    full_len = len(seq)
+    window_len = 100
     
-    # Boundary checks
-    if split_idx < 1: split_idx = 1
-    if split_idx >= len(seq): split_idx = len(seq) - 1
-
-    # --- Helper to Search Primers ---
-    def find_best_primer(chunk, is_p1, min_l, max_l, target_tm, tolerance):
-        # Constraints
-        eff_max = min(max_l, len(chunk))
-        eff_min = min(min_l, eff_max) # Ensure min <= max
-        
-        if eff_max < 1: return None # No chunk to search
-
-        best_cand = None
-        min_diff = float("inf")
-
-        # Iterate length range
-        for l in range(eff_min, eff_max + 1):
-            if is_p1:
-                # P1: Take last `l` bases, Reverse Complement
-                sub = chunk[-l:]
-                primer_seq = str(Seq(sub).reverse_complement())
-            else:
-                # P2: Take first `l` bases
-                sub = chunk[:l]
-                primer_seq = sub
-            
-            p_tm = primer3.calc_tm(primer_seq)
-            diff = abs(p_tm - target_tm)
-            
-            # If tolerance is not Inf, skip invalid
-            if tolerance != float("inf") and diff > tolerance:
-                continue
-
-            # Update best match (closest Tm)
-            if diff < min_diff:
-                min_diff = diff
-                best_cand = {
-                    "seq": primer_seq,
-                    "tm": round(p_tm, 1),
-                    "len": l,
-                    "gc": round((primer_seq.count("G") + primer_seq.count("C")) / l * 100, 1),
-                    "diff": diff
-                }
-        
-        if best_cand:
-            # Augment with coordinates
-            if is_p1:
-                best_cand["start"] = split_idx - best_cand["len"]
-                best_cand["end"] = split_idx
-            else:
-                best_cand["start"] = split_idx
-                best_cand["end"] = split_idx + best_cand["len"]
-                
-        return best_cand
-
-    # --- P1 Selection ---
-    left_chunk = seq[:split_idx]
-    
-    # Determine P1 Range
-    if request.p1_len is not None:
-        p1_r_min, p1_r_max = request.p1_len, request.p1_len
+    if full_len > window_len:
+        start_w = (full_len - window_len) // 2
+        end_w = start_w + window_len
+        window_seq = seq[start_w:end_w]
+        # split relative to window is 50
+        split_idx_in_window = window_len // 2
+        # absolute split index (for reference)
+        absolute_split = start_w + split_idx_in_window
     else:
-        desired = request.desired_len
-        p1_r_min = desired if desired else request.min_len
-        p1_r_max = desired if desired else min(split_idx, request.max_len)
+        window_seq = seq
+        split_idx_in_window = full_len // 2
+        absolute_split = split_idx_in_window
 
-    # Strategies: Strict -> Relaxed Tm -> Fallback Length
-    p1_strategies = [
-        (p1_r_min, p1_r_max, request.tm_tolerance),
-        (p1_r_min, p1_r_max, float("inf")),
-        (10, 40, float("inf"))
-    ]
+    # 2. MOLigo Generation (20bp, RevComp)
+    # We work relative to the *window* center (split_idx_in_window)
+    # MOLigo 2 (Left/5' side): ends at split + shift.
+    # MOLigo 1 (Right/3' side): starts at split + shift.
 
-    p1_final = None
-    for (mn, mx, tol) in p1_strategies:
-        p1_final = find_best_primer(left_chunk, True, mn, mx, request.target_tm, tol)
-        if p1_final: break
-        
-    if not p1_final:
-        raise HTTPException(status_code=400, detail="Cannot generate P1 (sequence too short?).")
-
-    # --- P2 Selection ---
-    right_chunk = seq[split_idx:]
+    # --- MOLigo 2 (Left) ---
+    # Target 20bp ENDING at (split_idx_in_window + request.moligo2_shift)
+    m2_end = split_idx_in_window + request.moligo2_shift
+    m2_start = m2_end - 20
     
-    # Determine P2 Range
-    if request.p2_len is not None:
-        p2_r_min, p2_r_max = request.p2_len, request.p2_len
-    else:
-        desired = request.desired_len
-        p2_r_min = desired if desired else request.min_len
-        p2_r_max = desired if desired else min(len(right_chunk), request.max_len)
+    # Check bounds relative to window
+    if m2_start < 0 or m2_end > len(window_seq):
+         # If out of window bounds, try clamping or error? 
+         # User requested "if user provided less, then work with what he provided".
+         # Let's clamp to window limits, even if < 20bp?
+         # "write them out in a box... 20 bp long oligos" -> strict 20bp implies we shouldn't return mismatch length.
+         # But shifts might push it out. Let's return error if out of bounds of the *window*?
+         # Or maybe just clamp shift? user wants to move them.
+         # If I strictly follow: "select +- 100bp... split into two 20 bp long oligos".
+         # Let's safeguard index.
+         m2_start = max(0, m2_start)
+         m2_end = min(len(window_seq), m2_end)
+    
+    moligo2_seq_fwd = window_seq[m2_start:m2_end]
+    moligo2_final = str(Seq(moligo2_seq_fwd).reverse_complement())
 
-    p2_strategies = [
-        (p2_r_min, p2_r_max, request.tm_tolerance),
-        (p2_r_min, p2_r_max, float("inf")),
-        (10, 40, float("inf"))
-    ]
+    # --- MOLigo 1 (Right) ---
+    # Target 20bp STARTING at (split_idx_in_window + request.moligo1_shift)
+    m1_start = split_idx_in_window + request.moligo1_shift
+    m1_end = m1_start + 20
 
-    p2_final = None
-    for (mn, mx, tol) in p2_strategies:
-        p2_final = find_best_primer(right_chunk, False, mn, mx, request.target_tm, tol)
-        if p2_final: break
+    if m1_start < 0 or m1_end > len(window_seq):
+        m1_start = max(0, m1_start)
+        m1_end = min(len(window_seq), m1_end)
 
-    if not p2_final:
-        raise HTTPException(status_code=400, detail="Cannot generate P2 (sequence too short?).")
+    moligo1_seq_fwd = window_seq[m1_start:m1_end]
+    moligo1_final = str(Seq(moligo1_seq_fwd).reverse_complement())
+
+    # Calc Stats
+    def get_stats(s, start_idx, end_idx):
+        if not s: return {"seq": "", "len": 0, "tm": 0, "gc": 0, "start": 0, "end": 0}
+        return {
+            "seq": s,
+            "len": len(s),
+            "tm": round(primer3.calc_tm(s), 1),
+            "gc": round((s.count("G") + s.count("C")) / len(s) * 100, 1),
+            "start": start_idx,
+            "end": end_idx
+        }
+
+    # Absolute indices relative to original `seq`
+    # (Handling cases where window_seq might be shorter than window_len)
+    abs_m2_start = (start_w if full_len > window_len else 0) + m2_start
+    abs_m2_end = (start_w if full_len > window_len else 0) + m2_end
+    
+    abs_m1_start = (start_w if full_len > window_len else 0) + m1_start
+    abs_m1_end = (start_w if full_len > window_len else 0) + m1_end
 
     return {
-        "p1": p1_final,
-        "p2": p2_final,
-        "split_idx": split_idx
+        "p1": get_stats(moligo1_final, abs_m1_start, abs_m1_end), # Right side (MOLigo 1)
+        "p2": get_stats(moligo2_final, abs_m2_start, abs_m2_end), # Left side (MOLigo 2)
+        "split_idx": absolute_split
     }
 
 

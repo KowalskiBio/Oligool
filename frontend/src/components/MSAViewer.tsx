@@ -364,22 +364,22 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
             ctx.fillRect(Math.floor(handleX), rowsTop + rowAreaH, handleDrawW, MINIMAP_HANDLE_H - 1);
         }
 
-        // 2.5) Draw Primers (P1=Green, P2=Blue) on Query Row (row 0)
+        // 2.5) Draw MOLigo markers in the Minimap Ruler area
         if (primers) {
-            const y = rowsTop; // Query is row 0
-            const h = Math.max(1, rowH - 0.5);
+            const mmRulerY = MINIMAP_GC_H;
+            const mmRulerH = MINIMAP_RULER_H;
 
-            // P1
+            // MOLigo 1 (Right/3' - Green)
             const p1x = LABEL_WIDTH + (primers.p1.start / seqLen) * mmSeqW;
             const p1w = Math.max(1, ((primers.p1.end - primers.p1.start) / seqLen) * mmSeqW);
             ctx.fillStyle = '#22c55e'; // Green
-            ctx.fillRect(p1x, y, p1w, h); // Fill
+            ctx.fillRect(p1x, mmRulerY + mmRulerH - 4, p1w, 4);
 
-            // P2
+            // MOLigo 2 (Left/5' - Yellow/Peachy)
             const p2x = LABEL_WIDTH + (primers.p2.start / seqLen) * mmSeqW;
             const p2w = Math.max(1, ((primers.p2.end - primers.p2.start) / seqLen) * mmSeqW);
-            ctx.fillStyle = '#3b82f6'; // Blue
-            ctx.fillRect(p2x, y, p2w, h);
+            ctx.fillStyle = '#facc15'; // Yellow
+            ctx.fillRect(p2x, mmRulerY + mmRulerH - 4, p2w, 4);
         }
 
         ctx.fillStyle = isDark ? '#334155' : '#cbd5e1';
@@ -587,6 +587,19 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
             }
         }
 
+        /* ── MOLigo markers in main ruler ── */
+        if (primers) {
+            const p1x = LABEL_WIDTH + primers.p1.start * cellW - scrollLeft;
+            const p1w = (primers.p1.end - primers.p1.start) * cellW;
+            ctx.fillStyle = '#22c55e';
+            ctx.fillRect(p1x, RULER_HEIGHT - 4, p1w, 4);
+
+            const p2x = LABEL_WIDTH + primers.p2.start * cellW - scrollLeft;
+            const p2w = (primers.p2.end - primers.p2.start) * cellW;
+            ctx.fillStyle = '#facc15'; // Yellow
+            ctx.fillRect(p2x, RULER_HEIGHT - 4, p2w, 4);
+        }
+
         /* ── row contents (within clip) ── */
         for (let row = 0; row < sequences.length; row++) {
             const s = sequences[row];
@@ -642,8 +655,8 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
                                 bg = isDark ? '#064e3b' : '#bbf7d0'; // Green
                                 fg = isDark ? '#6ee7b7' : '#14532d';
                             } else if (col >= primers.p2.start && col < primers.p2.end) {
-                                bg = isDark ? '#1e3a8a' : '#bfdbfe'; // Blue
-                                fg = isDark ? '#93c5fd' : '#1e3a8a';
+                                bg = isDark ? '#78350f' : '#fef3c7'; // Yellow/Amber
+                                fg = isDark ? '#fcd34d' : '#92400e';
                             }
                         }
                     }
@@ -695,7 +708,7 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
                             ctx.fillStyle = '#22c55e'; // Green
                             ctx.fillRect(x, y + 2, Math.max(1, cellW), ROW_HEIGHT - 4);
                         } else if (col >= primers.p2.start && col < primers.p2.end) {
-                            ctx.fillStyle = '#3b82f6'; // Blue
+                            ctx.fillStyle = '#facc15'; // Yellow
                             ctx.fillRect(x, y + 2, Math.max(1, cellW), ROW_HEIGHT - 4);
                         }
                     }

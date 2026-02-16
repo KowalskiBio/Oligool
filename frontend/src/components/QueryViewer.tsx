@@ -25,17 +25,12 @@ const QueryViewer: React.FC<QueryViewerProps> = ({ data, jobName, onPrimersUpdat
     const [copyFeedback, setCopyFeedback] = useState('');
     const [showMoligizer, setShowMoligizer] = useState(false);
 
-    // Controls
-    const [targetTm, setTargetTm] = useState(60);
-    const [tmTolerance, setTmTolerance] = useState(0.5); // Default 0.5 as requested
-    const [minLen, setMinLen] = useState(18);
-    const [maxLen, setMaxLen] = useState(30); // Default 30
-    const [desiredLen, setDesiredLen] = useState<number | ''>(''); // Optional fixed length
-    const [splitIdx, setSplitIdx] = useState<number | null>(null); // Absolute index
+    // Controls - Shift Logic
+    const [moligo1Shift, setMoligo1Shift] = useState(0); // Right/3'
+    const [moligo2Shift, setMoligo2Shift] = useState(0); // Left/5'
 
-    // Per-primer manual length overrides (if user clicks + / -)
-    const [p1Len, setP1Len] = useState<number | null>(null);
-    const [p2Len, setP2Len] = useState<number | null>(null);
+    // Derived split for visualization only (backend calculates actual split)
+    const [splitIdx, setSplitIdx] = useState<number | null>(null);
 
     const [primers, setPrimers] = useState<MoligizeResponse | null>(null);
     const [loading, setLoading] = useState(false);
@@ -52,14 +47,14 @@ const QueryViewer: React.FC<QueryViewerProps> = ({ data, jobName, onPrimersUpdat
     useEffect(() => {
         if (data) {
             const raw = data.seq.replace(/-/g, '');
-            // When data changes, reset split to middle (if not set appropriately)
+            // When data changes, reset state
             setSplitIdx(Math.floor(raw.length / 2));
-            setP1Len(null);
-            setP2Len(null);
+            setMoligo1Shift(0);
+            setMoligo2Shift(0);
             setPrimers(null);
             onPrimersUpdate(null);
         }
-    }, [data?.id, data?.seq]); // Only rely on ID/Seq change, not full object ref
+    }, [data?.id, data?.seq]);
 
     // Start with splitIdx centered if null (initial load)
     useEffect(() => {
@@ -78,11 +73,11 @@ const QueryViewer: React.FC<QueryViewerProps> = ({ data, jobName, onPrimersUpdat
                 u++;
             }
         }
-        return gappedSeq.length; // Should not happen if index valid
+        return gappedSeq.length;
     };
 
     useEffect(() => {
-        if (!data || !showMoligizer || splitIdx === null) {
+        if (!data || !showMoligizer) {
             onPrimersUpdate(null);
             return;
         }
@@ -93,8 +88,6 @@ const QueryViewer: React.FC<QueryViewerProps> = ({ data, jobName, onPrimersUpdat
         const fetchPrimers = async () => {
             setLoading(true);
             setError('');
-            // Don't clear primers immediately to avoid flickering, but maybe we should?
-            // setPrimers(null);
 
             try {
                 const res = await fetch('http://localhost:8000/moligize', {
@@ -102,14 +95,9 @@ const QueryViewer: React.FC<QueryViewerProps> = ({ data, jobName, onPrimersUpdat
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         sequence: raw,
-                        target_tm: targetTm,
-                        tm_tolerance: tmTolerance,
-                        min_len: minLen,
-                        max_len: maxLen,
-                        desired_len: desiredLen === '' ? null : Number(desiredLen),
-                        p1_len: p1Len,
-                        p2_len: p2Len,
-                        split_idx: splitIdx
+                        moligo1_shift: moligo1Shift,
+                        moligo2_shift: moligo2Shift,
+                        // split_idx is optional, let backend default to center
                     })
                 });
 
@@ -143,7 +131,7 @@ const QueryViewer: React.FC<QueryViewerProps> = ({ data, jobName, onPrimersUpdat
                 });
 
             } catch (err: any) {
-                setError(err.message || 'Failed to generate primers');
+                setError(err.message || 'Failed to generate moligos');
                 setPrimers(null);
                 onPrimersUpdate(null);
             } finally {
@@ -151,22 +139,19 @@ const QueryViewer: React.FC<QueryViewerProps> = ({ data, jobName, onPrimersUpdat
             }
         };
 
-        const debounce = setTimeout(fetchPrimers, 400);
+        const debounce = setTimeout(fetchPrimers, 200); // Faster debounce as calculation is cheap
         return () => clearTimeout(debounce);
-    }, [data, showMoligizer, targetTm, tmTolerance, minLen, maxLen, desiredLen, p1Len, p2Len, splitIdx]);
+    }, [data, showMoligizer, moligo1Shift, moligo2Shift]);
 
     if (!data) return null;
     const rawSeq = data.seq.replace(/-/g, '');
 
-    // Helper to adjust manual length
-    const adjustLength = (primer: 'p1' | 'p2', delta: number) => {
-        if (!primers) return;
-        if (primer === 'p1') {
-            const current = p1Len ?? primers.p1.len;
-            setP1Len(Math.max(10, current + delta)); // limit min 10
+    // Helper to adjust shift
+    const adjustShift = (moligo: 'm1' | 'm2', delta: number) => {
+        if (moligo === 'm1') {
+            setMoligo1Shift(prev => prev + delta);
         } else {
-            const current = p2Len ?? primers.p2.len;
-            setP2Len(Math.max(10, current + delta));
+            setMoligo2Shift(prev => prev + delta);
         }
     };
 
@@ -176,11 +161,11 @@ const QueryViewer: React.FC<QueryViewerProps> = ({ data, jobName, onPrimersUpdat
         const chars = rawSeq.split('');
         return chars.map((char, i) => {
             let className = '';
-            // P1 (Green): [p1.start, p1.end)
+            // P1 (Right/3' - Green): [p1.start, p1.end)
             if (i >= primers.p1.start && i < primers.p1.end) {
                 className = 'bg-green-200 dark:bg-green-900/40 text-green-900 dark:text-green-300 font-bold';
             }
-            // P2 (Blue): [p2.start, p2.end)
+            // P2 (Left/5' - Blue): [p2.start, p2.end)
             else if (i >= primers.p2.start && i < primers.p2.end) {
                 className = 'bg-blue-200 dark:bg-blue-900/40 text-blue-900 dark:text-blue-300 font-bold';
             }
@@ -224,87 +209,49 @@ const QueryViewer: React.FC<QueryViewerProps> = ({ data, jobName, onPrimersUpdat
             {/* Moligizer Panel */}
             {showMoligizer && (
                 <div className="bg-purple-50/50 dark:bg-purple-900/10 border-b border-purple-100 dark:border-purple-900/30 p-4 font-sans">
-                    {/* Controls Row 1: Global Settings */}
-                    <div className="flex items-end gap-x-6 gap-y-4 mb-4 flex-wrap">
-                        <div className="flex items-center gap-2">
-                            <label className="text-xs font-semibold text-purple-800 dark:text-purple-300">Target Tm</label>
-                            <input
-                                type="number"
-                                value={targetTm}
-                                onChange={e => {
-                                    setTargetTm(Number(e.target.value));
-                                    setP1Len(null);
-                                    setP2Len(null);
-                                }}
-                                className="w-14 rounded-md border-purple-200 dark:border-purple-800 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 text-sm py-1 px-2 focus:ring-purple-500 focus:border-purple-500 border"
-                            />
-                            <span className="text-purple-800 dark:text-purple-300 font-bold">±</span>
-                            <input
-                                type="number"
-                                step="0.1"
-                                value={tmTolerance}
-                                onChange={e => {
-                                    setTmTolerance(Number(e.target.value));
-                                    setP1Len(null);
-                                    setP2Len(null);
-                                }}
-                                className="w-14 rounded-md border-purple-200 dark:border-purple-800 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 text-sm py-1 px-2 focus:ring-purple-500 focus:border-purple-500 border"
-                                title="Deviation (°C)"
-                            />
-                        </div>
-                        <div>
-                            <label className="block text-xs font-semibold text-purple-800 dark:text-purple-300 mb-1">Min Len</label>
-                            <input
-                                type="number"
-                                value={minLen}
-                                onChange={e => {
-                                    setMinLen(Number(e.target.value));
-                                    setP1Len(null);
-                                    setP2Len(null);
-                                }}
-                                className="w-14 rounded-md border-purple-200 dark:border-purple-800 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 text-sm py-1 px-2 focus:ring-purple-500 focus:border-purple-500 border"
-                            />
-                        </div>
-                        <div>
-                            <label className="block text-xs font-semibold text-purple-800 dark:text-purple-300 mb-1">Max Len</label>
-                            <input
-                                type="number"
-                                value={maxLen}
-                                onChange={e => {
-                                    setMaxLen(Number(e.target.value));
-                                    setP1Len(null);
-                                    setP2Len(null);
-                                }}
-                                className="w-14 rounded-md border-purple-200 dark:border-purple-800 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 text-sm py-1 px-2 focus:ring-purple-500 focus:border-purple-500 border"
-                            />
-                        </div>
-                        <div>
-                            <label className="block text-xs font-semibold text-purple-800 dark:text-purple-300 mb-1">Desired Len</label>
-                            <input
-                                type="number"
-                                value={desiredLen}
-                                onChange={e => {
-                                    setDesiredLen(e.target.value === '' ? '' : Number(e.target.value));
-                                    setP1Len(null);
-                                    setP2Len(null);
-                                }}
-                                placeholder="Opt"
-                                className="w-16 rounded-md border-purple-200 dark:border-purple-800 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 text-sm py-1 px-2 focus:ring-purple-500 focus:border-purple-500 placeholder-slate-400 dark:placeholder-slate-500 border"
-                            />
-                        </div>
-                    </div >
 
-                    {loading && <div className="text-sm text-purple-600 dark:text-purple-400 animate-pulse mb-2">Designing primers...</div>}
+                    {loading && <div className="text-sm text-purple-600 dark:text-purple-400 animate-pulse mb-2">Generating MOLigos...</div>}
                     {error && <div className="text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 p-2 rounded mb-2 border border-red-100 dark:border-red-900/30">{error}</div>}
 
                     {
                         primers && !loading && (
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                {/* Primer 1 (Left - Green) */}
+                                {/* MOLigo 2 (Left - Yellow/Peachy) */}
+                                <div className="bg-white dark:bg-slate-800 rounded-lg border-amber-200 dark:border-amber-900/30 p-3 shadow-sm relative group flex flex-col justify-between border">
+                                    <div>
+                                        <div className="flex justify-between items-start mb-2">
+                                            <div className="text-xs font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wider">MOLigo 2 (Left / 5')</div>
+                                            <button
+                                                onClick={() => handleCopy(primers.p2.seq)}
+                                                className="text-xs bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400 px-2 py-1 rounded hover:bg-amber-100 dark:hover:bg-amber-900/40 border border-amber-200 dark:border-amber-800/50"
+                                            >
+                                                Copy
+                                            </button>
+                                        </div>
+                                        <div className="font-mono text-sm text-slate-700 dark:text-slate-300 break-all bg-amber-50/50 dark:bg-amber-900/10 p-2 rounded">{primers.p2.seq}</div>
+                                    </div>
+
+                                    <div className="mt-3 flex items-center justify-between border-t border-slate-100 dark:border-slate-700 pt-2">
+                                        <div className="flex gap-3 text-xs text-slate-500 dark:text-slate-400">
+                                            <span>Len: <b className="text-slate-700 dark:text-slate-200">{primers.p2.len}</b></span>
+                                            <span>Tm: <b className="text-slate-700 dark:text-slate-200">{primers.p2.tm}°C</b></span>
+                                        </div>
+                                        {/* Shift Component */}
+                                        <div className="flex items-center gap-1">
+                                            <span className="text-[10px] uppercase text-slate-400 font-bold mr-1">Shift</span>
+                                            <button onClick={() => adjustShift('m2', -1)} className="w-6 h-6 flex items-center justify-center bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 rounded text-slate-600 dark:text-slate-400 font-bold text-xs" title="Move Left">&lt;</button>
+                                            <button onClick={() => adjustShift('m2', 1)} className="w-6 h-6 flex items-center justify-center bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 rounded text-slate-600 dark:text-slate-400 font-bold text-xs" title="Move Right">&gt;</button>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* MOLigo 1 (Right - Green - Was Primer 1 color logic) 
+                                    Backend: "p1": get_stats(moligo1_final), # Right side (MOLigo 1)
+                                */}
                                 <div className="bg-white dark:bg-slate-800 rounded-lg border border-green-200 dark:border-green-900/30 p-3 shadow-sm relative group flex flex-col justify-between">
                                     <div>
                                         <div className="flex justify-between items-start mb-2">
-                                            <div className="text-xs font-bold text-green-600 dark:text-green-400 uppercase tracking-wider">Primer 1 (Forward / Left)</div>
+                                            <div className="text-xs font-bold text-green-600 dark:text-green-400 uppercase tracking-wider">MOLigo 1 (Right / 3')</div>
                                             <button
                                                 onClick={() => handleCopy(primers.p1.seq)}
                                                 className="text-xs bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400 px-2 py-1 rounded hover:bg-green-100 dark:hover:bg-green-900/40 border border-green-200 dark:border-green-800/50"
@@ -320,38 +267,11 @@ const QueryViewer: React.FC<QueryViewerProps> = ({ data, jobName, onPrimersUpdat
                                             <span>Len: <b className="text-slate-700 dark:text-slate-200">{primers.p1.len}</b></span>
                                             <span>Tm: <b className="text-slate-700 dark:text-slate-200">{primers.p1.tm}°C</b></span>
                                         </div>
-                                        {/* Length Controls */}
+                                        {/* Shift Component */}
                                         <div className="flex items-center gap-1">
-                                            <button onClick={() => adjustLength('p1', -1)} className="w-6 h-6 flex items-center justify-center bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 rounded text-slate-600 dark:text-slate-400 font-bold text-xs" title="Remove 1bp">-</button>
-                                            <button onClick={() => adjustLength('p1', 1)} className="w-6 h-6 flex items-center justify-center bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 rounded text-slate-600 dark:text-slate-400 font-bold text-xs" title="Add 1bp">+</button>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {/* Primer 2 (Right - Blue) */}
-                                <div className="bg-white dark:bg-slate-800 rounded-lg border border-blue-200 dark:border-blue-900/30 p-3 shadow-sm relative group flex flex-col justify-between">
-                                    <div>
-                                        <div className="flex justify-between items-start mb-2">
-                                            <div className="text-xs font-bold text-blue-600 dark:text-blue-400 uppercase tracking-wider">Primer 2 (Reverse / Right)</div>
-                                            <button
-                                                onClick={() => handleCopy(primers.p2.seq)}
-                                                className="text-xs bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400 px-2 py-1 rounded hover:bg-blue-100 dark:hover:bg-blue-900/40 border border-blue-200 dark:border-blue-800/50"
-                                            >
-                                                Copy
-                                            </button>
-                                        </div>
-                                        <div className="font-mono text-sm text-slate-700 dark:text-slate-300 break-all bg-blue-50/50 dark:bg-blue-900/10 p-2 rounded">{primers.p2.seq}</div>
-                                    </div>
-
-                                    <div className="mt-3 flex items-center justify-between border-t border-slate-100 dark:border-slate-700 pt-2">
-                                        <div className="flex gap-3 text-xs text-slate-500 dark:text-slate-400">
-                                            <span>Len: <b className="text-slate-700 dark:text-slate-200">{primers.p2.len}</b></span>
-                                            <span>Tm: <b className="text-slate-700 dark:text-slate-200">{primers.p2.tm}°C</b></span>
-                                        </div>
-                                        {/* Length Controls */}
-                                        <div className="flex items-center gap-1">
-                                            <button onClick={() => adjustLength('p2', -1)} className="w-6 h-6 flex items-center justify-center bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 rounded text-slate-600 dark:text-slate-400 font-bold text-xs" title="Remove 1bp">-</button>
-                                            <button onClick={() => adjustLength('p2', 1)} className="w-6 h-6 flex items-center justify-center bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 rounded text-slate-600 dark:text-slate-400 font-bold text-xs" title="Add 1bp">+</button>
+                                            <span className="text-[10px] uppercase text-slate-400 font-bold mr-1">Shift</span>
+                                            <button onClick={() => adjustShift('m1', -1)} className="w-6 h-6 flex items-center justify-center bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 rounded text-slate-600 dark:text-slate-400 font-bold text-xs" title="Move Left">&lt;</button>
+                                            <button onClick={() => adjustShift('m1', 1)} className="w-6 h-6 flex items-center justify-center bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 rounded text-slate-600 dark:text-slate-400 font-bold text-xs" title="Move Right">&gt;</button>
                                         </div>
                                     </div>
                                 </div>
