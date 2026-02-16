@@ -57,6 +57,7 @@ def run_blast(
         "QUERY": clean_seq,
         "HITLIST_SIZE": str(max_hits),
         "FORMAT_TYPE": "XML",
+        "MEGABLAST": "on",  # Optimization: Use MEGABLAST for faster, high-identity matches
     }
     if api_key:
         params["API_KEY"] = api_key
@@ -99,7 +100,7 @@ def run_blast(
     print(f"[BLAST] Waiting {wait_time}s before first poll...")
     time.sleep(wait_time)
 
-    max_polls = 30  # Max ~5 minutes of polling
+    max_polls = 20  # Max ~3-4 minutes of polling (20 * 10s = 200s)
     for poll in range(max_polls):
         check_params = {
             "CMD": "Get",
@@ -111,7 +112,7 @@ def run_blast(
 
         if "Status=WAITING" in check_resp.text:
             print(f"[BLAST] Still waiting... (poll {poll + 1}/{max_polls})")
-            time.sleep(3)
+            time.sleep(10) # Optimization: Wait 10s between polls to avoid throttling
             continue
         elif "Status=FAILED" in check_resp.text:
             raise RuntimeError("BLAST search failed on NCBI servers.")
@@ -119,7 +120,7 @@ def run_blast(
             print("[BLAST] Results ready!")
             break
     else:
-        raise RuntimeError("BLAST search timed out after 5 minutes.")
+        raise RuntimeError(f"BLAST search timed out after {max_polls * 10} seconds.")
 
     # Step 3: Fetch results in XML format
     result_params = {

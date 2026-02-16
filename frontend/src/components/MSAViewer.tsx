@@ -15,6 +15,7 @@ interface MSAViewerProps {
 
 /* ── constants ────────────────────────────────────────── */
 const LABEL_WIDTH = 140;
+const RIGHT_PADDING = 20;
 const RULER_HEIGHT = 24;
 const ROW_HEIGHT = 18;
 const MAX_VIEWER_HEIGHT = 500;
@@ -63,7 +64,7 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
     const querySeq = sequences.length > 0 ? sequences[0].seq : '';
 
     /* ── sizing ─────────────────────────────────────────── */
-    const seqAreaW = availableWidth - LABEL_WIDTH;
+    const seqAreaW = Math.max(1, availableWidth - LABEL_WIDTH - RIGHT_PADDING);
     const totalVirtualW = seqAreaW / viewFraction;
     const cellW = seqLen > 0 ? totalVirtualW / seqLen : 1;
     const visibleBases = seqLen * viewFraction;
@@ -103,7 +104,7 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
 
     /* ── container resize tracking ──────────────────────── */
     useEffect(() => {
-        const el = containerRef.current;
+        const el = scrollRef.current;
         if (!el) return;
         const obs = new ResizeObserver((e) => {
             for (const entry of e) setAvailableWidth(entry.contentRect.width);
@@ -206,7 +207,7 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
         cvs.style.height = `${MINIMAP_HEIGHT}px`;
         ctx.scale(dpr, dpr);
 
-        const mmSeqW = availableWidth - LABEL_WIDTH;
+        const mmSeqW = availableWidth - LABEL_WIDTH - RIGHT_PADDING;
         const rowsTop = MINIMAP_GC_H + MINIMAP_RULER_H;
         const rowAreaH = MINIMAP_HEIGHT - rowsTop - MINIMAP_HANDLE_H; // subtract handle height
         const rowH = Math.max(1, Math.min(3, rowAreaH / sequences.length));
@@ -394,11 +395,11 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
         const canvas = minimapRef.current;
         if (!canvas) return;
         const rect = canvas.getBoundingClientRect();
-        const mmSeqW = rect.width - LABEL_WIDTH;
+        const mmSeqW = rect.width - LABEL_WIDTH - RIGHT_PADDING;
         const mouseXFrac = Math.max(0, Math.min(1, (e.clientX - rect.left - LABEL_WIDTH) / mmSeqW));
 
         // Capture current viewport
-        const curSeqAreaW = availableWidth - LABEL_WIDTH;
+        const curSeqAreaW = availableWidth - LABEL_WIDTH - RIGHT_PADDING;
         // const curTotalVW = curSeqAreaW / viewFraction; // unused in select mode
         const curStart = scrollLeft / (curSeqAreaW / viewFraction);
         const curEnd = curStart + viewFraction;
@@ -509,10 +510,10 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
         const canvas = minimapRef.current;
         if (!canvas) return;
         const rect = canvas.getBoundingClientRect();
-        const mmSeqW = rect.width - LABEL_WIDTH;
+        const mmSeqW = rect.width - LABEL_WIDTH - RIGHT_PADDING;
         const mouseXFrac = (e.clientX - rect.left - LABEL_WIDTH) / mmSeqW;
 
-        const curSeqAreaW = availableWidth - LABEL_WIDTH;
+        const curSeqAreaW = availableWidth - LABEL_WIDTH - RIGHT_PADDING;
         const curTotalVW = curSeqAreaW / viewFraction;
         const curStart = scrollLeft / curTotalVW;
         const curEnd = curStart + viewFraction;
@@ -556,12 +557,14 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
         /* ── clip sequence area so it never bleeds into labels ── */
         ctx.save();
         ctx.beginPath();
-        ctx.rect(LABEL_WIDTH, 0, seqAreaW, totalH);
+        // Allow drawing into the right padding for labels/ticks
+        ctx.rect(LABEL_WIDTH, 0, availableWidth - LABEL_WIDTH, totalH);
         ctx.clip();
 
         /* ── ruler ── */
         ctx.fillStyle = isDark ? '#1e293b' : '#f8fafc';
-        ctx.fillRect(LABEL_WIDTH, 0, seqAreaW, RULER_HEIGHT);
+        // Extend background to full width to cover padding
+        ctx.fillRect(LABEL_WIDTH, 0, availableWidth - LABEL_WIDTH, RULER_HEIGHT);
         ctx.strokeStyle = isDark ? '#334155' : '#e2e8f0';
         ctx.lineWidth = 1;
         ctx.beginPath();
@@ -711,10 +714,14 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
             const y = RULER_HEIGHT + row * ROW_HEIGHT;
             const isQuery = row === 0;
 
-            ctx.fillStyle = isQuery ? '#f0f9ff' : '#ffffff';
+            ctx.fillStyle = isQuery
+                ? (isDark ? '#0c4a6e' : '#f0f9ff') // Dark blue vs Light blue
+                : (isDark ? '#1e293b' : '#ffffff'); // Slate-800 vs White
             ctx.fillRect(0, y, LABEL_WIDTH - 1, ROW_HEIGHT);
 
-            ctx.fillStyle = isQuery ? '#0369a1' : '#475569';
+            ctx.fillStyle = isQuery
+                ? (isDark ? '#bae6fd' : '#0369a1') // Light blue vs Dark blue
+                : (isDark ? '#e2e8f0' : '#475569'); // Slate-200 vs Slate-600
             ctx.font = `${isQuery ? 'bold ' : ''}10px ui-monospace, SFMono-Regular, monospace`;
 
             ctx.textAlign = 'right';
@@ -747,7 +754,7 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
             if (!rect) return;
 
             const offsetX = e.clientX - rect.left - LABEL_WIDTH;
-            const seqAreaWidth = rect.width - LABEL_WIDTH; // Should match seqAreaW effectively
+            const seqAreaWidth = rect.width - LABEL_WIDTH - RIGHT_PADDING; // Should match seqAreaW effectively
 
             // If mouse is over labels, just zoom center or left? Let's assume clamping to 0 if < 0.
             const validOffsetX = Math.max(0, Math.min(seqAreaWidth, offsetX));
@@ -879,7 +886,7 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
             </div>
 
             {/* ── minimap navigator ── */}
-            <div className="border-b border-slate-200 bg-slate-50">
+            <div className="border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900">
                 <canvas
                     ref={minimapRef}
                     style={{ display: 'block', cursor: 'crosshair' }}
@@ -889,17 +896,17 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
             </div>
 
             {/* ── legend ── */}
-            <div className="px-5 py-1.5 border-b border-slate-100 bg-white flex items-center gap-4 text-xs text-slate-500">
+            <div className="px-5 py-1.5 border-b border-slate-100 dark:border-slate-700 bg-white dark:bg-slate-800 flex items-center gap-4 text-xs text-slate-500 dark:text-slate-400">
                 <span className="flex items-center gap-1">
-                    <span className="inline-block w-3 h-3 rounded-sm" style={{ background: '#f3f4f6' }} />
+                    <span className="inline-block w-3 h-3 rounded-sm border border-slate-200 dark:border-slate-700" style={{ background: isDark ? '#1e293b' : '#f3f4f6' }} />
                     Sequence / Match
                 </span>
                 <span className="flex items-center gap-1">
-                    <span className="inline-block w-3 h-3 rounded-sm" style={{ background: '#fee2e2' }} />
+                    <span className="inline-block w-3 h-3 rounded-sm border border-red-100 dark:border-red-900" style={{ background: isDark ? '#7f1d1d' : '#fee2e2' }} />
                     Mismatch
                 </span>
                 <span className="flex items-center gap-1">
-                    <span className="inline-block w-3 h-3 rounded-sm" style={{ background: '#9333ea' }} />
+                    <span className="inline-block w-3 h-3 rounded-sm border border-purple-100 dark:border-purple-900" style={{ background: isDark ? '#3b0764' : '#f3e8ff' }} />
                     Insertion / Deletion
                 </span>
                 <span className="ml-auto italic text-slate-400">
@@ -910,7 +917,7 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
             {/* ── scrollable canvas area ── */}
             <div
                 ref={scrollRef}
-                className="overflow-x-auto overflow-y-auto overscroll-contain"
+                className={`overflow-y-auto overscroll-contain ${viewFraction >= 0.99 ? 'overflow-x-hidden' : 'overflow-x-auto'}`}
                 style={{ height: `${Math.min(totalH, MAX_VIEWER_HEIGHT)}px` }}
                 onScroll={handleScroll}
                 onWheel={handleWheel}
@@ -926,13 +933,13 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
             {/* ── selection stats footer ── */}
             {
                 selectionStats && (
-                    <div className="bg-slate-50 border-t border-slate-200 px-5 py-2 text-xs text-slate-600 font-mono flex items-center justify-between">
+                    <div className="bg-slate-50 dark:bg-slate-900 border-t border-slate-200 dark:border-slate-700 px-5 py-2 text-xs text-slate-600 dark:text-slate-400 font-mono flex items-center justify-between">
                         <div className="flex items-center gap-4">
-                            <span className="font-semibold text-slate-700">Visible Range: {startCol + 1}–{endCol + 1}</span>
+                            <span className="font-semibold text-slate-700 dark:text-slate-300">Visible Range: {startCol + 1}–{endCol + 1}</span>
                             <span>Length: {selectionStats.total} bp</span>
-                            <span className="text-emerald-700 font-medium">GC: {selectionStats.gcPct.toFixed(1)}%</span>
+                            <span className="text-emerald-700 dark:text-emerald-400 font-medium">GC: {selectionStats.gcPct.toFixed(1)}%</span>
                         </div>
-                        <div className="flex items-center gap-3 text-slate-500">
+                        <div className="flex items-center gap-3 text-slate-500 dark:text-slate-500">
                             <span>A: {selectionStats.a}</span>
                             <span>T: {selectionStats.t}</span>
                             <span>G: {selectionStats.g}</span>
