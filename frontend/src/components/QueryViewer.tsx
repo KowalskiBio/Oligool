@@ -19,6 +19,7 @@ interface MoligizeResponse {
     p1: Primer;
     p2: Primer;
     split_idx: number;
+    params_not_met?: boolean;
 }
 
 const QueryViewer: React.FC<QueryViewerProps> = ({ data, jobName, onPrimersUpdate }) => {
@@ -27,6 +28,8 @@ const QueryViewer: React.FC<QueryViewerProps> = ({ data, jobName, onPrimersUpdat
 
     // Controls - Shift Logic
     const [moligoShift, setMoligoShift] = useState(0);
+    const [moligo1Len, setMoligo1Len] = useState(20);
+    const [moligo2Len, setMoligo2Len] = useState(20);
 
     // Derived split for visualization only (backend calculates actual split)
     const [splitIdx, setSplitIdx] = useState<number | null>(null);
@@ -34,6 +37,16 @@ const QueryViewer: React.FC<QueryViewerProps> = ({ data, jobName, onPrimersUpdat
     const [primers, setPrimers] = useState<MoligizeResponse | null>(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
+
+    const [showParams, setShowParams] = useState(false);
+    const [searchParams, setSearchParams] = useState({
+        min_len: 18,
+        max_l: 30,
+        target_tm: 60.0,
+        tm_dev: 2.0,
+        tm_diff: 2.0
+    });
+    const [paramsNotMet, setParamsNotMet] = useState(false);
 
     const handleCopy = (text: string) => {
         navigator.clipboard.writeText(text).then(() => {
@@ -49,6 +62,8 @@ const QueryViewer: React.FC<QueryViewerProps> = ({ data, jobName, onPrimersUpdat
             // When data changes, reset state
             setSplitIdx(Math.floor(raw.length / 2));
             setMoligoShift(0);
+            setMoligo1Len(20);
+            setMoligo2Len(20);
             setPrimers(null);
             onPrimersUpdate(null);
         }
@@ -95,7 +110,16 @@ const QueryViewer: React.FC<QueryViewerProps> = ({ data, jobName, onPrimersUpdat
                         sequence: raw,
                         moligo1_shift: moligoShift,
                         moligo2_shift: moligoShift,
-                        // split_idx is optional, let backend default to center
+                        moligo1_len: moligo1Len,
+                        moligo2_len: moligo2Len,
+                        search_params: showParams ? {
+                            min_len: Number(searchParams.min_len),
+                            max_len: Number(searchParams.max_l),
+                            target_tm: Number(searchParams.target_tm),
+                            tm_dev: Number(searchParams.tm_dev),
+                            tm_diff: Number(searchParams.tm_diff),
+                            moligoShift: moligoShift
+                        } : null
                     })
                 });
 
@@ -110,6 +134,7 @@ const QueryViewer: React.FC<QueryViewerProps> = ({ data, jobName, onPrimersUpdat
                 }
                 const json: MoligizeResponse = await res.json();
                 setPrimers(json);
+                setParamsNotMet(!!json.params_not_met);
 
                 const p1StartGapped = mapUngappedToGapped(json.p1.start, data.seq);
                 const p1EndGapped = mapUngappedToGapped(json.p1.end, data.seq);
@@ -139,7 +164,7 @@ const QueryViewer: React.FC<QueryViewerProps> = ({ data, jobName, onPrimersUpdat
 
         const debounce = setTimeout(fetchPrimers, 200); // Faster debounce as calculation is cheap
         return () => clearTimeout(debounce);
-    }, [data, showMoligizer, moligoShift]);
+    }, [data, showMoligizer, moligoShift, showParams, searchParams, moligo1Len, moligo2Len]);
 
     if (!data) return null;
     const rawSeq = data.seq.replace(/-/g, '');
@@ -199,6 +224,16 @@ const QueryViewer: React.FC<QueryViewerProps> = ({ data, jobName, onPrimersUpdat
                             >&gt;</button>
                         </div>
                     )}
+
+                    <button
+                        onClick={() => setShowParams(!showParams)}
+                        className={`ml-2 px-3 py-1 text-[10px] font-bold rounded border transition-all uppercase tracking-tight ${showParams
+                            ? 'bg-amber-100 text-amber-700 border-amber-300'
+                            : 'bg-white dark:bg-slate-700 text-slate-500 border-slate-200 dark:border-slate-600 hover:border-amber-300 hover:text-amber-600'
+                            }`}
+                    >
+                        ⚙️ Search by params
+                    </button>
                 </div>
                 <div className="flex items-center gap-3">
                     {copyFeedback && (
@@ -216,6 +251,66 @@ const QueryViewer: React.FC<QueryViewerProps> = ({ data, jobName, onPrimersUpdat
             {/* Moligizer Panel */}
             {showMoligizer && (
                 <div className="bg-purple-50/50 dark:bg-purple-900/5 border-b border-purple-100 dark:border-purple-900/20 p-4 font-sans min-h-[140px] relative">
+                    {showParams && (
+                        <div className="mb-4 p-3 bg-white dark:bg-slate-800 rounded-lg border border-amber-200 dark:border-amber-900/30 shadow-sm grid grid-cols-2 md:grid-cols-5 gap-3">
+                            <div className="flex flex-col gap-1">
+                                <label className="text-[10px] font-bold text-slate-400 uppercase">Min Len</label>
+                                <input
+                                    type="number"
+                                    value={searchParams.min_len}
+                                    onChange={e => setSearchParams({ ...searchParams, min_len: parseInt(e.target.value) })}
+                                    className="px-2 py-1 text-xs border border-slate-200 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-900"
+                                />
+                            </div>
+                            <div className="flex flex-col gap-1">
+                                <label className="text-[10px] font-bold text-slate-400 uppercase">Max Len</label>
+                                <input
+                                    type="number"
+                                    value={searchParams.max_l}
+                                    onChange={e => setSearchParams({ ...searchParams, max_l: parseInt(e.target.value) })}
+                                    className="px-2 py-1 text-xs border border-slate-200 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-900"
+                                />
+                            </div>
+                            <div className="flex flex-col gap-1">
+                                <label className="text-[10px] font-bold text-slate-400 uppercase">Target Tm</label>
+                                <input
+                                    type="number"
+                                    step="0.1"
+                                    value={searchParams.target_tm}
+                                    onChange={e => setSearchParams({ ...searchParams, target_tm: parseFloat(e.target.value) })}
+                                    className="px-2 py-1 text-xs border border-slate-200 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-900"
+                                />
+                            </div>
+                            <div className="flex flex-col gap-1">
+                                <label className="text-[10px] font-bold text-slate-400 uppercase">Tm Dev</label>
+                                <input
+                                    type="number"
+                                    step="0.1"
+                                    value={searchParams.tm_dev}
+                                    onChange={e => setSearchParams({ ...searchParams, tm_dev: parseFloat(e.target.value) })}
+                                    className="px-2 py-1 text-xs border border-slate-200 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-900"
+                                />
+                            </div>
+                            <div className="flex flex-col gap-1">
+                                <label className="text-[10px] font-bold text-slate-400 uppercase">Tm Diff</label>
+                                <input
+                                    type="number"
+                                    step="0.1"
+                                    value={searchParams.tm_diff}
+                                    onChange={e => setSearchParams({ ...searchParams, tm_diff: parseFloat(e.target.value) })}
+                                    className="px-2 py-1 text-xs border border-slate-200 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-900"
+                                />
+                            </div>
+                        </div>
+                    )}
+
+                    {paramsNotMet && (
+                        <div className="mb-4 px-3 py-2 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/50 rounded-md text-amber-700 dark:text-amber-400 text-xs flex items-center gap-2">
+                            <span className="text-sm">⚠️</span>
+                            <b>Params too strict, no moligos found.</b> Showing default center-split oligos instead.
+                        </div>
+                    )}
+
                     {error && <div className="text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 p-2 rounded mb-4 border border-red-100 dark:border-red-900/30">{error}</div>}
 
                     {
@@ -241,6 +336,18 @@ const QueryViewer: React.FC<QueryViewerProps> = ({ data, jobName, onPrimersUpdat
                                             <span>Len: <b className="text-slate-700 dark:text-slate-200">{primers.p2.len}</b></span>
                                             <span>Tm: <b className="text-slate-700 dark:text-slate-200">{primers.p2.tm}°C</b></span>
                                         </div>
+                                        <div className="flex bg-slate-100 dark:bg-slate-700 rounded border border-slate-200 dark:border-slate-600 overflow-hidden shadow-sm">
+                                            <button
+                                                onClick={() => setMoligo2Len(prev => Math.max(10, prev - 1))}
+                                                className="w-8 h-7 flex items-center justify-center hover:bg-white dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition-colors font-bold border-r border-slate-200 dark:border-slate-600"
+                                                title="Decrease length"
+                                            >-</button>
+                                            <button
+                                                onClick={() => setMoligo2Len(prev => Math.min(60, prev + 1))}
+                                                className="w-8 h-7 flex items-center justify-center hover:bg-white dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition-colors font-bold"
+                                                title="Increase length to left"
+                                            >+</button>
+                                        </div>
                                     </div>
                                 </div>
 
@@ -263,6 +370,18 @@ const QueryViewer: React.FC<QueryViewerProps> = ({ data, jobName, onPrimersUpdat
                                         <div className="flex gap-3 text-xs text-slate-500 dark:text-slate-400">
                                             <span>Len: <b className="text-slate-700 dark:text-slate-200">{primers.p1.len}</b></span>
                                             <span>Tm: <b className="text-slate-700 dark:text-slate-200">{primers.p1.tm}°C</b></span>
+                                        </div>
+                                        <div className="flex bg-slate-100 dark:bg-slate-700 rounded border border-slate-200 dark:border-slate-600 overflow-hidden shadow-sm">
+                                            <button
+                                                onClick={() => setMoligo1Len(prev => Math.max(10, prev - 1))}
+                                                className="w-8 h-7 flex items-center justify-center hover:bg-white dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition-colors font-bold border-r border-slate-200 dark:border-slate-600"
+                                                title="Decrease length"
+                                            >-</button>
+                                            <button
+                                                onClick={() => setMoligo1Len(prev => Math.min(60, prev + 1))}
+                                                className="w-8 h-7 flex items-center justify-center hover:bg-white dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition-colors font-bold"
+                                                title="Increase length to right"
+                                            >+</button>
                                         </div>
                                     </div>
                                 </div>
