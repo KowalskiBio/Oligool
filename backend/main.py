@@ -141,8 +141,9 @@ class MoligizeRequest(BaseModel):
 async def moligize_sequence(request: MoligizeRequest):
     try:
         import primer3
+        from Bio.Seq import Seq
     except ImportError:
-        raise HTTPException(status_code=500, detail="primer3-py is not installed on the server.")
+        raise HTTPException(status_code=500, detail="primer3-py or biopython is not installed.")
 
     seq = request.sequence.upper().replace(" ", "").replace("\n", "").replace("-", "")
     if not seq:
@@ -158,102 +159,112 @@ async def moligize_sequence(request: MoligizeRequest):
     if split_idx < 1: split_idx = 1
     if split_idx >= len(seq): split_idx = len(seq) - 1
 
-    # Determine Global Length Range
-    if request.desired_len is not None:
-        global_min = request.desired_len
-        global_max = request.desired_len
-    else:
-        global_min = request.min_len
-        global_max = min(split_idx, request.max_len) # Use user max_len
+    # --- Helper to Search Primers ---
+    def find_best_primer(chunk, is_p1, min_l, max_l, target_tm, tolerance):
+        # Constraints
+        eff_max = min(max_l, len(chunk))
+        eff_min = min(min_l, eff_max) # Ensure min <= max
+        
+        if eff_max < 1: return None # No chunk to search
 
-    # P1 (Forward/Left, ends at split_idx)
-    p1_best = None
-    p1_diff = float("inf")
-    
+        best_cand = None
+        min_diff = float("inf")
+
+        # Iterate length range
+        for l in range(eff_min, eff_max + 1):
+            if is_p1:
+                # P1: Take last `l` bases, Reverse Complement
+                sub = chunk[-l:]
+                primer_seq = str(Seq(sub).reverse_complement())
+            else:
+                # P2: Take first `l` bases
+                sub = chunk[:l]
+                primer_seq = sub
+            
+            p_tm = primer3.calc_tm(primer_seq)
+            diff = abs(p_tm - target_tm)
+            
+            # If tolerance is not Inf, skip invalid
+            if tolerance != float("inf") and diff > tolerance:
+                continue
+
+            # Update best match (closest Tm)
+            if diff < min_diff:
+                min_diff = diff
+                best_cand = {
+                    "seq": primer_seq,
+                    "tm": round(p_tm, 1),
+                    "len": l,
+                    "gc": round((primer_seq.count("G") + primer_seq.count("C")) / l * 100, 1),
+                    "diff": diff
+                }
+        
+        if best_cand:
+            # Augment with coordinates
+            if is_p1:
+                best_cand["start"] = split_idx - best_cand["len"]
+                best_cand["end"] = split_idx
+            else:
+                best_cand["start"] = split_idx
+                best_cand["end"] = split_idx + best_cand["len"]
+                
+        return best_cand
+
+    # --- P1 Selection ---
     left_chunk = seq[:split_idx]
     
-    # Specific P1 Length Override > Global Desired > Global Min/Max
+    # Determine P1 Range
     if request.p1_len is not None:
-        p1_range_min = request.p1_len
-        p1_range_max = request.p1_len
+        p1_r_min, p1_r_max = request.p1_len, request.p1_len
     else:
-        p1_range_min = global_min
-        p1_range_max = global_max
-    
-    # Clamp to available length
-    p1_range_max = min(p1_range_max, len(left_chunk))
-    p1_range_min = min(p1_range_min, len(left_chunk))
+        desired = request.desired_len
+        p1_r_min = desired if desired else request.min_len
+        p1_r_max = desired if desired else min(split_idx, request.max_len)
 
-    # Iterate P1
-    for l in range(p1_range_min, p1_range_max + 1):
-        sub = left_chunk[-l:]
-        from Bio.Seq import Seq
-        rc_seq = str(Seq(sub).reverse_complement())
+    # Strategies: Strict -> Relaxed Tm -> Fallback Length
+    p1_strategies = [
+        (p1_r_min, p1_r_max, request.tm_tolerance),
+        (p1_r_min, p1_r_max, float("inf")),
+        (10, 40, float("inf"))
+    ]
+
+    p1_final = None
+    for (mn, mx, tol) in p1_strategies:
+        p1_final = find_best_primer(left_chunk, True, mn, mx, request.target_tm, tol)
+        if p1_final: break
         
-        tm = primer3.calc_tm(rc_seq)
-        diff = abs(tm - request.target_tm)
-        
-        if diff > request.tm_tolerance:
-            continue
+    if not p1_final:
+        raise HTTPException(status_code=400, detail="Cannot generate P1 (sequence too short?).")
 
-        if diff < p1_diff:
-            p1_diff = diff
-            p1_best = {
-                "seq": rc_seq,
-                "tm": round(tm, 1),
-                "len": l,
-                "gc": round((rc_seq.count("G") + rc_seq.count("C")) / l * 100, 1),
-                "start": split_idx - l,
-                "end": split_idx
-            }
-
-    # P2 (Reverse/Right, starts at split_idx)
-    p2_best = None
-    p2_diff = float("inf")
-    
+    # --- P2 Selection ---
     right_chunk = seq[split_idx:]
     
-    # Specific P2 Length Override > Global Desired > Global Min/Max
+    # Determine P2 Range
     if request.p2_len is not None:
-        p2_range_min = request.p2_len
-        p2_range_max = request.p2_len
+        p2_r_min, p2_r_max = request.p2_len, request.p2_len
     else:
-        p2_range_min = global_min
-        p2_range_max = global_max
+        desired = request.desired_len
+        p2_r_min = desired if desired else request.min_len
+        p2_r_max = desired if desired else min(len(right_chunk), request.max_len)
 
-    p2_range_max = min(p2_range_max, len(right_chunk))
-    p2_range_min = min(p2_range_min, len(right_chunk))
+    p2_strategies = [
+        (p2_r_min, p2_r_max, request.tm_tolerance),
+        (p2_r_min, p2_r_max, float("inf")),
+        (10, 40, float("inf"))
+    ]
 
-    for l in range(p2_range_min, p2_range_max + 1):
-        sub = right_chunk[:l]
-        tm = primer3.calc_tm(sub)
-        diff = abs(tm - request.target_tm)
-        
-        if diff > request.tm_tolerance:
-            continue
-            
-        if diff < p2_diff:
-            p2_diff = diff
-            p2_best = {
-                "seq": sub,
-                "tm": round(tm, 1),
-                "len": l,
-                "gc": round((sub.count("G") + sub.count("C")) / l * 100, 1),
-                "start": split_idx,
-                "end": split_idx + l
-            }
+    p2_final = None
+    for (mn, mx, tol) in p2_strategies:
+        p2_final = find_best_primer(right_chunk, False, mn, mx, request.target_tm, tol)
+        if p2_final: break
 
-    # If strict check fails, we might return None. Handle logic to inform user?
-    # Using 400 to avoid confusion with 404 (Route Not Found)
-    if not p1_best:
-         raise HTTPException(status_code=400, detail="No Primer 1 found matching criteria. Try relaxing constraints.")
-    if not p2_best:
-         raise HTTPException(status_code=400, detail="No Primer 2 found matching criteria. Try relaxing constraints.")
+    if not p2_final:
+        raise HTTPException(status_code=400, detail="Cannot generate P2 (sequence too short?).")
 
     return {
-        "p1": p1_best,
-        "p2": p2_best,
-        "split_idx": split_idx # Return actual used split idx
+        "p1": p1_final,
+        "p2": p2_final,
+        "split_idx": split_idx
     }
 
 
