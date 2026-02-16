@@ -131,10 +131,10 @@ class MoligizeRequest(BaseModel):
     sequence: str
     moligo1_shift: int = 0
     moligo2_shift: int = 0
-    moligo1_len: int = 20
-    moligo2_len: int = 20
+    moligo1_len: int = 50
+    moligo2_len: int = 50
     # Search params
-    search_params: Optional[Dict] = None # {min_len: 18, max_len: 30, target_tm: 60, tm_dev: 2, tm_diff: 2}
+    search_params: Optional[Dict] = None # {min_len: 18, max_len: 30, tm_min: 47, tm_max: 58, tm_diff: 1.5}
 
 @app.post("/moligize")
 async def moligize_sequence(request: MoligizeRequest):
@@ -164,6 +164,13 @@ async def moligize_sequence(request: MoligizeRequest):
     
     absolute_split = start_w + split_idx_in_window
 
+    # Handle sequence lengths < 100 for defaults
+    # If the user hasn't manually adjusted lengths (they are at 50), and sequence is < 100
+    l1 = request.moligo1_len
+    l2 = request.moligo2_len
+    if l1 == 50 and l2 == 50 and len(window_seq) < 100:
+        l1 = l2 = len(window_seq) // 2
+
     def get_stats(s, start_idx, end_idx):
         if not s: return {"seq": "", "len": 0, "tm": 0, "gc": 0, "start": 0, "end": 0}
         return {
@@ -176,16 +183,16 @@ async def moligize_sequence(request: MoligizeRequest):
         }
 
     # Deterministic fallback (the current logic)
-    def get_deterministic(s1_shift, s2_shift, l1, l2):
+    def get_deterministic(s1_shift, s2_shift, len1, len2):
         # M2 (Left): ends at split + shift, length l2
         m2_end = split_idx_in_window + s2_shift
-        m2_start = max(0, m2_end - l2)
-        m2_end = min(len(window_seq), m2_start + l2) 
+        m2_start = max(0, m2_end - len2)
+        m2_end = min(len(window_seq), m2_start + len2) 
         
         # M1 (Right): starts at split + shift, length l1
         m1_start = split_idx_in_window + s1_shift
-        m1_end = min(len(window_seq), m1_start + l1)
-        m1_start = max(0, m1_end - l1)
+        m1_end = min(len(window_seq), m1_start + len1)
+        m1_start = max(0, m1_end - len1)
         
         m2_fwd = window_seq[m2_start:m2_end]
         m1_fwd = window_seq[m1_start:m1_end]
@@ -195,17 +202,17 @@ async def moligize_sequence(request: MoligizeRequest):
         
         return m1_rc, m2_rc, m1_start, m1_end, m2_start, m2_end
 
-    moligo1_final, moligo2_final, m1_start, m1_end, m2_start, m2_end = get_deterministic(request.moligo1_shift, request.moligo2_shift, request.moligo1_len, request.moligo2_len)
+    moligo1_final, moligo2_final, m1_start, m1_end, m2_start, m2_end = get_deterministic(request.moligo1_shift, request.moligo2_shift, l1, l2)
     params_not_met = False
 
     # 3. Parameter-based Search
     if request.search_params is not None:
         p: Dict = request.search_params
         min_l = int(p.get('min_len', 18))
-        max_l = int(p.get('max_len', 30))
-        tgt_tm = float(p.get('target_tm', 60.0))
-        tm_dev = float(p.get('tm_dev', 2.0))
-        tm_diff = float(p.get('tm_diff', 2.0))
+        max_l = int(p.get('max_len', 60)) # increased max for 50nt defaults
+        tm_min = float(p.get('tm_min', 47.0))
+        tm_max = float(p.get('tm_max', 58.0))
+        tm_diff = float(p.get('tm_diff', 1.5))
         
         best_pair = None
         best_score = float('inf') # Lower is better (closest to center)
@@ -224,7 +231,7 @@ async def moligize_sequence(request: MoligizeRequest):
         # No, let's keep it simple: search uses its own min/max. The +/- buttons in the UI will update the 'min_len' and 'max_len' of the search if in search mode? 
         # No, user wants independent buttons.
         
-        # We will search based on min/max_l or EXACT lengths if manually set (not 20)
+        # We will search based on min/max_l or EXACT lengths if manually set (not 50)
         # However, min_l/max_l already come from the UI.
         # Let's just use the range. If the user clicked +/-, they are effectively 
         # saying "I want a specific length". 
@@ -232,11 +239,11 @@ async def moligize_sequence(request: MoligizeRequest):
         # as the range if the user has touched them.
         
         m1_search_range = range(min_l, max_l + 1)
-        if request.moligo1_len != 20: 
+        if request.moligo1_len != 50: 
             m1_search_range = [request.moligo1_len]
             
         m2_search_range = range(min_l, max_l + 1)
-        if request.moligo2_len != 20:
+        if request.moligo2_len != 50:
             m2_search_range = [request.moligo2_len]
 
         subs_m1 = []
@@ -249,7 +256,7 @@ async def moligize_sequence(request: MoligizeRequest):
                     s = window_seq[i:i+l]
                     rc = str(Seq(s).reverse_complement())
                     tm = primer3.calc_tm(rc)
-                    if abs(tm - tgt_tm) <= tm_dev:
+                    if tm_min <= tm <= tm_max:
                         subs_m2.append({'start': i, 'end': i + l, 'tm': tm, 'seq': rc, 'len': l})
 
         # Precompute for M1
@@ -259,7 +266,7 @@ async def moligize_sequence(request: MoligizeRequest):
                     s = window_seq[i:i+l]
                     rc = str(Seq(s).reverse_complement())
                     tm = primer3.calc_tm(rc)
-                    if abs(tm - tgt_tm) <= tm_dev:
+                    if tm_min <= tm <= tm_max:
                         subs_m1.append({'start': i, 'end': i + l, 'tm': tm, 'seq': rc, 'len': l})
         
         target_center = split_idx_in_window + p.get('moligoShift', 0)

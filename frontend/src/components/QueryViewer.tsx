@@ -28,8 +28,8 @@ const QueryViewer: React.FC<QueryViewerProps> = ({ data, jobName, onPrimersUpdat
 
     // Controls - Shift Logic
     const [moligoShift, setMoligoShift] = useState(0);
-    const [moligo1Len, setMoligo1Len] = useState(20);
-    const [moligo2Len, setMoligo2Len] = useState(20);
+    const [moligo1Len, setMoligo1Len] = useState(50);
+    const [moligo2Len, setMoligo2Len] = useState(50);
 
     // Derived split for visualization only (backend calculates actual split)
     const [splitIdx, setSplitIdx] = useState<number | null>(null);
@@ -40,11 +40,11 @@ const QueryViewer: React.FC<QueryViewerProps> = ({ data, jobName, onPrimersUpdat
 
     const [showParams, setShowParams] = useState(false);
     const [searchParams, setSearchParams] = useState({
-        min_len: 18,
-        max_l: 30,
-        target_tm: 60.0,
-        tm_dev: 2.0,
-        tm_diff: 2.0
+        min_len: 40,
+        max_l: 60,
+        tm_min: 47.0,
+        tm_max: 58.0,
+        tm_diff: 1.5
     });
     const [paramsNotMet, setParamsNotMet] = useState(false);
 
@@ -62,8 +62,8 @@ const QueryViewer: React.FC<QueryViewerProps> = ({ data, jobName, onPrimersUpdat
             // When data changes, reset state
             setSplitIdx(Math.floor(raw.length / 2));
             setMoligoShift(0);
-            setMoligo1Len(20);
-            setMoligo2Len(20);
+            setMoligo1Len(50);
+            setMoligo2Len(50);
             setPrimers(null);
             onPrimersUpdate(null);
         }
@@ -115,8 +115,8 @@ const QueryViewer: React.FC<QueryViewerProps> = ({ data, jobName, onPrimersUpdat
                         search_params: showParams ? {
                             min_len: Number(searchParams.min_len),
                             max_len: Number(searchParams.max_l),
-                            target_tm: Number(searchParams.target_tm),
-                            tm_dev: Number(searchParams.tm_dev),
+                            tm_min: Number(searchParams.tm_min),
+                            tm_max: Number(searchParams.tm_max),
                             tm_diff: Number(searchParams.tm_diff),
                             moligoShift: moligoShift
                         } : null
@@ -272,22 +272,22 @@ const QueryViewer: React.FC<QueryViewerProps> = ({ data, jobName, onPrimersUpdat
                                 />
                             </div>
                             <div className="flex flex-col gap-1">
-                                <label className="text-[10px] font-bold text-slate-400 uppercase">Target Tm</label>
+                                <label className="text-[10px] font-bold text-slate-400 uppercase">Tm Min</label>
                                 <input
                                     type="number"
                                     step="0.1"
-                                    value={searchParams.target_tm}
-                                    onChange={e => setSearchParams({ ...searchParams, target_tm: parseFloat(e.target.value) })}
+                                    value={searchParams.tm_min}
+                                    onChange={e => setSearchParams({ ...searchParams, tm_min: parseFloat(e.target.value) })}
                                     className="px-2 py-1 text-xs border border-slate-200 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-900"
                                 />
                             </div>
                             <div className="flex flex-col gap-1">
-                                <label className="text-[10px] font-bold text-slate-400 uppercase">Tm Dev</label>
+                                <label className="text-[10px] font-bold text-slate-400 uppercase">Tm Max</label>
                                 <input
                                     type="number"
                                     step="0.1"
-                                    value={searchParams.tm_dev}
-                                    onChange={e => setSearchParams({ ...searchParams, tm_dev: parseFloat(e.target.value) })}
+                                    value={searchParams.tm_max}
+                                    onChange={e => setSearchParams({ ...searchParams, tm_max: parseFloat(e.target.value) })}
                                     className="px-2 py-1 text-xs border border-slate-200 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-900"
                                 />
                             </div>
