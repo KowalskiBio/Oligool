@@ -235,10 +235,10 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, idtCredent
     };
 
     const renderIdtCard = (title: string, data: any) => {
-        if (!data || data.error) return <div className="text-[10px] text-red-400">{data?.error || 'N/A'}</div>;
+        if (!data || data.error) return <div className="text-sm text-red-400">{data?.error || 'N/A'}</div>;
         const dg = data.DeltaG;
         return (
-            <div className="flex justify-between items-center text-[10px]">
+            <div className="flex justify-between items-center text-sm">
                 <span className="text-slate-500">{title}:</span>
                 <span className={getIdtStatusColor(dg)}>{dg !== undefined ? `${dg.toFixed(2)}` : 'N/A'}</span>
             </div>
@@ -430,29 +430,31 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, idtCredent
                         {primers && idtCredentials && (
                             <div className="mt-4 border-t border-slate-100 dark:border-slate-700 pt-4">
                                 <div className="flex items-center justify-between mb-3">
-                                    <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">IDT OligoAnalyzer Results</h4>
+                                    <h4 className="text-sm font-bold text-slate-400 uppercase tracking-widest">IDT OligoAnalyzer Results</h4>
                                     {!idtResults && !isIdtLoading && (
-                                        <button onClick={runIdtAnalysis} className="text-[10px] font-bold bg-indigo-50 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-400 px-3 py-1 rounded hover:bg-indigo-100 transition-colors border border-indigo-200 dark:border-indigo-800">Run Full IDT Analysis</button>
+                                        <button onClick={runIdtAnalysis} className="text-xs font-bold bg-indigo-50 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-400 px-3 py-1.5 rounded hover:bg-indigo-100 transition-colors border border-indigo-200 dark:border-indigo-800">Run Full IDT Analysis</button>
                                     )}
-                                    {isIdtLoading && <div className="animate-pulse text-[10px] text-indigo-500 font-medium">Analyzing with IDT API...</div>}
+                                    {isIdtLoading && <div className="animate-pulse text-xs text-indigo-500 font-medium">Analyzing with IDT API...</div>}
                                 </div>
-                                {idtError && <div className="text-[10px] text-red-500 bg-red-50 dark:bg-red-900/20 p-2 rounded mb-3 border border-red-100 dark:border-red-900/30">Error: {idtError}</div>}
+                                {idtError && <div className="text-xs text-red-500 bg-red-50 dark:bg-red-900/20 p-2 rounded mb-3 border border-red-100 dark:border-red-900/30">Error: {idtError}</div>}
                                 {idtResults && (
                                     <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                                        <div className="bg-slate-50 dark:bg-slate-900/40 p-2 rounded border border-slate-100 dark:border-slate-800">
-                                            <div className="text-[9px] font-bold text-slate-500 uppercase mb-1">MOLigo 2 Stability</div>
+                                        <div className="bg-slate-50 dark:bg-slate-900/40 p-3 rounded border border-slate-100 dark:border-slate-800">
+                                            <div className="text-xs font-bold text-slate-500 uppercase mb-1">MOLigo 2 Stability</div>
                                             {renderIdtCard("Hairpin ΔG", idtResults.m2.hairpin)}
                                             {renderIdtCard("Self-Dimer ΔG", idtResults.m2.self_dimer)}
+                                            <div className="text-[10px] text-slate-400 mt-1 italic">kcal/mol</div>
                                         </div>
-                                        <div className="bg-slate-50 dark:bg-slate-900/40 p-2 rounded border border-slate-100 dark:border-slate-800">
-                                            <div className="text-[9px] font-bold text-slate-500 uppercase mb-1">MOLigo 1 Stability</div>
+                                        <div className="bg-slate-50 dark:bg-slate-900/40 p-3 rounded border border-slate-100 dark:border-slate-800">
+                                            <div className="text-xs font-bold text-slate-500 uppercase mb-1">MOLigo 1 Stability</div>
                                             {renderIdtCard("Hairpin ΔG", idtResults.m1.hairpin)}
                                             {renderIdtCard("Self-Dimer ΔG", idtResults.m1.self_dimer)}
+                                            <div className="text-[10px] text-slate-400 mt-1 italic">kcal/mol</div>
                                         </div>
-                                        <div className="bg-indigo-50/30 dark:bg-indigo-900/20 p-2 rounded border border-indigo-100/50 dark:border-indigo-900/30">
-                                            <div className="text-[9px] font-bold text-indigo-500 uppercase mb-1">Cross-Dimer Pairwise</div>
+                                        <div className="bg-indigo-50/30 dark:bg-indigo-900/20 p-3 rounded border border-indigo-100/50 dark:border-indigo-900/30">
+                                            <div className="text-xs font-bold text-indigo-500 uppercase mb-1">Cross-Dimer Pairwise</div>
                                             {renderIdtCard("Hetero-Dimer ΔG", idtResults.pairwise)}
-                                            <div className="text-[8px] text-slate-400 mt-1 italic">kcal/mole</div>
+                                            <div className="text-[10px] text-slate-400 mt-1 italic">kcal/mol</div>
                                         </div>
                                     </div>
                                 )}
