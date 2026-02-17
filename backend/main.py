@@ -401,53 +401,103 @@ async def analyze_idt_oligos(request: IdtAnalyzeRequest):
     def hit_idt(endpoint, seq1, seq2=None):
         url = f"{base_url}/{endpoint}"
         params = {}
-        # EU Swagger uses dNTPsConc (lowercase d)
-        payload = {
-            "NaConc": 50.0,
-            "MgConc": 1.5,
-            "dNTPsConc": 0.2,
-            "OligoConc": 0.25,
-            "NucleotideType": "DNA"
-        }
+        payload = None
 
-        if endpoint == "HeteroDimer":
-            # For HeteroDimer, sequences MUST be in query parameters
+        if endpoint == "Hairpin":
+            # Hairpin: sequence in JSON body with specific concentration params
+            payload = {
+                "Sequence": seq1,
+                "NaConc": 50.0,
+                "FoldingTemp": 25.0,
+                "MgConc": 1.5,
+                "NucleotideType": "DNA"
+            }
+        elif endpoint == "SelfDimer":
+            # SelfDimer: sequence as query parameter only
+            params = {"primary": seq1}
+        elif endpoint == "HeteroDimer":
+            # HeteroDimer: both sequences as query parameters
             params = {"primary": seq1, "secondary": seq2}
-        else:
-            # For Analyze (Hairpin/SelfDimer), sequence is in the body
-            payload["Sequence"] = seq1
             
         try:
-            # Send both just in case, though Swagger says Analyze=Body, HeteroDimer=Query
-            response = requests.post(url, json=payload, params=params, headers=headers, timeout=10)
+            response = requests.post(url, json=payload, params=params, headers=headers, timeout=15)
             if not response.ok:
                 return {"error": f"IDT {endpoint} Error: {response.status_code} - {response.text}"}
             return response.json()
         except Exception as e:
             return {"error": str(e)}
 
-    # Analyze endpoint provides a comprehensive result (Hairpin, SelfDimer)
-    # for a single sequence. HeteroDimer is for the pair.
-    m1_data = hit_idt("Analyze", request.p1_seq)
-    m2_data = hit_idt("Analyze", request.p2_seq)
+    # Use SPECIFIC endpoints for each analysis type.
+    # The IDT API has /Hairpin, /SelfDimer, /HeteroDimer as separate endpoints
+    # that return DeltaG directly, instead of the general /Analyze endpoint.
+    m1_hairpin = hit_idt("Hairpin", request.p1_seq)
+    m1_selfdimer = hit_idt("SelfDimer", request.p1_seq)
+    m2_hairpin = hit_idt("Hairpin", request.p2_seq)
+    m2_selfdimer = hit_idt("SelfDimer", request.p2_seq)
     hetero = hit_idt("HeteroDimer", request.p1_seq, request.p2_seq)
 
-    # We map the Analyze response back to our frontend's expected format
-    # The Analyze response usually contains Hairpin and SelfDimer objects
-    def extract_dg(data, key):
-        if not data or "error" in data: return data
-        return data.get(key, data)
+    # DEBUG: Log raw responses to understand structure
+    import json as _json
+    print("=== IDT RAW RESPONSES ===")
+    print(f"M1 Hairpin: {_json.dumps(m1_hairpin, indent=2, default=str)}")
+    print(f"M1 SelfDimer: {_json.dumps(m1_selfdimer, indent=2, default=str)}")
+    print(f"M2 Hairpin: {_json.dumps(m2_hairpin, indent=2, default=str)}")
+    print(f"M2 SelfDimer: {_json.dumps(m2_selfdimer, indent=2, default=str)}")
+    print(f"HeteroDimer: {_json.dumps(hetero, indent=2, default=str)}")
+    print("=== END IDT RAW RESPONSES ===")
+
+    # Each specific endpoint (Hairpin, SelfDimer, HeteroDimer) should return
+    # DeltaG directly in its response. We use find_dg to robustly extract it
+    # regardless of exact response format variations.
+    def find_dg(data):
+        """Extract DeltaG from a single-endpoint response."""
+        if not data or isinstance(data, str):
+            return {"DeltaG": None}
+        if isinstance(data, dict) and "error" in data:
+            return data
+        
+        # If response is an array (multiple structures found), pick lowest DeltaG
+        if isinstance(data, list):
+            if len(data) == 0:
+                return {"DeltaG": None}
+            best = None
+            for item in data:
+                dg = _extract_delta_g(item)
+                if dg is not None and (best is None or dg < best):
+                    best = dg
+            return {"DeltaG": best}
+        
+        # If response is a dict, DeltaG should be at top level
+        if isinstance(data, dict):
+            dg = _extract_delta_g(data)
+            if dg is not None:
+                return {"DeltaG": dg}
+            return data
+        
+        return {"DeltaG": None}
+    
+    def _extract_delta_g(obj):
+        """Extract DeltaG from a dict, trying common key names."""
+        if not isinstance(obj, dict):
+            return None
+        for k in ["DeltaG", "deltaG", "deltag", "delta_g", "dG", "Energy", "energy"]:
+            if k in obj:
+                try:
+                    return float(obj[k])
+                except (ValueError, TypeError):
+                    pass
+        return None
 
     return {
         "m1": {
-            "hairpin": extract_dg(m1_data, "Hairpin"),
-            "self_dimer": extract_dg(m1_data, "SelfDimer")
+            "hairpin": find_dg(m1_hairpin),
+            "self_dimer": find_dg(m1_selfdimer)
         },
         "m2": {
-            "hairpin": extract_dg(m2_data, "Hairpin"),
-            "self_dimer": extract_dg(m2_data, "SelfDimer")
+            "hairpin": find_dg(m2_hairpin),
+            "self_dimer": find_dg(m2_selfdimer)
         },
-        "pairwise": hetero
+        "pairwise": find_dg(hetero)
     }
 
 
