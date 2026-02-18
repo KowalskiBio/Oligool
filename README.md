@@ -18,6 +18,7 @@ pip install -r ./backend/requirements.txt
 ```
 
 ```bash
+cd frontend
 npm install
 ```
 
