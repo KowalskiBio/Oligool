@@ -32,8 +32,8 @@ set "PATH=%ROOT%.bin\mafft\mafft-win;%PATH%"
 :mafft_done
 
 REM -- 3. Node.js ------------------------
-if exist "%ROOT%.bin\node\node.exe" (
-    set "PATH=%ROOT%.bin\node;%PATH%"
+if exist "%ROOT%.bin\node\node-v20.11.1-win-x64\node.exe" (
+    set "PATH=%ROOT%.bin\node\node-v20.11.1-win-x64;%PATH%"
 )
 
 where node >nul 2>&1
@@ -44,7 +44,7 @@ powershell -command "Invoke-WebRequest -Uri 'https://nodejs.org/dist/v20.11.1/no
 powershell -command "Expand-Archive -Path '%ROOT%.bin\node\node.zip' -DestinationPath '%ROOT%.bin\node' -Force"
 del "%ROOT%.bin\node\node.zip"
 
-set "PATH=%ROOT%.bin\node;%PATH%"
+set "PATH=%ROOT%.bin\node\node-v20.11.1-win-x64;%PATH%"
 :node_done
 
 for /f "tokens=*" %%v in ('python --version 2^>^&1') do echo [OK] %%v
