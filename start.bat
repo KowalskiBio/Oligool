@@ -16,11 +16,9 @@ exit /b 1
 :python_done
 
 REM -- 2. MAFFT --------------------------
-set "MAFFT_BIN="
-if exist "%ROOT%.bin\mafft" (
-    for /R "%ROOT%.bin\mafft" %%I in (mafft.bat) do set "MAFFT_BIN=%%~dpI"
+if exist "%ROOT%.bin\mafft\mafft-win\mafft.bat" (
+    set "PATH=%ROOT%.bin\mafft\mafft-win;%PATH%"
 )
-if defined MAFFT_BIN set "PATH=%MAFFT_BIN%;%PATH%"
 
 where mafft >nul 2>&1
 if not errorlevel 1 goto mafft_done
@@ -30,17 +28,13 @@ powershell -command "Invoke-WebRequest -Uri 'https://mafft.cbrc.jp/alignment/sof
 powershell -command "Expand-Archive -Path '%ROOT%.bin\mafft\mafft.zip' -DestinationPath '%ROOT%.bin\mafft' -Force"
 del "%ROOT%.bin\mafft\mafft.zip"
 
-set "MAFFT_BIN="
-for /R "%ROOT%.bin\mafft" %%I in (mafft.bat) do set "MAFFT_BIN=%%~dpI"
-if defined MAFFT_BIN set "PATH=%MAFFT_BIN%;%PATH%"
+set "PATH=%ROOT%.bin\mafft\mafft-win;%PATH%"
 :mafft_done
 
 REM -- 3. Node.js ------------------------
-set "NODE_BIN="
-if exist "%ROOT%.bin\node" (
-    for /R "%ROOT%.bin\node" %%I in (node.exe) do set "NODE_BIN=%%~dpI"
+if exist "%ROOT%.bin\node\node.exe" (
+    set "PATH=%ROOT%.bin\node;%PATH%"
 )
-if defined NODE_BIN set "PATH=%NODE_BIN%;%PATH%"
 
 where node >nul 2>&1
 if not errorlevel 1 goto node_done
@@ -50,9 +44,7 @@ powershell -command "Invoke-WebRequest -Uri 'https://nodejs.org/dist/v20.11.1/no
 powershell -command "Expand-Archive -Path '%ROOT%.bin\node\node.zip' -DestinationPath '%ROOT%.bin\node' -Force"
 del "%ROOT%.bin\node\node.zip"
 
-set "NODE_BIN="
-for /R "%ROOT%.bin\node" %%I in (node.exe) do set "NODE_BIN=%%~dpI"
-if defined NODE_BIN set "PATH=%NODE_BIN%;%PATH%"
+set "PATH=%ROOT%.bin\node;%PATH%"
 :node_done
 
 for /f "tokens=*" %%v in ('python --version 2^>^&1') do echo [OK] %%v
