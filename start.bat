@@ -69,7 +69,7 @@ REM -- Node dependencies ------------------------------------
 if not exist "%ROOT%frontend\node_modules" (
     echo [..] Installing Node dependencies (first run)...
     cd /d "%ROOT%frontend"
-    call npm install
+    call npm.cmd install
     cd /d "%ROOT%"
 )
 echo [OK] Node packages ready
@@ -80,7 +80,7 @@ start "Oligool-Backend" /min cmd /c "cd /d "%ROOT%" && "%ROOT%.venv\Scripts\pyth
 
 REM -- start frontend ---------------------------------------
 echo [..] Starting frontend on http://localhost:5173 ...
-start "Oligool-Frontend" /min cmd /c "cd /d "%ROOT%frontend" && npm run dev -- --host 0.0.0.0"
+start "Oligool-Frontend" /min cmd /c "cd /d "%ROOT%frontend" && npm.cmd run dev -- --host 0.0.0.0"
 
 REM -- open browser after a short delay ---------------------
 timeout /t 4 /nobreak >nul
