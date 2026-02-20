@@ -44,11 +44,11 @@ if errorlevel 1 (
 )
 
 if exist "%NODE_DIR%\node.exe" (
-    set "PATH=%NODE_DIR%;!PATH!"
+    set "PATH=%NODE_DIR%;%PATH%"
 )
 
 if exist "%MAFFT_DIR%\mafft-win\mafft.bat" (
-    set "PATH=%MAFFT_DIR%\mafft-win;!PATH!"
+    set "PATH=%MAFFT_DIR%\mafft-win;%PATH%"
 )
 
 for /f "tokens=*" %%v in ('python --version 2^>^&1') do echo [OK] %%v
