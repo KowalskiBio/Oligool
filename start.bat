@@ -32,19 +32,20 @@ set "PATH=%ROOT%.bin\mafft\mafft-win;%PATH%"
 :mafft_done
 
 REM -- 3. Node.js ------------------------
-if exist "%ROOT%.bin\node\node-v20.11.1-win-x64\node.exe" (
-    set "PATH=%ROOT%.bin\node\node-v20.11.1-win-x64;%PATH%"
+if exist "%ROOT%.bin\node\node-v22.14.0-win-x64\node.exe" (
+    set "PATH=%ROOT%.bin\node\node-v22.14.0-win-x64;%PATH%"
 )
 
 where node >nul 2>&1
 if not errorlevel 1 goto node_done
-echo [..] Node.js not found. Downloading portable Node.js v20.11.1...
-if not exist "%ROOT%.bin\node" mkdir "%ROOT%.bin\node"
-powershell -command "Invoke-WebRequest -Uri 'https://nodejs.org/dist/v20.11.1/node-v20.11.1-win-x64.zip' -OutFile '%ROOT%.bin\node\node.zip'"
+echo [..] Node.js not found. Downloading portable Node.js v22.14.0...
+if exist "%ROOT%.bin\node" rmdir /s /q "%ROOT%.bin\node"
+mkdir "%ROOT%.bin\node"
+powershell -command "Invoke-WebRequest -Uri 'https://nodejs.org/dist/v22.14.0/node-v22.14.0-win-x64.zip' -OutFile '%ROOT%.bin\node\node.zip'"
 powershell -command "Expand-Archive -Path '%ROOT%.bin\node\node.zip' -DestinationPath '%ROOT%.bin\node' -Force"
 del "%ROOT%.bin\node\node.zip"
 
-set "PATH=%ROOT%.bin\node\node-v20.11.1-win-x64;%PATH%"
+set "PATH=%ROOT%.bin\node\node-v22.14.0-win-x64;%PATH%"
 :node_done
 
 for /f "tokens=*" %%v in ('python --version 2^>^&1') do echo [OK] %%v

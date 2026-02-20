@@ -37,7 +37,7 @@ command -v python3 >/dev/null 2>&1 || fail "Python 3 is required but not found. 
 
 if ! command -v node >/dev/null 2>&1; then
     info "Node.js not found. Downloading portable Node.js..."
-    NODE_VERSION="v20.11.1"
+    NODE_VERSION="v22.14.0"
     OS="$(uname -s | tr '[:upper:]' '[:lower:]')"
     ARCH="$(uname -m)"
     if [ "$ARCH" = "x86_64" ]; then ARCH="x64"; fi
