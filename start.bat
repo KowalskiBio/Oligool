@@ -13,14 +13,6 @@ REM ── setup local paths ─────────────────
 set "NODE_DIR=%ROOT%.bin\node"
 set "MAFFT_DIR=%ROOT%.bin\mafft"
 
-if exist "%NODE_DIR%\node.exe" (
-    set "PATH=%NODE_DIR%;%PATH%"
-)
-
-if exist "%MAFFT_DIR%\mafft-win\mafft.bat" (
-    set "PATH=%MAFFT_DIR%\mafft-win;%PATH%"
-)
-
 REM ── prerequisite checks ──────────────────────────────────
 where python >nul 2>&1
 if errorlevel 1 (
@@ -31,23 +23,33 @@ if errorlevel 1 (
 
 where node >nul 2>&1
 if errorlevel 1 (
-    echo [..] Node.js not found. Downloading portable Node.js...
-    if not exist "%ROOT%.bin" mkdir "%ROOT%.bin"
-    powershell -command "Invoke-WebRequest -Uri 'https://nodejs.org/dist/v20.11.1/node-v20.11.1-win-x64.zip' -OutFile '%ROOT%.bin\node.zip'"
-    powershell -command "Expand-Archive -Path '%ROOT%.bin\node.zip' -DestinationPath '%ROOT%.bin' -Force"
-    ren "%ROOT%.bin\node-v20.11.1-win-x64" "node"
-    del "%ROOT%.bin\node.zip"
-    set "PATH=%NODE_DIR%;%PATH%"
+    if not exist "%NODE_DIR%\node.exe" (
+        echo [..] Node.js not found. Downloading portable Node.js...
+        if not exist "%ROOT%.bin" mkdir "%ROOT%.bin"
+        powershell -command "Invoke-WebRequest -Uri 'https://nodejs.org/dist/v20.11.1/node-v20.11.1-win-x64.zip' -OutFile '%ROOT%.bin\node.zip'"
+        powershell -command "Expand-Archive -Path '%ROOT%.bin\node.zip' -DestinationPath '%ROOT%.bin' -Force"
+        ren "%ROOT%.bin\node-v20.11.1-win-x64" "node"
+        del "%ROOT%.bin\node.zip"
+    )
 )
 
 where mafft >nul 2>&1
 if errorlevel 1 (
-    echo [..] MAFFT not found. Downloading portable MAFFT...
-    if not exist "%MAFFT_DIR%" mkdir "%MAFFT_DIR%"
-    powershell -command "Invoke-WebRequest -Uri 'https://mafft.cbrc.jp/alignment/software/mafft-7.520-win64-signed.zip' -OutFile '%MAFFT_DIR%\mafft.zip'"
-    powershell -command "Expand-Archive -Path '%MAFFT_DIR%\mafft.zip' -DestinationPath '%MAFFT_DIR%' -Force"
-    del "%MAFFT_DIR%\mafft.zip"
-    set "PATH=%MAFFT_DIR%\mafft-win;%PATH%"
+    if not exist "%MAFFT_DIR%\mafft-win\mafft.bat" (
+        echo [..] MAFFT not found. Downloading portable MAFFT...
+        if not exist "%MAFFT_DIR%" mkdir "%MAFFT_DIR%"
+        powershell -command "Invoke-WebRequest -Uri 'https://mafft.cbrc.jp/alignment/software/mafft-7.520-win64-signed.zip' -OutFile '%MAFFT_DIR%\mafft.zip'"
+        powershell -command "Expand-Archive -Path '%MAFFT_DIR%\mafft.zip' -DestinationPath '%MAFFT_DIR%' -Force"
+        del "%MAFFT_DIR%\mafft.zip"
+    )
+)
+
+if exist "%NODE_DIR%\node.exe" (
+    set "PATH=%NODE_DIR%;!PATH!"
+)
+
+if exist "%MAFFT_DIR%\mafft-win\mafft.bat" (
+    set "PATH=%MAFFT_DIR%\mafft-win;!PATH!"
 )
 
 for /f "tokens=*" %%v in ('python --version 2^>^&1') do echo [OK] %%v
