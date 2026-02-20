@@ -25,9 +25,22 @@ def run_msa(sequences: List[Dict[str, str]]) -> str:
         input_file = temp_in.name
     
     try:
+        # Resolve MAFFT executable path (needed for .bat scripts on Windows)
+        import shutil
+        import sys
+        mafft_exe = shutil.which('mafft')
+        
+        # Explicit fallback if PATH inheritance failed for uvicorn
+        if not mafft_exe and sys.platform == 'win32':
+            local_mafft = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), '.bin', 'mafft', 'mafft-win', 'mafft.bat')
+            if os.path.exists(local_mafft):
+                mafft_exe = local_mafft
+                
+        if not mafft_exe:
+            raise RuntimeError("MAFFT executable not found. Please ensure it is installed and in your PATH.")
+            
         # Run MAFFT using subprocess
-        # Assumes mafft is installed and in PATH
-        cmd = ['mafft', '--auto', '--quiet', input_file]
+        cmd = [mafft_exe, '--auto', '--quiet', input_file]
         
         # Prepare environment with specific TMPDIR to avoid permission issues
         local_tmp_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "tmp_mafft")
@@ -42,9 +55,11 @@ def run_msa(sequences: List[Dict[str, str]]) -> str:
         # If MAFFT fails, raise error with details
         raise RuntimeError(f"MAFFT alignment failed: {e.stderr}")
     except FileNotFoundError:
-        # If MAFFT executable not found
+        # Fallback if shutil.which somehow missed it but subprocess still caught it
         raise RuntimeError("MAFFT executable not found. Please ensure it is installed and in your PATH.")
     finally:
         # Clean up temp file
         if os.path.exists(input_file):
             os.remove(input_file)
+            
+    return ""
