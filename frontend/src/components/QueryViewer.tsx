@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import PrimerizePanel from './PrimerizePanel';
 
 interface QueryViewerProps {
     data: { id: string; seq: string; start: number; end: number };
@@ -61,6 +62,12 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, idtCredent
         tm_diff: 1.5
     });
     const [paramsNotMet, setParamsNotMet] = useState(false);
+
+    // Primerize state
+    const [showPrimerize, setShowPrimerize] = useState(false);
+    const [tagSeq, setTagSeq] = useState('taattgaattgaaagataagtgt');
+    const [fwdPrimer, setFwdPrimer] = useState('CGCGGTAGTAAGAAGTGAGA');
+    const [revPrimer, setRevPrimer] = useState('ACTCGTAGGGAATAAACCGT');
 
     const handleCopy = (text: string) => {
         navigator.clipboard.writeText(text).then(() => {
@@ -292,6 +299,18 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, idtCredent
                     >
                         ⚙️ Search by params
                     </button>
+
+                    {primers && (
+                        <button
+                            onClick={() => setShowPrimerize(!showPrimerize)}
+                            className={`ml-2 px-3 py-1 text-xs font-bold rounded-full border transition-all ${showPrimerize
+                                ? 'bg-rose-500 text-white border-rose-500 shadow-md ring-2 ring-rose-100 dark:ring-rose-900/40'
+                                : 'bg-white dark:bg-slate-700 text-rose-500 dark:text-rose-400 border-rose-200 dark:border-rose-800 hover:border-rose-400 hover:bg-rose-50 dark:hover:bg-rose-900/20'
+                                }`}
+                        >
+                            🧬 Primerize!
+                        </button>
+                    )}
                 </div>
                 <div className="flex items-center gap-3">
                     {copyFeedback && (
@@ -425,6 +444,20 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, idtCredent
                             </div>
                         ) : (
                             loading && <div className="flex items-center justify-center p-8"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600"></div></div>
+                        )}
+
+                        {/* ── Primerize Panel ─────────────────────────────── */}
+                        {primers && showPrimerize && (
+                            <PrimerizePanel
+                                moligo1Seq={primers.p1.seq}
+                                moligo2Seq={primers.p2.seq}
+                                tagSeq={tagSeq}
+                                fwdPrimer={fwdPrimer}
+                                revPrimer={revPrimer}
+                                onTagChange={setTagSeq}
+                                onFwdChange={setFwdPrimer}
+                                onRevChange={setRevPrimer}
+                            />
                         )}
 
                         {primers && idtCredentials && (
