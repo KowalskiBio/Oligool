@@ -19,3 +19,6 @@ hat3.seed
 output.json
 pre
 test.fasta
+
+# Portable Binaries
+.bin/
