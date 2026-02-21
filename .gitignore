@@ -22,3 +22,19 @@ test.fasta
 
 # Portable Binaries
 .bin/
+
+# PyInstaller Outputs
+build/
+dist/
+*.spec
+
+# Build Environments
+build_venv/
+tmp_mafft/
+
+# Frontend
+frontend/dist/
+frontend/build_log.txt
+
+# Downloaded Archives
+*.zip
