@@ -106,23 +106,11 @@ info "Starting frontend on http://localhost:5173 …"
 (cd "$ROOT/frontend" && npm run dev -- --host 0.0.0.0) &
 FRONTEND_PID=$!
 
-# ── wait a moment then open the browser ───────────────────
-sleep 3
-info "Opening browser…"
-if command -v open >/dev/null 2>&1; then
-    open "http://localhost:5173"
-elif command -v xdg-open >/dev/null 2>&1; then
-    xdg-open "http://localhost:5173"
-fi
+# ── start native desktop window ───────────────────────────
+info "Opening application window…"
+(cd "$ROOT" && python3 webview_app.py)
 
 echo ""
-echo -e "${GREEN}╔═══════════════════════════════════════════════╗${NC}"
-echo -e "${GREEN}║  Oligool is running!                          ║${NC}"
-echo -e "${GREEN}║  Frontend → http://localhost:5173              ║${NC}"
-echo -e "${GREEN}║  Backend  → http://localhost:8000              ║${NC}"
-echo -e "${GREEN}║  Press Ctrl+C to stop                         ║${NC}"
-echo -e "${GREEN}╚═══════════════════════════════════════════════╝${NC}"
-echo ""
 
-# keep alive until Ctrl+C
-wait
+# When the pywebview window closes, we shut down the servers automatically
+cleanup

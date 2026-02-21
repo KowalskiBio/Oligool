@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import PrimerizePanel from './PrimerizePanel';
 
 interface QueryViewerProps {
@@ -115,7 +115,7 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, idtCredent
             setError('');
 
             try {
-                const res = await fetch('http://localhost:8000/moligize', {
+                const res = await fetch(((import.meta.env.VITE_API_BASE as string) || "") + '/moligize', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -199,7 +199,7 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, idtCredent
         setIsIdtLoading(true);
         setIdtError(null);
         try {
-            const tRes = await fetch('http://localhost:8000/idt/token', {
+            const tRes = await fetch(((import.meta.env.VITE_API_BASE as string) || "") + '/idt/token', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -215,7 +215,7 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, idtCredent
             }
             const { access_token } = await tRes.json();
 
-            const aRes = await fetch('http://localhost:8000/idt/analyze', {
+            const aRes = await fetch(((import.meta.env.VITE_API_BASE as string) || "") + '/idt/analyze', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({

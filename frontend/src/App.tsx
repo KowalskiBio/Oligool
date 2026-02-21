@@ -125,7 +125,7 @@ function App() {
         throw new Error('Please enter a sequence.');
       }
 
-      const response = await fetch('http://localhost:8000/search', {
+      const response = await fetch(((import.meta.env.VITE_API_BASE as string) || "") + '/search', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

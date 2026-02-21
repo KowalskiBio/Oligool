@@ -25,27 +25,53 @@ def run_msa(sequences: List[Dict[str, str]]) -> str:
         input_file = temp_in.name
     
     try:
-        # Resolve MAFFT executable path (needed for .bat scripts on Windows)
+        # Resolve MAFFT executable path
         import shutil
         import sys
+        
+        # Determine base path for bundled dependencies
+        # Determine base path for bundled dependencies
+        is_frozen_app = getattr(sys, 'frozen', False) and sys.platform == 'darwin' and '.app/Contents/MacOS' in sys.executable
+        if is_frozen_app:
+            # PyInstaller renames '.bin' to '__dot__bin' inside Contents/Frameworks for valid bundle structure
+            base_path = os.path.abspath(os.path.join(os.path.dirname(sys.executable), '..', 'Frameworks'))
+        elif getattr(sys, 'frozen', False):
+            base_path = getattr(sys, '_MEIPASS', os.path.dirname(sys.executable))
+        else:
+            base_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            
         mafft_exe = shutil.which('mafft')
         
-        # Explicit fallback if PATH inheritance failed for uvicorn
-        if not mafft_exe and sys.platform == 'win32':
-            local_mafft = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), '.bin', 'mafft', 'mafft-win', 'mafft.bat')
+        if getattr(sys, 'frozen', False) or not mafft_exe:
+            if sys.platform == 'win32':
+                local_mafft = os.path.join(base_path, '.bin', 'mafft', 'mafft-win', 'mafft.bat')
+            elif is_frozen_app:
+                local_mafft = os.path.join(base_path, '__dot__bin', 'mafft', 'mafft-mac', 'mafft-mac', 'mafftdir', 'bin', 'mafft')
+            else:
+                local_mafft = os.path.join(base_path, '.bin', 'mafft', 'mafft-mac', 'mafft-mac', 'mafftdir', 'bin', 'mafft')
+                
             if os.path.exists(local_mafft):
                 mafft_exe = local_mafft
                 
-        if not mafft_exe:
-            raise RuntimeError("MAFFT executable not found. Please ensure it is installed and in your PATH.")
+        if not mafft_exe or not os.path.exists(mafft_exe):
+            raise RuntimeError(f"MAFFT executable not found. Expected at {mafft_exe} or in PATH.")
             
         # Run MAFFT using subprocess
         cmd = [mafft_exe, '--auto', '--quiet', input_file]
         
+        # Prepare environment
+        env = os.environ.copy()
+        
+        # Set MAFFT_BINARIES so the wrapper script can find its support binaries (v0.000 error fix)
+        libexec_dir = os.path.join(os.path.dirname(os.path.dirname(mafft_exe)), 'libexec')
+        if os.path.exists(libexec_dir):
+            env["MAFFT_BINARIES"] = libexec_dir
+            # Also add to PATH to be safe
+            env["PATH"] = libexec_dir + os.pathsep + os.path.dirname(mafft_exe) + os.pathsep + env.get("PATH", "")
+
         # Prepare environment with specific TMPDIR to avoid permission issues
         local_tmp_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "tmp_mafft")
         os.makedirs(local_tmp_dir, exist_ok=True)
-        env = os.environ.copy()
         env["TMPDIR"] = local_tmp_dir
 
         result = subprocess.run(cmd, capture_output=True, text=True, check=True, env=env)

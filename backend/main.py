@@ -4,7 +4,10 @@ from pydantic import BaseModel
 from typing import List, Optional
 from backend.alignment import run_msa
 from backend.blast import run_blast
-import uvicorn
+import sys
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+import os
 
 app = FastAPI()
 
@@ -16,6 +19,36 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+def get_frontend_dir():
+    if getattr(sys, 'frozen', False):
+        if sys.platform == 'darwin' and '.app/Contents/MacOS' in sys.executable:
+            base_path = os.path.abspath(os.path.join(os.path.dirname(sys.executable), '..', 'Resources'))
+        else:
+            base_path = getattr(sys, '_MEIPASS', os.path.dirname(sys.executable))
+    else:
+        base_path = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+    return os.path.join(base_path, "frontend", "dist")
+
+frontend_dir = get_frontend_dir()
+if os.path.exists(os.path.join(frontend_dir, "assets")):
+    app.mount("/assets", StaticFiles(directory=os.path.join(frontend_dir, "assets")), name="assets")
+
+    @app.get("/")
+    def serve_index():
+        return FileResponse(os.path.join(frontend_dir, "index.html"))
+
+    # To serve the logo or vite.svg from public/ which end up in dist/
+    @app.get("/{filename}.png")
+    @app.get("/{filename}.svg")
+    def serve_public_images(filename: str):
+        file_path = os.path.join(frontend_dir, f"{filename}.png")
+        if not os.path.exists(file_path):
+            file_path = os.path.join(frontend_dir, f"{filename}.svg")
+        if os.path.exists(file_path):
+            return FileResponse(file_path)
+        raise HTTPException(status_code=404, detail="File not found")
+
 
 
 class SearchRequest(BaseModel):

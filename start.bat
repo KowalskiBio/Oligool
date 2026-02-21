@@ -78,8 +78,8 @@ start "Oligool-Backend" /D "%ROOT%" /min "%ROOT%.venv\Scripts\python.exe" -m uvi
 echo [..] Starting frontend on http://localhost:5173 ...
 start "Oligool-Frontend" /D "%ROOT%frontend" /min npm.cmd run dev -- --host 0.0.0.0
 
-timeout /t 4 /nobreak >nul
-start http://localhost:5173
+echo [..] Opening application window...
+"%ROOT%.venv\Scripts\python.exe" webview_app.py
 
 echo.
 echo +-----------------------------------------------+
@@ -89,9 +89,6 @@ echo ^|  Backend  -^> http://localhost:8000              ^|
 echo ^|  Close this window to stop                    ^|
 echo +-----------------------------------------------+
 echo.
-echo Press any key to stop all servers and exit...
-pause >nul
-
 echo [..] Shutting down...
 taskkill /fi "WINDOWTITLE eq Oligool-Backend*" /f >nul 2>&1
 taskkill /fi "WINDOWTITLE eq Oligool-Frontend*" /f >nul 2>&1
