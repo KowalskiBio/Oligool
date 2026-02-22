@@ -36,7 +36,7 @@ if not exist "%ROOT%\.bin\mafft" mkdir "%ROOT%\.bin\mafft"
 if exist "%ROOT%\.bin\mafft\mafft-win\mafft.bat" goto :skip_mafft
 
 echo Downloading MAFFT from official source...
-curl -L "https://mafft.cbrc.jp/alignment/software/mafft-7.505-win64.zip" -o "%ROOT%\mafft_win.zip"
+curl -L "https://mafft.cbrc.jp/alignment/software/mafft-7.526-win64-signed.zip" -o "%ROOT%\mafft_win.zip"
 if %ERRORLEVEL% neq 0 ( set "FAIL_STEP=curl download mafft" & goto :error )
 
 echo Extracting MAFFT...

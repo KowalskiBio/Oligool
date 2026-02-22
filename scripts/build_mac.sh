@@ -34,8 +34,8 @@ pip install pyinstaller Pillow pywebview
 echo "Downloading portable MAFFT to embed in application..."
 mkdir -p .bin/mafft/mafft-mac
 if [ ! -f .bin/mafft/mafft-mac/mafft-mac/mafft ]; then
-    # The official repo migrated their version numbers. 7.505 is still active.
-    curl -sL "https://mafft.cbrc.jp/alignment/software/mafft-7.505-mac.zip" -o mafft.zip
+    # The official repo migrated their version numbers. 7.526 is currently active.
+    curl -sL "https://mafft.cbrc.jp/alignment/software/mafft-7.526-mac.zip" -o mafft.zip
     unzip -q mafft.zip -d .bin/mafft/mafft-mac
     rm mafft.zip
 fi

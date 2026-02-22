@@ -75,6 +75,10 @@ def run_msa(sequences: List[Dict[str, str]]) -> str:
         if mafft_exe and ('.bin' in mafft_exe or '__dot__bin' in mafft_exe):
             # Set MAFFT_BINARIES so the local wrapper script can find its support binaries
             libexec_dir = os.path.join(os.path.dirname(os.path.dirname(mafft_exe)), 'libexec', 'mafft', 'bin')
+            if not os.path.exists(libexec_dir):
+                # macOS MAFFT binary ZIP often puts binaries directly in libexec/
+                libexec_dir = os.path.join(os.path.dirname(os.path.dirname(mafft_exe)), 'libexec')
+                
             if os.path.exists(libexec_dir):
                 env["MAFFT_BINARIES"] = libexec_dir
                 env["PATH"] = libexec_dir + os.pathsep + os.path.dirname(mafft_exe) + os.pathsep + env["PATH"]
