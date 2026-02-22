@@ -54,4 +54,5 @@ if __name__ == "__main__":
     webview.create_window("Oligool", frontend_url, width=1280, height=800, min_size=(800, 600))
     
     # Start the application loop (blocks until the window is closed)
-    webview.start()
+    # private_mode=False ensures localStorage and cookies persist between sessions
+    webview.start(private_mode=False)
