@@ -85,7 +85,13 @@ def run_msa(sequences: List[Dict[str, str]]) -> str:
 
         try:
             cmd = [mafft_exe, '--auto', '--quiet', input_file]
-            result = subprocess.run(cmd, capture_output=True, text=True, check=True, env=env)
+            
+            # Prevent CMD window from flashing on Windows
+            creationflags = 0
+            if sys.platform == 'win32':
+                creationflags = subprocess.CREATE_NO_WINDOW
+                
+            result = subprocess.run(cmd, capture_output=True, text=True, check=True, env=env, creationflags=creationflags)
             return result.stdout
         finally:
             import shutil
