@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 
 export interface PrimerizeProps {
     templateSeq: string;
@@ -29,6 +29,12 @@ export default function PrimerizePanel({
     onTagChange, onFwdChange, onRevChange
 }: PrimerizeProps) {
 
+    const [isSeqMode, setIsSeqMode] = useState(() => localStorage.getItem('primerize_seq_mode') === 'true');
+
+    useEffect(() => {
+        localStorage.setItem('primerize_seq_mode', String(isSeqMode));
+    }, [isSeqMode]);
+
     // ── Lengths ──────────────────────────────────────────────────────────
     const m2Len = moligo2Seq.length || 0;
     const m1Len = moligo1Seq.length || 0;
@@ -51,7 +57,7 @@ export default function PrimerizePanel({
 
     const totalHorizontalNt = leftArmProj + combinedFlatLen + rightArmProj || 1;
 
-    const pad = 40; // minimal horizontal margin on both extremities
+    const pad = 12; // minimal horizontal margin to fill edges
     const effectiveW = VW - 2 * pad;
 
     const pxPerNt = effectiveW / totalHorizontalNt;
@@ -72,11 +78,11 @@ export default function PrimerizePanel({
 
     // Y-Axis Positioning
     const maxArmDx = Math.max(leftArmDx, rightArmDx);
-    const tmplY = Math.max(60, maxArmDx + 30);
+    const tmplY = Math.max(50, maxArmDx + 20); // Tightened vertical space
     const stH = 12;
     const gap = 6;
 
-    const VH = tmplY + stH * 2 + gap + 40; // dynamic SVG height
+    const VH = tmplY + stH * 2 + gap + 15; // Tightened bottom margin
 
     // ── Polygon Math for Perfect Miter & Perpendicular Joints ──
     const hw = 7; // half-width (stroke thickness 14)
@@ -134,12 +140,63 @@ export default function PrimerizePanel({
         polyFwdBS = `${p_miterR.top.x},${p_miterR.top.y} ${p_end.top.x},${p_end.top.y} ${p_end.bot.x},${p_end.bot.y} ${p_miterR.bot.x},${p_miterR.bot.y}`;
     }
 
+    // ── Seq Mode Helper ──────────────────────────────────────────────────
+    const reverseComplement = (s: string) => {
+        const dict: { [key: string]: string } = { 'A': 'T', 'T': 'A', 'C': 'G', 'G': 'C', 'N': 'N', 'U': 'A', 'a': 't', 't': 'a', 'c': 'g', 'g': 'c', 'n': 'n', 'u': 'a' };
+        return s.split('').reverse().map(c => dict[c] || c).join('');
+    };
+
+    const tmplTop = reverseComplement(moligo2Seq + moligo1Seq);
+    const tmplBot = (moligo2Seq + moligo1Seq);
+
+    const renderSeqChars = (seq: string, p0: { x: number, y: number }, p1: { x: number, y: number }, color: string) => {
+        if (!seq || seq.length === 0) return null;
+        const fontSize = Math.min(13, pxPerNt * 1.1);
+        return seq.split('').map((char, i) => {
+            const ratio = (i + 0.5) / seq.length;
+            const x = p0.x + (p1.x - p0.x) * ratio;
+            const y = p0.y + (p1.y - p0.y) * ratio;
+            // For tilted arms, calculate rotation
+            let angle = 0;
+            if (p1.x !== p0.x || p1.y !== p0.y) {
+                angle = Math.atan2(p1.y - p0.y, p1.x - p0.x) * (180 / Math.PI);
+            }
+
+            return (
+                <text
+                    key={i}
+                    x={x}
+                    y={y}
+                    textAnchor="middle"
+                    dominantBaseline="middle"
+                    fontSize={fontSize}
+                    fontWeight="bold"
+                    fill={color}
+                    transform={`rotate(${angle}, ${x}, ${y})`}
+                    style={{ pointerEvents: 'none', userSelect: 'none' }}
+                >
+                    {char}
+                </text>
+            );
+        });
+    };
+
     return (
         <div className="mt-4 border-t border-slate-100 dark:border-slate-800 pt-4">
             {/* Header */}
-            <div className="flex items-center gap-2 mb-3">
-                <span className="text-sm font-bold text-slate-500 uppercase tracking-widest">🧬 Primerize Schematic</span>
-                <span className="text-xs text-slate-400 dark:text-slate-500">— Final: Perfect Optical Polygons</span>
+            <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                    <span className="text-sm font-bold text-slate-500 uppercase tracking-widest">🧬 Primerize Schematic</span>
+                </div>
+                <button
+                    onClick={() => setIsSeqMode(!isSeqMode)}
+                    className={`px-4 py-1.5 text-xs font-bold rounded-full border transition-all uppercase tracking-tight ${isSeqMode
+                        ? 'bg-indigo-600 border-indigo-600 text-white shadow-md shadow-indigo-200 dark:shadow-indigo-900/20'
+                        : 'bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-400 hover:border-indigo-400 hover:text-indigo-600'
+                        }`}
+                >
+                    {isSeqMode ? '🔡 Shape Mode' : '🔡 Seq Mode'}
+                </button>
             </div>
 
             {/* ── SVG Schematic ── */}
@@ -150,39 +207,53 @@ export default function PrimerizePanel({
 
                     {/* ═══ TEMPLATE STRANDS (+ / −) ═══ */}
                     <rect x={tmplX0} y={tmplY} width={tmplW} height={stH}
-                        rx="3" fill={C.tmplFill} stroke={C.tmpl} strokeWidth="1.5" />
+                        rx="3" fill={C.tmplFill} stroke={C.tmpl} strokeWidth="1.5"
+                        opacity={isSeqMode ? 0.3 : 1} />
                     <rect x={tmplX0} y={tmplY + stH + gap} width={tmplW} height={stH}
-                        rx="3" fill={C.tmplFill} stroke={C.tmpl} strokeWidth="1.5" />
+                        rx="3" fill={C.tmplFill} stroke={C.tmpl} strokeWidth="1.5"
+                        opacity={isSeqMode ? 0.3 : 1} />
 
                     {/* + / − labels */}
-                    <text x={tmplX0 - 8} y={tmplY + stH / 2 + 4} textAnchor="end"
-                        fontSize="11" fontWeight="bold" fill={C.tmpl}>5'</text>
-                    <text x={tmplX1 + 8} y={tmplY + stH / 2 + 4} textAnchor="start"
-                        fontSize="11" fontWeight="bold" fill={C.tmpl}>3'</text>
+                    <text x={tmplX0 - 6} y={tmplY + stH / 2 + 3} textAnchor="end"
+                        fontSize="9" fontWeight="bold" fill={C.tmpl}>5'</text>
+                    <text x={tmplX1 + 6} y={tmplY + stH / 2 + 3} textAnchor="start"
+                        fontSize="9" fontWeight="bold" fill={C.tmpl}>3'</text>
 
-                    <text x={tmplX0 - 8} y={tmplY + stH + gap + stH / 2 + 4} textAnchor="end"
-                        fontSize="11" fontWeight="bold" fill={C.tmpl}>3'</text>
-                    <text x={tmplX1 + 8} y={tmplY + stH + gap + stH / 2 + 4} textAnchor="start"
-                        fontSize="11" fontWeight="bold" fill={C.tmpl}>5'</text>
+                    <text x={tmplX0 - 6} y={tmplY + stH + gap + stH / 2 + 3} textAnchor="end"
+                        fontSize="9" fontWeight="bold" fill={C.tmpl}>3'</text>
+                    <text x={tmplX1 + 6} y={tmplY + stH + gap + stH / 2 + 3} textAnchor="start"
+                        fontSize="9" fontWeight="bold" fill={C.tmpl}>5'</text>
 
-                    {/* Target DNA sequence label */}
-                    <text x={(tmplX0 + tmplX1) / 2} y={tmplY + stH * 2 + gap + 20}
-                        textAnchor="middle" fontSize="11" fill={C.tmpl} fontStyle="italic">
-                        Target DNA sequence (template)
-                    </text>
+                    {/* + / − labels */}
 
                     {/* ═══ Left Side: Rev BS + TAG + Oligo 2 ═══ */}
-                    <g opacity="0.85">
+                    <g opacity={isSeqMode ? 0.15 : 0.85}>
                         {revLen > 0 && <polygon points={polyRevBS} fill={C.revBs} />}
                         {tagLen > 0 && <polygon points={polyTAG} fill={C.tag} />}
                         <polygon points={polyM2} fill={C.m2} />
                     </g>
 
                     {/* ═══ Right Side: Oligo 1 + Forward BS ═══ */}
-                    <g opacity="0.85">
+                    <g opacity={isSeqMode ? 0.15 : 0.85}>
                         <polygon points={polyM1} fill={C.m1} />
                         {fwdLen > 0 && <polygon points={polyFwdBS} fill={C.fwdBs} />}
                     </g>
+
+                    {/* ═══ Seq Mode Letters ═══ */}
+                    {isSeqMode && (
+                        <g>
+                            {/* Template Sequences */}
+                            {renderSeqChars(tmplTop, { x: tmplX0, y: tmplY + stH / 2 }, { x: tmplX1, y: tmplY + stH / 2 }, C.tmpl)}
+                            {renderSeqChars(tmplBot, { x: tmplX0, y: tmplY + stH + gap + stH / 2 }, { x: tmplX1, y: tmplY + stH + gap + stH / 2 }, C.tmpl)}
+
+                            {/* Probes/Primers */}
+                            {renderSeqChars(revPrimer || "", L, S, C.revBs)}
+                            {renderSeqChars(tagSeq || "", S, C_left, C.tag)}
+                            {renderSeqChars(moligo2Seq, C_left, R, C.m2)}
+                            {renderSeqChars(moligo1Seq, R, C_right, C.m1)}
+                            {renderSeqChars(fwdPrimer || "", C_right, F, C.fwdBs)}
+                        </g>
+                    )}
 
 
                     {/* Annealing ticks */}
@@ -201,7 +272,7 @@ export default function PrimerizePanel({
                     {revLen > 0 && (
                         <div className="flex items-center gap-2">
                             <div className="w-4 h-4 rounded-sm" style={{ backgroundColor: C.revBs }} />
-                            <span className="font-semibold text-slate-700 dark:text-slate-200">Rev BS</span>
+                            <span className="font-semibold text-slate-700 dark:text-slate-200">Reverse PBS</span>
                             <span className="text-slate-400 font-mono text-xs">({revLen}nt)</span>
                         </div>
                     )}
@@ -225,7 +296,7 @@ export default function PrimerizePanel({
                     {fwdLen > 0 && (
                         <div className="flex items-center gap-2">
                             <div className="w-4 h-4 rounded-sm" style={{ backgroundColor: C.fwdBs }} />
-                            <span className="font-semibold text-slate-700 dark:text-slate-200">Forward BS</span>
+                            <span className="font-semibold text-slate-700 dark:text-slate-200">Forward PBS</span>
                             <span className="text-slate-400 font-mono text-xs">({fwdLen}nt)</span>
                         </div>
                     )}
@@ -246,10 +317,10 @@ export default function PrimerizePanel({
             {/* ── Sequence Inputs ── */}
             <div className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-6 pt-6 border-t border-slate-100 dark:border-slate-800">
 
-                {/* Rev BS Input */}
+                {/* Reverse PBS Input */}
                 <div className="flex flex-col gap-2">
                     <label className="text-xs font-semibold uppercase flex justify-between" style={{ color: C.revBs }}>
-                        <span>Rev Primer (Rev BS)</span>
+                        <span>Rev Primer (Reverse PBS)</span>
                         <span className="text-slate-400 font-mono">{revLen}nt</span>
                     </label>
                     <textarea
@@ -276,10 +347,10 @@ export default function PrimerizePanel({
                     />
                 </div>
 
-                {/* Forward BS Input */}
+                {/* Forward PBS Input */}
                 <div className="flex flex-col gap-2">
                     <label className="text-xs font-semibold uppercase flex justify-between" style={{ color: C.fwdBs }}>
-                        <span>Forward Primer (Fwd BS)</span>
+                        <span>Forward Primer (Forward PBS)</span>
                         <span className="text-slate-400 font-mono">{fwdLen}nt</span>
                     </label>
                     <textarea
