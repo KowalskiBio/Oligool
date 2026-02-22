@@ -10,6 +10,10 @@ export interface PrimerizeProps {
     onTagChange?: (val: string) => void;
     onFwdChange?: (val: string) => void;
     onRevChange?: (val: string) => void;
+    onCreatePrimersClick?: (fwdPcr: string, revPcr: string) => void;
+    isPrimerIdtLoading?: boolean;
+    primerIdtResults?: any;
+    primerIdtError?: string | null;
 }
 
 const C = {
@@ -26,7 +30,8 @@ export default function PrimerizePanel({
     templateSeq,
     moligo1Seq, moligo2Seq,
     tagSeq, fwdPrimer, revPrimer,
-    onTagChange, onFwdChange, onRevChange
+    onTagChange, onFwdChange, onRevChange,
+    onCreatePrimersClick, isPrimerIdtLoading, primerIdtResults, primerIdtError
 }: PrimerizeProps) {
 
     const [isSeqMode, setIsSeqMode] = useState(() => localStorage.getItem('primerize_seq_mode') === 'true');
@@ -320,7 +325,7 @@ export default function PrimerizePanel({
                 {/* Reverse PBS Input */}
                 <div className="flex flex-col gap-2">
                     <label className="text-xs font-semibold uppercase flex justify-between" style={{ color: C.revBs }}>
-                        <span>Rev Primer (Reverse PBS)</span>
+                        <span>Reverse PBS</span>
                         <span className="text-slate-400 font-mono">{revLen}nt</span>
                     </label>
                     <textarea
@@ -350,7 +355,7 @@ export default function PrimerizePanel({
                 {/* Forward PBS Input */}
                 <div className="flex flex-col gap-2">
                     <label className="text-xs font-semibold uppercase flex justify-between" style={{ color: C.fwdBs }}>
-                        <span>Forward Primer (Forward PBS)</span>
+                        <span>Forward PBS</span>
                         <span className="text-slate-400 font-mono">{fwdLen}nt</span>
                     </label>
                     <textarea
@@ -362,6 +367,91 @@ export default function PrimerizePanel({
                     />
                 </div>
 
+            </div>
+
+            {/* ── Generated PCR Primers ── */}
+            <div className="mt-6 p-4 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl">
+                <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-sm font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">PCR Amplification Primers</h3>
+                    <button
+                        onClick={() => {
+                            if (fwdPrimer && revPrimer) {
+                                onCreatePrimersClick?.(reverseComplement(fwdPrimer), reverseComplement(revPrimer));
+                            }
+                        }}
+                        disabled={isPrimerIdtLoading || !fwdPrimer || !revPrimer}
+                        className="px-4 py-2 text-xs font-bold rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white shadow-md transition-colors disabled:opacity-50"
+                    >
+                        {isPrimerIdtLoading ? 'Analyzing...' : 'Analyze primers'}
+                    </button>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {/* Forward Primer */}
+                    <div className="flex flex-col gap-2">
+                        <label className="text-xs font-semibold uppercase text-slate-500">
+                            <span>Forward Primer</span>
+                        </label>
+                        <div className="w-full h-12 p-3 text-sm font-mono bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-700 dark:text-slate-300 shadow-inner flex items-center overflow-x-auto">
+                            {reverseComplement(fwdPrimer || "")}
+                        </div>
+                    </div>
+
+                    {/* Reverse Primer */}
+                    <div className="flex flex-col gap-2">
+                        <label className="text-xs font-semibold uppercase text-slate-500">
+                            <span>Reverse Primer</span>
+                        </label>
+                        <div className="w-full h-12 p-3 text-sm font-mono bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-700 dark:text-slate-300 shadow-inner flex items-center overflow-x-auto">
+                            {reverseComplement(revPrimer || "")}
+                        </div>
+                    </div>
+                </div>
+
+                {primerIdtError && <div className="mt-4 text-xs text-red-500 bg-red-50 dark:bg-red-900/20 p-2 rounded border border-red-100 dark:border-red-900/30">Error: {primerIdtError}</div>}
+                {primerIdtResults && (
+                    <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-3">
+                        <div className="bg-white dark:bg-slate-900/40 p-3 rounded border border-slate-200 dark:border-slate-700 shadow-sm">
+                            <div className="text-xs font-bold text-slate-500 uppercase mb-1">Forward Primer</div>
+                            <div className="flex justify-between items-center text-sm">
+                                <span className="text-slate-500">Hairpin ΔG:</span>
+                                <span className={primerIdtResults.m1.hairpin?.DeltaG < -9 ? 'text-red-500 font-bold' : primerIdtResults.m1.hairpin?.DeltaG < -6 ? 'text-amber-500 font-bold' : 'text-emerald-500 font-bold'}>
+                                    {primerIdtResults.m1.hairpin?.DeltaG !== undefined ? primerIdtResults.m1.hairpin.DeltaG.toFixed(2) : 'N/A'}
+                                </span>
+                            </div>
+                            <div className="flex justify-between items-center text-sm mt-1">
+                                <span className="text-slate-500">Self-Dimer ΔG:</span>
+                                <span className={primerIdtResults.m1.self_dimer?.DeltaG < -9 ? 'text-red-500 font-bold' : primerIdtResults.m1.self_dimer?.DeltaG < -6 ? 'text-amber-500 font-bold' : 'text-emerald-500 font-bold'}>
+                                    {primerIdtResults.m1.self_dimer?.DeltaG !== undefined ? primerIdtResults.m1.self_dimer.DeltaG.toFixed(2) : 'N/A'}
+                                </span>
+                            </div>
+                        </div>
+                        <div className="bg-white dark:bg-slate-900/40 p-3 rounded border border-slate-200 dark:border-slate-700 shadow-sm">
+                            <div className="text-xs font-bold text-slate-500 uppercase mb-1">Reverse Primer</div>
+                            <div className="flex justify-between items-center text-sm">
+                                <span className="text-slate-500">Hairpin ΔG:</span>
+                                <span className={primerIdtResults.m2.hairpin?.DeltaG < -9 ? 'text-red-500 font-bold' : primerIdtResults.m2.hairpin?.DeltaG < -6 ? 'text-amber-500 font-bold' : 'text-emerald-500 font-bold'}>
+                                    {primerIdtResults.m2.hairpin?.DeltaG !== undefined ? primerIdtResults.m2.hairpin.DeltaG.toFixed(2) : 'N/A'}
+                                </span>
+                            </div>
+                            <div className="flex justify-between items-center text-sm mt-1">
+                                <span className="text-slate-500">Self-Dimer ΔG:</span>
+                                <span className={primerIdtResults.m2.self_dimer?.DeltaG < -9 ? 'text-red-500 font-bold' : primerIdtResults.m2.self_dimer?.DeltaG < -6 ? 'text-amber-500 font-bold' : 'text-emerald-500 font-bold'}>
+                                    {primerIdtResults.m2.self_dimer?.DeltaG !== undefined ? primerIdtResults.m2.self_dimer.DeltaG.toFixed(2) : 'N/A'}
+                                </span>
+                            </div>
+                        </div>
+                        <div className="bg-indigo-50/50 dark:bg-indigo-900/20 p-3 rounded border border-indigo-100 dark:border-indigo-900/30">
+                            <div className="text-xs font-bold text-indigo-500 uppercase mb-1">Cross-Dimer Pairwise</div>
+                            <div className="flex justify-between items-center text-sm">
+                                <span className="text-slate-500">Hetero-Dimer ΔG:</span>
+                                <span className={primerIdtResults.pairwise?.DeltaG < -9 ? 'text-red-500 font-bold' : primerIdtResults.pairwise?.DeltaG < -6 ? 'text-amber-500 font-bold' : 'text-emerald-500 font-bold'}>
+                                    {primerIdtResults.pairwise?.DeltaG !== undefined ? primerIdtResults.pairwise.DeltaG.toFixed(2) : 'N/A'}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                )}
             </div>
 
         </div>

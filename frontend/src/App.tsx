@@ -599,12 +599,12 @@ function App() {
                   data={selectedSequence}
                   jobName={jobName}
                   onPrimersUpdate={setSelectedPrimers}
-                  idtCredentials={idtClientId && idtClientSecret ? {
+                  idtCredentials={{
                     clientId: idtClientId,
                     clientSecret: idtClientSecret,
                     username: idtUsername,
                     password: idtPassword
-                  } : undefined}
+                  }}
                 />
               )}
             </>

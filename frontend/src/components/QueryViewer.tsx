@@ -44,6 +44,11 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, idtCredent
     const [idtResults, setIdtResults] = useState<IdtData | null>(null);
     const [idtError, setIdtError] = useState<string | null>(null);
 
+    // Primer IDT Analysis State
+    const [isPrimerIdtLoading, setIsPrimerIdtLoading] = useState(false);
+    const [primerIdtResults, setPrimerIdtResults] = useState<IdtData | null>(null);
+    const [primerIdtError, setPrimerIdtError] = useState<string | null>(null);
+
     // Controls - Shift Logic
     const [moligoShift, setMoligoShift] = useState(() => Number(localStorage.getItem('moligo_shift')) || 0);
     const [moligo1Len, setMoligo1Len] = useState(() => Number(localStorage.getItem('moligo_1_len')) || 50);
@@ -86,6 +91,8 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, idtCredent
             // Keep lengths and shift persistent if the user wants them to stay
             setIdtResults(null);
             setIdtError(null);
+            setPrimerIdtResults(null);
+            setPrimerIdtError(null);
             onPrimersUpdate(null);
         }
     }, [data?.id, data?.seq]);
@@ -245,6 +252,49 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, idtCredent
             setIdtError(err.message);
         } finally {
             setIsIdtLoading(false);
+        }
+    };
+
+    const runPrimerIdtAnalysis = async (fwd_seq: string, rev_seq: string) => {
+        if (!idtCredentials || !idtCredentials.clientId || !idtCredentials.clientSecret) {
+            setPrimerIdtError("No IDT credentials provided. Add them in settings.");
+            return;
+        }
+        setIsPrimerIdtLoading(true);
+        setPrimerIdtError(null);
+        try {
+            const tRes = await fetch(((import.meta.env.VITE_API_BASE as string) || "") + '/idt/token', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    client_id: idtCredentials.clientId,
+                    client_secret: idtCredentials.clientSecret,
+                    username: idtCredentials.username,
+                    password: idtCredentials.password
+                })
+            });
+            if (!tRes.ok) {
+                const errorData = await tRes.json();
+                throw new Error(errorData.detail || "IDT Auth Failed");
+            }
+            const { access_token } = await tRes.json();
+
+            const aRes = await fetch(((import.meta.env.VITE_API_BASE as string) || "") + '/idt/analyze', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    p1_seq: fwd_seq,
+                    p2_seq: rev_seq,
+                    token: access_token
+                })
+            });
+            if (!aRes.ok) throw new Error("IDT Analysis Failed");
+            const results = await aRes.json();
+            setPrimerIdtResults(results);
+        } catch (err: any) {
+            setPrimerIdtError(err.message);
+        } finally {
+            setIsPrimerIdtLoading(false);
         }
     };
 
@@ -472,6 +522,10 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, idtCredent
                                 onTagChange={setTagSeq}
                                 onFwdChange={setFwdPrimer}
                                 onRevChange={setRevPrimer}
+                                onCreatePrimersClick={runPrimerIdtAnalysis}
+                                isPrimerIdtLoading={isPrimerIdtLoading}
+                                primerIdtResults={primerIdtResults}
+                                primerIdtError={primerIdtError}
                             />
                         )}
 

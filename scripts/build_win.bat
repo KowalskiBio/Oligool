@@ -8,12 +8,30 @@ echo   Oligoool Windows App Builder
 echo ==================================================
 echo Project ROOT: %ROOT%
 
+:: --- 0. Node.js Environment (if needed) ---
+echo [0/5] Checking for Node.js...
+if exist "%ROOT%\.bin\node\node-v22.14.0-win-x64\node.exe" (
+    set "PATH=%ROOT%\.bin\node\node-v22.14.0-win-x64;%PATH%"
+)
+where node >nul 2>&1
+if not errorlevel 1 goto node_done
+echo Downloading portable Node.js v22.14.0...
+if exist "%ROOT%\.bin\node" rmdir /s /q "%ROOT%\.bin\node"
+mkdir "%ROOT%\.bin\node"
+powershell -command "Invoke-WebRequest -Uri 'https://nodejs.org/dist/v22.14.0/node-v22.14.0-win-x64.zip' -OutFile '%ROOT%\.bin\node\node.zip'"
+if %ERRORLEVEL% neq 0 ( set "FAIL_STEP=node download" & goto :error )
+powershell -command "Expand-Archive -Path '%ROOT%\.bin\node\node.zip' -DestinationPath '%ROOT%\.bin\node' -Force"
+if %ERRORLEVEL% neq 0 ( set "FAIL_STEP=node extraction" & goto :error )
+del "%ROOT%\.bin\node\node.zip"
+set "PATH=%ROOT%\.bin\node\node-v22.14.0-win-x64;%PATH%"
+:node_done
+
 :: --- 1. Static Frontend ---
 echo [1/5] Building static React frontend...
 cd /d "%ROOT%\frontend"
-call npm install
+call npm.cmd install
 if %ERRORLEVEL% neq 0 ( set "FAIL_STEP=npm install" & goto :error )
-call npm run build
+call npm.cmd run build
 if %ERRORLEVEL% neq 0 ( set "FAIL_STEP=npm run build" & goto :error )
 
 :: --- 2. Python Environment ---
