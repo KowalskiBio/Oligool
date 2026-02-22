@@ -28,7 +28,7 @@ interface Primer {
     end: number;
 }
 
-interface MoligizeResponse {
+interface OligizeResponse {
     p1: Primer;
     p2: Primer;
     split_idx: number;
@@ -37,7 +37,7 @@ interface MoligizeResponse {
 
 export default function QueryViewer({ data, jobName, onPrimersUpdate, idtCredentials }: QueryViewerProps) {
     const [copyFeedback, setCopyFeedback] = useState('');
-    const [showMoligizer, setShowMoligizer] = useState(false);
+    const [showOligizer, setShowOligizer] = useState(() => localStorage.getItem('show_oligizer') === 'true');
 
     // IDT Analysis State
     const [isIdtLoading, setIsIdtLoading] = useState(false);
@@ -45,29 +45,33 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, idtCredent
     const [idtError, setIdtError] = useState<string | null>(null);
 
     // Controls - Shift Logic
-    const [moligoShift, setMoligoShift] = useState(0);
-    const [moligo1Len, setMoligo1Len] = useState(50);
-    const [moligo2Len, setMoligo2Len] = useState(50);
+    const [moligoShift, setMoligoShift] = useState(() => Number(localStorage.getItem('moligo_shift')) || 0);
+    const [moligo1Len, setMoligo1Len] = useState(() => Number(localStorage.getItem('moligo_1_len')) || 50);
+    const [moligo2Len, setMoligo2Len] = useState(() => Number(localStorage.getItem('moligo_2_len')) || 50);
 
-    const [primers, setPrimers] = useState<MoligizeResponse | null>(null);
+    const [primers, setPrimers] = useState<OligizeResponse | null>(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
 
-    const [showParams, setShowParams] = useState(false);
-    const [searchParams, setSearchParams] = useState({
-        min_len: 40,
-        max_l: 60,
-        tm_min: 47.0,
-        tm_max: 58.0,
-        tm_diff: 1.5
+    const [showParams, setShowParams] = useState(() => localStorage.getItem('show_search_params') === 'true');
+    const [searchParams, setSearchParams] = useState(() => {
+        const saved = localStorage.getItem('oligo_search_params');
+        if (saved) return JSON.parse(saved);
+        return {
+            min_len: 40,
+            max_l: 60,
+            tm_min: 47.0,
+            tm_max: 58.0,
+            tm_diff: 1.5
+        };
     });
     const [paramsNotMet, setParamsNotMet] = useState(false);
 
     // Primerize state
-    const [showPrimerize, setShowPrimerize] = useState(false);
-    const [tagSeq, setTagSeq] = useState('taattgaattgaaagataagtgt');
-    const [fwdPrimer, setFwdPrimer] = useState('CGCGGTAGTAAGAAGTGAGA');
-    const [revPrimer, setRevPrimer] = useState('ACTCGTAGGGAATAAACCGT');
+    const [showPrimerize, setShowPrimerize] = useState(() => localStorage.getItem('show_primerize') === 'true');
+    const [tagSeq, setTagSeq] = useState(() => localStorage.getItem('tag_seq') || 'taattgaattgaaagataagtgt');
+    const [fwdPrimer, setFwdPrimer] = useState(() => localStorage.getItem('fwd_primer') || 'CGCGGTAGTAAGAAGTGAGA');
+    const [revPrimer, setRevPrimer] = useState(() => localStorage.getItem('rev_primer') || 'ACTCGTAGGGAATAAACCGT');
 
     const handleCopy = (text: string) => {
         navigator.clipboard.writeText(text).then(() => {
@@ -79,10 +83,7 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, idtCredent
     // Initialize/Reset state when data changes
     useEffect(() => {
         if (data) {
-            setMoligoShift(0);
-            setMoligo1Len(50);
-            setMoligo2Len(50);
-            setPrimers(null);
+            // Keep lengths and shift persistent if the user wants them to stay
             setIdtResults(null);
             setIdtError(null);
             onPrimersUpdate(null);
@@ -102,7 +103,7 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, idtCredent
     };
 
     useEffect(() => {
-        if (!data || !showMoligizer) {
+        if (!data || !showOligizer) {
             onPrimersUpdate(null);
             return;
         }
@@ -144,7 +145,7 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, idtCredent
                         throw new Error(errorText);
                     }
                 }
-                const json: MoligizeResponse = await res.json();
+                const json: OligizeResponse = await res.json();
                 setPrimers(json);
                 setParamsNotMet(!!json.params_not_met);
 
@@ -166,7 +167,7 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, idtCredent
                 });
 
             } catch (err: any) {
-                setError(err.message || 'Failed to generate moligos');
+                setError(err.message || 'Failed to generate oligos');
             } finally {
                 setLoading(false);
             }
@@ -174,7 +175,20 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, idtCredent
 
         const debounce = setTimeout(fetchPrimers, 200);
         return () => clearTimeout(debounce);
-    }, [data, showMoligizer, moligoShift, showParams, searchParams, moligo1Len, moligo2Len]);
+    }, [data, showOligizer, moligoShift, showParams, searchParams, moligo1Len, moligo2Len]);
+
+    // Persistence
+    useEffect(() => { localStorage.setItem('moligo_shift', String(moligoShift)); }, [moligoShift]);
+    useEffect(() => { localStorage.setItem('moligo_1_len', String(moligo1Len)); }, [moligo1Len]);
+    useEffect(() => { localStorage.setItem('moligo_2_len', String(moligo2Len)); }, [moligo2Len]);
+    useEffect(() => { localStorage.setItem('show_oligizer', String(showOligizer)); }, [showOligizer]);
+
+    useEffect(() => { localStorage.setItem('show_search_params', String(showParams)); }, [showParams]);
+    useEffect(() => { localStorage.setItem('oligo_search_params', JSON.stringify(searchParams)); }, [searchParams]);
+    useEffect(() => { localStorage.setItem('show_primerize', String(showPrimerize)); }, [showPrimerize]);
+    useEffect(() => { localStorage.setItem('tag_seq', tagSeq); }, [tagSeq]);
+    useEffect(() => { localStorage.setItem('fwd_primer', fwdPrimer); }, [fwdPrimer]);
+    useEffect(() => { localStorage.setItem('rev_primer', revPrimer); }, [revPrimer]);
 
     if (!data) return null;
     const rawSeq = data.seq.replace(/-/g, '');
@@ -257,22 +271,22 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, idtCredent
             <div className="px-5 py-3 bg-gradient-to-r from-slate-50 to-indigo-50/50 dark:from-slate-800 dark:to-indigo-900/20 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between flex-wrap gap-2">
                 <div className="flex items-center gap-3">
                     <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-200">
-                        Moligo provenance: <span className="font-mono text-indigo-600 dark:text-indigo-400">{jobName}</span>
+                        Oligo provenance: <span className="font-mono text-indigo-600 dark:text-indigo-400">{jobName}</span>
                     </h2>
                     <span className="text-sm text-slate-500 dark:text-slate-400">
                         (bp {data.start + 1}–{data.end + 1}, len {rawSeq.length})
                     </span>
                     <button
-                        onClick={() => setShowMoligizer(!showMoligizer)}
-                        className={`ml-2 px-3 py-1 text-xs font-bold rounded-full border transition-all ${showMoligizer
+                        onClick={() => setShowOligizer(!showOligizer)}
+                        className={`ml-2 px-3 py-1 text-xs font-bold rounded-full border transition-all ${showOligizer
                             ? 'bg-purple-600 text-white border-purple-600 shadow-md ring-2 ring-purple-100 dark:ring-purple-900/40'
                             : 'bg-white dark:bg-slate-700 text-purple-600 dark:text-purple-400 border-purple-200 dark:border-purple-800 hover:border-purple-400 dark:hover:border-purple-600 hover:bg-purple-50 dark:hover:bg-purple-900/20'
                             }`}
                     >
-                        ⚡ Moligize!
+                        ⚡ Oligize!
                     </button>
 
-                    {showMoligizer && (
+                    {showOligizer && (
                         <div className="flex items-center gap-1 ml-4 bg-white dark:bg-slate-700 border border-purple-200 dark:border-purple-800 rounded-lg px-2 py-0.5 shadow-sm">
                             <span className="text-[10px] uppercase text-slate-400 font-bold mr-1">Shift Both</span>
                             <button
@@ -326,7 +340,7 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, idtCredent
             </div>
 
             <div className="p-0">
-                {showMoligizer && (
+                {showOligizer && (
                     <div className="bg-purple-50/50 dark:bg-purple-900/5 border-b border-purple-100 dark:border-purple-900/20 p-4 font-sans relative">
                         {showParams && (
                             <div className="mb-4 p-3 bg-white dark:bg-slate-800 rounded-lg border border-amber-200 dark:border-amber-900/30 shadow-sm grid grid-cols-2 md:grid-cols-5 gap-3">
@@ -384,7 +398,7 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, idtCredent
                         {paramsNotMet && (
                             <div className="mb-4 px-3 py-2 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/50 rounded-md text-amber-700 dark:text-amber-400 text-xs flex items-center gap-2">
                                 <span className="text-sm">⚠️</span>
-                                <b>Params too strict, no moligos found.</b> Showing default center-split oligos instead.
+                                <b>Params too strict, no oligos found.</b> Showing default center-split oligos instead.
                             </div>
                         )}
 
@@ -395,7 +409,7 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, idtCredent
                                 <div className="bg-white dark:bg-slate-800 rounded-lg border border-amber-200 dark:border-amber-900/30 p-3 shadow-sm relative group flex flex-col justify-between">
                                     <div>
                                         <div className="flex justify-between items-start mb-2">
-                                            <div className="text-xs font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wider">MOLigo 2 (Left / 5')</div>
+                                            <div className="text-xs font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wider">Oligo 2 (Left / 5')</div>
                                             <button
                                                 onClick={() => handleCopy(primers.p2.seq)}
                                                 className="text-xs bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400 px-2 py-1 rounded hover:bg-amber-100 dark:hover:bg-amber-900/40 border border-amber-200 dark:border-amber-800/50"
@@ -420,7 +434,7 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, idtCredent
                                 <div className="bg-white dark:bg-slate-800 rounded-lg border border-green-200 dark:border-green-900/30 p-3 shadow-sm relative group flex flex-col justify-between">
                                     <div>
                                         <div className="flex justify-between items-start mb-2">
-                                            <div className="text-xs font-bold text-green-600 dark:text-green-400 uppercase tracking-wider">MOLigo 1 (Right / 3')</div>
+                                            <div className="text-xs font-bold text-green-600 dark:text-green-400 uppercase tracking-wider">Oligo 1 (Right / 3')</div>
                                             <button
                                                 onClick={() => handleCopy(primers.p1.seq)}
                                                 className="text-xs bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400 px-2 py-1 rounded hover:bg-green-100 dark:hover:bg-green-900/40 border border-green-200 dark:border-green-800/50"
@@ -474,13 +488,13 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, idtCredent
                                 {idtResults && (
                                     <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                                         <div className="bg-slate-50 dark:bg-slate-900/40 p-3 rounded border border-slate-100 dark:border-slate-800">
-                                            <div className="text-xs font-bold text-slate-500 uppercase mb-1">MOLigo 2 Stability</div>
+                                            <div className="text-xs font-bold text-slate-500 uppercase mb-1">Oligo 2 Stability</div>
                                             {renderIdtCard("Hairpin ΔG", idtResults.m2.hairpin)}
                                             {renderIdtCard("Self-Dimer ΔG", idtResults.m2.self_dimer)}
                                             <div className="text-[10px] text-slate-400 mt-1 italic">kcal/mol</div>
                                         </div>
                                         <div className="bg-slate-50 dark:bg-slate-900/40 p-3 rounded border border-slate-100 dark:border-slate-800">
-                                            <div className="text-xs font-bold text-slate-500 uppercase mb-1">MOLigo 1 Stability</div>
+                                            <div className="text-xs font-bold text-slate-500 uppercase mb-1">Oligo 1 Stability</div>
                                             {renderIdtCard("Hairpin ΔG", idtResults.m1.hairpin)}
                                             {renderIdtCard("Self-Dimer ΔG", idtResults.m1.self_dimer)}
                                             <div className="text-[10px] text-slate-400 mt-1 italic">kcal/mol</div>
@@ -499,10 +513,10 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, idtCredent
 
                 <div className="p-5 bg-slate-50/50 dark:bg-slate-900/50">
                     <div className="font-mono text-xs text-slate-600 dark:text-slate-400 break-all leading-relaxed max-h-60 overflow-y-auto p-4 bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 shadow-inner">
-                        {showMoligizer ? renderSequence() : rawSeq}
+                        {showOligizer ? renderSequence() : rawSeq}
                     </div>
                 </div>
             </div>
-        </div>
+        </div >
     );
 }

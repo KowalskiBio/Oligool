@@ -364,18 +364,18 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
             ctx.fillRect(Math.floor(handleX), rowsTop + rowAreaH, handleDrawW, MINIMAP_HANDLE_H - 1);
         }
 
-        // 2.5) Draw MOLigo markers in the Minimap Ruler area
+        // 2.5) Draw Oligo markers in the Minimap Ruler area
         if (primers) {
             const mmRulerY = MINIMAP_GC_H;
             const mmRulerH = MINIMAP_RULER_H;
 
-            // MOLigo 1 (Right/3' - Green)
+            // Oligo 1 (Right/3' - Green)
             const p1x = LABEL_WIDTH + (primers.p1.start / seqLen) * mmSeqW;
             const p1w = Math.max(1, ((primers.p1.end - primers.p1.start) / seqLen) * mmSeqW);
             ctx.fillStyle = '#22c55e'; // Green
             ctx.fillRect(p1x, mmRulerY + mmRulerH - 4, p1w, 4);
 
-            // MOLigo 2 (Left/5' - Yellow/Peachy)
+            // Oligo 2 (Left/5' - Yellow/Peachy)
             const p2x = LABEL_WIDTH + (primers.p2.start / seqLen) * mmSeqW;
             const p2w = Math.max(1, ((primers.p2.end - primers.p2.start) / seqLen) * mmSeqW);
             ctx.fillStyle = '#facc15'; // Yellow
@@ -587,7 +587,7 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
             }
         }
 
-        /* ── MOLigo markers in main ruler ── */
+        /* ── Oligo markers in main ruler ── */
         if (primers) {
             const p1x = LABEL_WIDTH + primers.p1.start * cellW - scrollLeft;
             const p1w = (primers.p1.end - primers.p1.start) * cellW;

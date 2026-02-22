@@ -181,9 +181,10 @@ async def moligize_sequence(request: MoligizeRequest):
     if not seq:
         raise HTTPException(status_code=400, detail="Sequence is empty.")
 
-    # 1. Windowing: Center 100bp (or full if shorter)
+    # 1. Windowing: Center 600bp (or full if shorter)
+    # Give a wide window so that manual shifts don't hit the array boundaries
     full_len = len(seq)
-    window_len = 100
+    window_len = 600
     
     start_w = 0
     if full_len > window_len:
@@ -217,14 +218,23 @@ async def moligize_sequence(request: MoligizeRequest):
 
     # Deterministic fallback (the current logic)
     def get_deterministic(s1_shift, s2_shift, len1, len2):
-        # M2 (Left): ends at split + shift, length l2
-        m2_end = split_idx_in_window + s2_shift
-        m2_start = max(0, m2_end - len2)
-        m2_end = min(len(window_seq), m2_start + len2) 
+        # The true split point in the window
+        split_pt = split_idx_in_window
         
-        # M1 (Right): starts at split + shift, length l1
-        m1_start = split_idx_in_window + s1_shift
-        m1_end = min(len(window_seq), m1_start + len1)
+        # M2 (Left, 5'): ends at split point + its shift
+        m2_end_target = split_pt + s2_shift
+        m2_start_target = m2_end_target - len2
+        
+        # apply bounds bounds
+        m2_start = max(0, m2_start_target)
+        m2_end = min(len(window_seq), m2_start + len2)
+        
+        # M1 (Right, 3'): starts at split point + its shift
+        m1_start_target = split_pt + s1_shift
+        m1_end_target = m1_start_target + len1
+        
+        # apply bounds 
+        m1_end = min(len(window_seq), m1_end_target)
         m1_start = max(0, m1_end - len1)
         
         m2_fwd = window_seq[m2_start:m2_end]
@@ -264,20 +274,13 @@ async def moligize_sequence(request: MoligizeRequest):
         # No, let's keep it simple: search uses its own min/max. The +/- buttons in the UI will update the 'min_len' and 'max_len' of the search if in search mode? 
         # No, user wants independent buttons.
         
-        # We will search based on min/max_l or EXACT lengths if manually set (not 50)
-        # However, min_l/max_l already come from the UI.
-        # Let's just use the range. If the user clicked +/-, they are effectively 
-        # saying "I want a specific length". 
-        # To avoid complexity, let's just make the search loop use the manual lengths 
-        # as the range if the user has touched them.
-        
-        m1_search_range = range(min_l, max_l + 1)
-        if request.moligo1_len != 50: 
-            m1_search_range = [request.moligo1_len]
-            
-        m2_search_range = range(min_l, max_l + 1)
-        if request.moligo2_len != 50:
-            m2_search_range = [request.moligo2_len]
+        # We will search based on min/max_l ONLY if the lengths are exactly 50 (defaults).
+        # Actually, since the UI allows the user to +/- length AND shift, they expect the lengths to remain rigid while shifting.
+        # If the user touched the lengths, OR they clicked shift (which we want to preserve lengths for), 
+        # it is safest to just search for the exact lengths they currently have configured in the UI state!
+        # The frontend tracks and sends request.moligo1_len and request.moligo2_len reliably.
+        m1_search_range = [request.moligo1_len]
+        m2_search_range = [request.moligo2_len]
 
         subs_m1 = []
         subs_m2 = []
@@ -302,14 +305,19 @@ async def moligize_sequence(request: MoligizeRequest):
                     if tm_min <= tm <= tm_max:
                         subs_m1.append({'start': i, 'end': i + l, 'tm': tm, 'seq': rc, 'len': l})
         
-        target_center = split_idx_in_window + p.get('moligoShift', 0)
+        # The shifts are inputs, we want the split point (M2 end, M1 start) to shift accordingly
+        target_split_m2 = split_idx_in_window + request.moligo2_shift
+        target_split_m1 = split_idx_in_window + request.moligo1_shift
 
         for s2 in subs_m2: # Left
             for s1 in subs_m1: # Right
-                if s1['start'] == s2['end']:
+                # We strictly want them to be contiguous, meaning M2 ends exactly where M1 begins.
+                # Even if shifted, they shift together relative to the window.
+                if s1['start'] == s2['end']: 
                      if abs(s1['tm'] - s2['tm']) <= tm_diff:
-                         dist = abs(s2['end'] - target_center)
-                         score = dist
+                         dist_m2 = abs(s2['end'] - target_split_m2)
+                         dist_m1 = abs(s1['start'] - target_split_m1)
+                         score = dist_m2 + dist_m1
                          if score < best_score:
                              best_score = score
                              best_pair = (s1, s2)

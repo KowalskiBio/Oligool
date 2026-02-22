@@ -27,11 +27,11 @@ function App() {
   const [idtUsername, setIdtUsername] = useState(() => localStorage.getItem('idt_username') || '');
   const [idtPassword, setIdtPassword] = useState(() => localStorage.getItem('idt_password') || '');
   const [showSettings, setShowSettings] = useState(!localStorage.getItem('ncbi_api_key'));
-  const [maxHitsPreset, setMaxHitsPreset] = useState('50');
-  const [customHits, setCustomHits] = useState('');
-  const [organism, setOrganism] = useState('');
-  const [eValue, setEValue] = useState('0.05');
-  const [percIdentity, setPercIdentity] = useState('0');
+  const [maxHitsPreset, setMaxHitsPreset] = useState(() => localStorage.getItem('max_hits_preset') || '50');
+  const [customHits, setCustomHits] = useState(() => localStorage.getItem('custom_hits') || '');
+  const [organism, setOrganism] = useState(() => localStorage.getItem('organism') || '');
+  const [eValue, setEValue] = useState(() => localStorage.getItem('e_value') || '0.05');
+  const [percIdentity, setPercIdentity] = useState(() => localStorage.getItem('perc_identity') || '0');
 
   const [isDarkMode, setIsDarkMode] = useState(() => {
     const saved = localStorage.getItem('theme');
@@ -39,7 +39,7 @@ function App() {
     return window.matchMedia('(prefers-color-scheme: dark)').matches;
   });
 
-  const [jobName, setJobName] = useState('Query');
+  const [jobName, setJobName] = useState(() => localStorage.getItem('job_name') || 'Query');
   const [selectedPrimers, setSelectedPrimers] = useState<{ p1: { start: number, end: number }, p2: { start: number, end: number } } | null>(null);
 
   useEffect(() => {
@@ -51,6 +51,14 @@ function App() {
       localStorage.setItem('theme', 'light');
     }
   }, [isDarkMode]);
+
+  // Persistence hooks
+  useEffect(() => { localStorage.setItem('organism', organism); }, [organism]);
+  useEffect(() => { localStorage.setItem('e_value', eValue); }, [eValue]);
+  useEffect(() => { localStorage.setItem('perc_identity', percIdentity); }, [percIdentity]);
+  useEffect(() => { localStorage.setItem('max_hits_preset', maxHitsPreset); }, [maxHitsPreset]);
+  useEffect(() => { localStorage.setItem('custom_hits', customHits); }, [customHits]);
+  useEffect(() => { localStorage.setItem('job_name', jobName); }, [jobName]);
 
   const maxHits = maxHitsPreset === 'custom'
     ? parseInt(customHits, 10) || 50

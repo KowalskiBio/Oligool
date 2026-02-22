@@ -25,7 +25,8 @@ const C = {
 export default function PrimerizePanel({
     templateSeq,
     moligo1Seq, moligo2Seq,
-    tagSeq, fwdPrimer, revPrimer
+    tagSeq, fwdPrimer, revPrimer,
+    onTagChange, onFwdChange, onRevChange
 }: PrimerizeProps) {
 
     // ── Lengths ──────────────────────────────────────────────────────────
@@ -145,7 +146,7 @@ export default function PrimerizePanel({
             <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-inner overflow-hidden">
                 <svg viewBox={`0 0 ${VW} ${VH}`} width="100%"
                     style={{ display: 'block', fontFamily: 'inherit' }}
-                    aria-label="MOLigo primerize schematic">
+                    aria-label="Oligo primerize schematic">
 
                     {/* ═══ TEMPLATE STRANDS (+ / −) ═══ */}
                     <rect x={tmplX0} y={tmplY} width={tmplW} height={stH}
@@ -241,6 +242,57 @@ export default function PrimerizePanel({
                     <span className="text-slate-400 font-mono text-xs">({templateSeq?.length || 0}nt)</span>
                 </div>
             </div>
+
+            {/* ── Sequence Inputs ── */}
+            <div className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-6 pt-6 border-t border-slate-100 dark:border-slate-800">
+
+                {/* Rev BS Input */}
+                <div className="flex flex-col gap-2">
+                    <label className="text-xs font-semibold uppercase flex justify-between" style={{ color: C.revBs }}>
+                        <span>Rev Primer (Rev BS)</span>
+                        <span className="text-slate-400 font-mono">{revLen}nt</span>
+                    </label>
+                    <textarea
+                        className="w-full h-20 p-2.5 text-sm font-mono bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-purple-500/50 focus:border-purple-500 outline-none resize-none text-slate-700 dark:text-slate-300 shadow-[0_1px_3px_rgba(0,0,0,0.05)] transition-all"
+                        value={revPrimer || ""}
+                        onChange={(e) => onRevChange?.(e.target.value.toUpperCase().replace(/[^ATCGUatcgu]/g, ''))}
+                        placeholder="Enter sequence..."
+                        spellCheck={false}
+                    />
+                </div>
+
+                {/* TAG Input */}
+                <div className="flex flex-col gap-2">
+                    <label className="text-xs font-semibold uppercase flex justify-between" style={{ color: C.tag }}>
+                        <span>TAG Sequence</span>
+                        <span className="text-slate-400 font-mono">{tagLen}nt</span>
+                    </label>
+                    <textarea
+                        className="w-full h-20 p-2.5 text-sm font-mono bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-red-500/50 focus:border-red-500 outline-none resize-none text-slate-700 dark:text-slate-300 shadow-[0_1px_3px_rgba(0,0,0,0.05)] transition-all"
+                        value={tagSeq || ""}
+                        onChange={(e) => onTagChange?.(e.target.value.toUpperCase().replace(/[^ATCGUatcgu]/g, ''))}
+                        placeholder="Enter sequence..."
+                        spellCheck={false}
+                    />
+                </div>
+
+                {/* Forward BS Input */}
+                <div className="flex flex-col gap-2">
+                    <label className="text-xs font-semibold uppercase flex justify-between" style={{ color: C.fwdBs }}>
+                        <span>Forward Primer (Fwd BS)</span>
+                        <span className="text-slate-400 font-mono">{fwdLen}nt</span>
+                    </label>
+                    <textarea
+                        className="w-full h-20 p-2.5 text-sm font-mono bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-pink-500/50 focus:border-pink-500 outline-none resize-none text-slate-700 dark:text-slate-300 shadow-[0_1px_3px_rgba(0,0,0,0.05)] transition-all"
+                        value={fwdPrimer || ""}
+                        onChange={(e) => onFwdChange?.(e.target.value.toUpperCase().replace(/[^ATCGUatcgu]/g, ''))}
+                        placeholder="Enter sequence..."
+                        spellCheck={false}
+                    />
+                </div>
+
+            </div>
+
         </div>
     );
 }
