@@ -107,8 +107,8 @@ info "Starting frontend on http://localhost:5173 …"
 FRONTEND_PID=$!
 
 # ── start native desktop window ───────────────────────────
-info "Opening application window…"
-(cd "$ROOT" && python3 webview_app.py)
+info "Opening application window (Development Mode)…"
+(cd "$ROOT" && python3 webview_app.py --dev)
 
 echo ""
 

@@ -56,26 +56,36 @@ def run_msa(sequences: List[Dict[str, str]]) -> str:
         if not mafft_exe or not os.path.exists(mafft_exe):
             raise RuntimeError(f"MAFFT executable not found. Expected at {mafft_exe} or in PATH.")
             
-        # Run MAFFT using subprocess
-        cmd = [mafft_exe, '--auto', '--quiet', input_file]
+        # Prepare environment with specific OS-approved TMPDIR to avoid macOS Sandbox permission issues
+        # Using the standard OS temp dir instead of a local project folder bypasses "Operation not permitted"
+        base_tmp = tempfile.gettempdir()
         
-        # Prepare environment
-        env = os.environ.copy()
+        # Create a guaranteed unique, pre-existing directory for this specific run
+        # This bypasses MAFFT's failing `mktemp` bash calls entirely.
+        safe_run_dir = tempfile.mkdtemp(dir=base_tmp)
         
-        # Set MAFFT_BINARIES so the wrapper script can find its support binaries (v0.000 error fix)
-        libexec_dir = os.path.join(os.path.dirname(os.path.dirname(mafft_exe)), 'libexec')
-        if os.path.exists(libexec_dir):
-            env["MAFFT_BINARIES"] = libexec_dir
-            # Also add to PATH to be safe
-            env["PATH"] = libexec_dir + os.pathsep + os.path.dirname(mafft_exe) + os.pathsep + env.get("PATH", "")
+        # We start with a relatively clean environment to avoid user shell pollution
+        # which often breaks Homebrew's MAFFT wrapper script.
+        env = {
+            "PATH": os.environ.get("PATH", "/usr/bin:/bin:/usr/sbin:/sbin"),
+            "TMPDIR": safe_run_dir,
+            "MAFFT_TMPDIR": safe_run_dir # Force MAFFT to use our safe directory
+        }
+        
+        if mafft_exe and ('.bin' in mafft_exe or '__dot__bin' in mafft_exe):
+            # Set MAFFT_BINARIES so the local wrapper script can find its support binaries
+            libexec_dir = os.path.join(os.path.dirname(os.path.dirname(mafft_exe)), 'libexec', 'mafft', 'bin')
+            if os.path.exists(libexec_dir):
+                env["MAFFT_BINARIES"] = libexec_dir
+                env["PATH"] = libexec_dir + os.pathsep + os.path.dirname(mafft_exe) + os.pathsep + env["PATH"]
 
-        # Prepare environment with specific TMPDIR to avoid permission issues
-        local_tmp_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "tmp_mafft")
-        os.makedirs(local_tmp_dir, exist_ok=True)
-        env["TMPDIR"] = local_tmp_dir
-
-        result = subprocess.run(cmd, capture_output=True, text=True, check=True, env=env)
-        return result.stdout
+        try:
+            cmd = [mafft_exe, '--auto', '--quiet', input_file]
+            result = subprocess.run(cmd, capture_output=True, text=True, check=True, env=env)
+            return result.stdout
+        finally:
+            import shutil
+            shutil.rmtree(safe_run_dir, ignore_errors=True)
         
     except subprocess.CalledProcessError as e:
         # If MAFFT fails, raise error with details

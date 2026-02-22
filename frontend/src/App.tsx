@@ -292,7 +292,7 @@ function App() {
                     type="text"
                     value={idtUsername}
                     onChange={(e) => handleIdtUsernameChange(e.target.value)}
-                    placeholder="IDT Account Email"
+                    placeholder="IDT Username"
                     className="flex-1 rounded-lg border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-xs p-2 border font-mono"
                   />
                 </div>

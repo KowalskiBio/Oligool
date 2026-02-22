@@ -449,6 +449,7 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, idtCredent
                         {/* ── Primerize Panel ─────────────────────────────── */}
                         {primers && showPrimerize && (
                             <PrimerizePanel
+                                templateSeq={rawSeq}
                                 moligo1Seq={primers.p1.seq}
                                 moligo2Seq={primers.p2.seq}
                                 tagSeq={tagSeq}

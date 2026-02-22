@@ -31,19 +31,27 @@ if __name__ == "__main__":
     # Required for PyInstaller multiprocessing on macOS/Windows
     multiprocessing.freeze_support()
     
-    server_url = "http://127.0.0.1:8000"
+    # Determine if we are running in development mode (live reload)
+    is_dev = "--dev" in sys.argv
+    frontend_url = "http://127.0.0.1:5173" if is_dev else "http://127.0.0.1:8000"
+    backend_url = "http://127.0.0.1:8000"
     
     # Start the FastAPI server in a background thread
     server_thread = threading.Thread(target=run_server, daemon=True)
     server_thread.start()
     
-    # Wait for the backend to initialize
-    if not check_server_ready(server_url):
+    # Wait for the backend to initialize (always on 8000)
+    if not check_server_ready(backend_url):
         print(f"Error: Backend server did not start in time. Check logs.", file=sys.stderr)
         sys.exit(1)
+        
+    # Wait for the frontend to initialize if in dev mode
+    if is_dev and not check_server_ready(frontend_url, timeout=60):
+        print(f"Error: Vite dev server did not start in time on {frontend_url}.", file=sys.stderr)
+        sys.exit(1)
     
-    # Create the native window, passing the server URL
-    webview.create_window("Oligool", server_url, width=1280, height=800, min_size=(800, 600))
+    # Create the native window, passing the appropriate frontend URL
+    webview.create_window("Oligool", frontend_url, width=1280, height=800, min_size=(800, 600))
     
     # Start the application loop (blocks until the window is closed)
     webview.start()
