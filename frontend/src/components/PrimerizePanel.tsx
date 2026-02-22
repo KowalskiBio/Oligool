@@ -13,11 +13,11 @@ export interface PrimerizeProps {
 }
 
 const C = {
-    m2: '#f59e0b',     // amber   – oligo probe 2 (flat)
-    m1: '#10b981',     // emerald – oligo probe 1 (flat)
+    m2: '#f59e0b',     // amber   – Oligo 2 (flat)
+    m1: '#10b981',     // emerald – Oligo 1 (flat)
     tag: '#ef4444',    // red     – TAG
-    revBs: '#3b82f6',  // blue    – Rev BS
-    fwdBs: '#6366f1',  // indigo  – Forward BS
+    revBs: '#c084fc',  // purple  – Rev BS
+    fwdBs: '#f472b6',  // pink    – Forward BS
     tmpl: '#94a3b8',   // slate   – template strands
     tmplFill: '#e2e8f0',
 };
@@ -45,11 +45,8 @@ export default function PrimerizePanel({
     // The arms extend outward at a 45-degree angle. Their horizontal footprint (dx)
     // is their sequence length * cos(45deg).
     const leftArmProj = leftArmLen * Math.SQRT1_2;
-    const revProj = revLen * Math.SQRT1_2;
-    const tagProj = tagLen * Math.SQRT1_2;
 
     const rightArmProj = rightArmLen * Math.SQRT1_2;
-    const fwdProj = fwdLen * Math.SQRT1_2;
 
     const totalHorizontalNt = leftArmProj + combinedFlatLen + rightArmProj || 1;
 
@@ -59,11 +56,9 @@ export default function PrimerizePanel({
     const pxPerNt = effectiveW / totalHorizontalNt;
 
     const leftArmDx = leftArmProj * pxPerNt;
-    const revDx = revProj * pxPerNt;
-    const tagDx = tagProj * pxPerNt;
+    const tagDx = tagLen * Math.SQRT1_2 * pxPerNt;
 
     const rightArmDx = rightArmProj * pxPerNt;
-    const fwdDx = fwdProj * pxPerNt;
 
     // Template & flat probe geometry
     const m2W = m2Len * pxPerNt;
@@ -82,20 +77,68 @@ export default function PrimerizePanel({
 
     const VH = tmplY + stH * 2 + gap + 40; // dynamic SVG height
 
-    // Gradient calculations
-    const gradM2_w = leftArmDx + m2W;
-    const stop1 = (revDx / gradM2_w) * 100;
-    const stop2 = ((revDx + tagDx) / gradM2_w) * 100;
+    // ── Polygon Math for Perfect Miter & Perpendicular Joints ──
+    const hw = 7; // half-width (stroke thickness 14)
+    const nx = hw * Math.SQRT1_2;
+    const ny = -hw * Math.SQRT1_2;
+    const dw = hw * (Math.SQRT2 - 1);
 
-    const gradM1_w = m1W + rightArmDx;
-    const stop3 = (m1W / gradM1_w) * 100;
+    // Centers
+    const L = { x: tmplX0 - leftArmDx, y: tmplY - 9 - leftArmDx };
+    const S = { x: tmplX0 - tagDx, y: tmplY - 9 - tagDx };
+    const C_left = { x: tmplX0, y: tmplY - 9 };
+    const R = { x: splitX, y: tmplY - 9 };
+    const C_right = { x: tmplX1, y: tmplY - 9 };
+    const F = { x: tmplX1 + rightArmDx, y: tmplY - 9 - rightArmDx };
+
+    // Left Arm segments
+    const p_start = { top: { x: L.x + nx, y: L.y + ny }, bot: { x: L.x - nx, y: L.y - ny } };
+    const p_split = { top: { x: S.x + nx, y: S.y + ny }, bot: { x: S.x - nx, y: S.y - ny } };
+    const p_miterL = {
+        top: { x: C_left.x + (leftArmLen > 0 ? dw : 0), y: C_left.y - hw },
+        bot: { x: C_left.x - (leftArmLen > 0 ? dw : 0), y: C_left.y + hw }
+    };
+
+    let polyRevBS = "";
+    let polyTAG = "";
+
+    if (revLen > 0 && tagLen > 0) {
+        polyRevBS = `${p_start.top.x},${p_start.top.y} ${p_split.top.x},${p_split.top.y} ${p_split.bot.x},${p_split.bot.y} ${p_start.bot.x},${p_start.bot.y}`;
+        polyTAG = `${p_split.top.x},${p_split.top.y} ${p_miterL.top.x},${p_miterL.top.y} ${p_miterL.bot.x},${p_miterL.bot.y} ${p_split.bot.x},${p_split.bot.y}`;
+    } else if (revLen > 0 && tagLen === 0) {
+        polyRevBS = `${p_start.top.x},${p_start.top.y} ${p_miterL.top.x},${p_miterL.top.y} ${p_miterL.bot.x},${p_miterL.bot.y} ${p_start.bot.x},${p_start.bot.y}`;
+    } else if (revLen === 0 && tagLen > 0) {
+        polyTAG = `${p_start.top.x},${p_start.top.y} ${p_miterL.top.x},${p_miterL.top.y} ${p_miterL.bot.x},${p_miterL.bot.y} ${p_start.bot.x},${p_start.bot.y}`;
+    }
+
+    // Horizontal Flat segments
+    const p_splitFlat = { top: { x: R.x, y: R.y - hw }, bot: { x: R.x, y: R.y + hw } };
+
+    const polyM2 = `${p_miterL.top.x},${p_miterL.top.y} ${p_splitFlat.top.x},${p_splitFlat.top.y} ${p_splitFlat.bot.x},${p_splitFlat.bot.y} ${p_miterL.bot.x},${p_miterL.bot.y}`;
+
+    const p_miterR = {
+        top: { x: C_right.x - (rightArmLen > 0 ? dw : 0), y: C_right.y - hw },
+        bot: { x: C_right.x + (rightArmLen > 0 ? dw : 0), y: C_right.y + hw }
+    };
+
+    const polyM1 = `${p_splitFlat.top.x},${p_splitFlat.top.y} ${p_miterR.top.x},${p_miterR.top.y} ${p_miterR.bot.x},${p_miterR.bot.y} ${p_splitFlat.bot.x},${p_splitFlat.bot.y}`;
+
+    // Right Arm segments
+    const nx2 = -hw * Math.SQRT1_2;
+    const ny2 = -hw * Math.SQRT1_2;
+    const p_end = { top: { x: F.x + nx2, y: F.y + ny2 }, bot: { x: F.x - nx2, y: F.y - ny2 } };
+
+    let polyFwdBS = "";
+    if (fwdLen > 0) {
+        polyFwdBS = `${p_miterR.top.x},${p_miterR.top.y} ${p_end.top.x},${p_end.top.y} ${p_end.bot.x},${p_end.bot.y} ${p_miterR.bot.x},${p_miterR.bot.y}`;
+    }
 
     return (
         <div className="mt-4 border-t border-slate-100 dark:border-slate-800 pt-4">
             {/* Header */}
             <div className="flex items-center gap-2 mb-3">
                 <span className="text-sm font-bold text-slate-500 uppercase tracking-widest">🧬 Primerize Schematic</span>
-                <span className="text-xs text-slate-400 dark:text-slate-500">— Final: Single Contiguous Path Graphic</span>
+                <span className="text-xs text-slate-400 dark:text-slate-500">— Final: Perfect Optical Polygons</span>
             </div>
 
             {/* ── SVG Schematic ── */}
@@ -103,27 +146,6 @@ export default function PrimerizePanel({
                 <svg viewBox={`0 0 ${VW} ${VH}`} width="100%"
                     style={{ display: 'block', fontFamily: 'inherit' }}
                     aria-label="MOLigo primerize schematic">
-
-                    <defs>
-                        {/* Gradient for Left Side (Rev BS -> TAG -> oligo probe 2) */}
-                        <linearGradient id="gradM2" gradientUnits="userSpaceOnUse"
-                            x1={tmplX0 - leftArmDx} y1={0}
-                            x2={splitX} y2={0}>
-                            <stop offset={`${stop1}%`} stopColor={C.revBs} />
-                            <stop offset={`${stop1}%`} stopColor={C.tag} />
-
-                            <stop offset={`${stop2}%`} stopColor={C.tag} />
-                            <stop offset={`${stop2}%`} stopColor={C.m2} />
-                        </linearGradient>
-
-                        {/* Gradient for Right Side (oligo probe 1 -> Forward BS) */}
-                        <linearGradient id="gradM1" gradientUnits="userSpaceOnUse"
-                            x1={splitX} y1={0}
-                            x2={tmplX1 + rightArmDx} y2={0}>
-                            <stop offset={`${stop3}%`} stopColor={C.m1} />
-                            <stop offset={`${stop3}%`} stopColor={C.fwdBs} />
-                        </linearGradient>
-                    </defs>
 
                     {/* ═══ TEMPLATE STRANDS (+ / −) ═══ */}
                     <rect x={tmplX0} y={tmplY} width={tmplW} height={stH}
@@ -148,17 +170,19 @@ export default function PrimerizePanel({
                         Target DNA sequence (template)
                     </text>
 
-                    {/* ═══ Left path: Rev BS + TAG + oligo probe 2 ═══ */}
+                    {/* ═══ Left Side: Rev BS + TAG + Oligo 2 ═══ */}
                     <g opacity="0.85">
-                        <path d={`M ${tmplX0 - leftArmDx} ${tmplY - 9 - leftArmDx} L ${tmplX0} ${tmplY - 9} L ${splitX} ${tmplY - 9}`}
-                            fill="none" stroke="url(#gradM2)" strokeWidth="14" strokeLinejoin="round" strokeLinecap="butt" />
+                        {revLen > 0 && <polygon points={polyRevBS} fill={C.revBs} />}
+                        {tagLen > 0 && <polygon points={polyTAG} fill={C.tag} />}
+                        <polygon points={polyM2} fill={C.m2} />
                     </g>
 
-                    {/* ═══ Right path: oligo probe 1 + Fwd BS ═══ */}
+                    {/* ═══ Right Side: Oligo 1 + Forward BS ═══ */}
                     <g opacity="0.85">
-                        <path d={`M ${splitX} ${tmplY - 9} L ${tmplX1} ${tmplY - 9} L ${tmplX1 + rightArmDx} ${tmplY - 9 - rightArmDx}`}
-                            fill="none" stroke="url(#gradM1)" strokeWidth="14" strokeLinejoin="round" strokeLinecap="butt" />
+                        <polygon points={polyM1} fill={C.m1} />
+                        {fwdLen > 0 && <polygon points={polyFwdBS} fill={C.fwdBs} />}
                     </g>
+
 
                     {/* Annealing ticks */}
                     {Array.from({ length: 20 }).map((_, i) => {
@@ -189,12 +213,12 @@ export default function PrimerizePanel({
                     )}
                     <div className="flex items-center gap-2">
                         <div className="w-4 h-4 rounded-sm" style={{ backgroundColor: C.m2 }} />
-                        <span className="font-semibold text-slate-700 dark:text-slate-200">oligo probe 2</span>
+                        <span className="font-semibold text-slate-700 dark:text-slate-200">Oligo 2</span>
                         <span className="text-slate-400 font-mono text-xs">({m2Len}nt)</span>
                     </div>
                     <div className="flex items-center gap-2">
                         <div className="w-4 h-4 rounded-sm" style={{ backgroundColor: C.m1 }} />
-                        <span className="font-semibold text-slate-700 dark:text-slate-200">oligo probe 1</span>
+                        <span className="font-semibold text-slate-700 dark:text-slate-200">Oligo 1</span>
                         <span className="text-slate-400 font-mono text-xs">({m1Len}nt)</span>
                     </div>
                     {fwdLen > 0 && (
