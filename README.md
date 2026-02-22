@@ -1,49 +1,31 @@
-# Oligool
+# 🐰 Oligool
 
-Multiple Sequence Alignment Viewer using React, FastAPI, and MAFFT.
+Oligool is a native desktop application for molecular biologists designed to streamline the design, alignment, and analysis of genetic sequences and oligos.
 
-## Prerequisites
+## 🚀 Core Capabilities
 
-- Node.js
-- Python 3.8+
-- MAFFT (`brew install mafft`)
+### 1. Dual-Source Search & Fetch
+- **NCBI & Ensembl Integration**: Toggle between data sources to find genes, transcripts, and sequences across thousands of organisms.
+- **Smart Filtering**: Persistent search parameters (E-value, Identity %, Organism) that survive application restarts.
 
-## Getting Started
+### 2. Interactive MSA Viewer
+- **High-Performance Alignment**: Powered by MAFFT for rapid multiple sequence alignment.
+- **2D Navigation**: Interactive minimap for scrubbing through massive alignments and identifying conservation patterns and variations.
 
-### macOS
+### 3. "Oligize!" Design
+- **Precision Splitting**: Pivot genomic regions into two contiguous oligos with exact control over shift and lengths.
+- **Real-time Delta G**: Live integration with IDT OligoAnalyzer to analyze hairpin formation and self-dimerization (requires IDT API credentials).
 
-1. Navigate to the `dist/` folder and double-click the **`Oligool.app`** application icon.
-2. The application will launch instantly as a native desktop application with a custom dock icon.
-
-**Building for macOS (.app / .dmg):**
-To compile the native application and disk image (including MAFFT binaries):
-1. Run the automated packager:
-   ```bash
-   ./scripts/build_mac.sh
-   ```
-2. The standalone **`Oligool.app`** and a distributable **`Oligool.dmg`** will be generated in the `dist/` directory.
-
-**Building for Windows (.exe):**
-To generate a standalone Windows executable, you must run the build on a Windows machine:
-1. Install dependencies: `pip install -r backend/requirements.txt pyinstaller pywebview`
-2. Build the frontend: `cd frontend && npm install && npm run build && cd ..`
-3. Run PyInstaller:
-   ```bash
-   pyinstaller --noconfirm --clean oligool.spec
-   ```
-4. **Important:** Distribute the entire `dist/Oligool/` folder (zip it). The `Oligool.exe` inside requires the surrounding library files to function.
-
-### Windows
-
-1. Double-click **`start.bat`** in the project root.
-2. The script will automatically install Node.js (if missing), install backend and frontend dependencies, and launch the application as a standalone desktop window entirely offline.
+### 4. "Primerize!" Schematic
+- **Visual Assembly**: A high-fidelity SVG schematic of your design, showing Forward and Reverse Primer Binding Sites (PBS) and TAG sequences.
+- **🔡 Seq Mode**: Toggle high-detail view to see base-by-base lettering along the schematic's architecture.
+- **Persistence**: Your TAGs, PBS sequences, and design preferences are remembered automatically.
 
 ---
 
-## Development / Manual Setup
+## 🛠 Setup & Development
 
-If you prefer to run the raw source code manually:
-
+### Local Development
 ```bash
 # 1. Start the Frontend (Vite)
 cd frontend
@@ -51,8 +33,30 @@ npm install
 npm run dev
 
 # 2. Start the Backend (FastAPI) in a separate terminal
+# The backend uses a virtual environment and launches the native webview
 python3 -m venv venv
 source venv/bin/activate
 pip install -r backend/requirements.txt
 python3 webview_app.py
 ```
+
+### Native Application Bundling
+
+#### 🍎 macOS (.app / .dmg)
+Build a standalone Mac bundle with a native transparent icon:
+```bash
+./scripts/build_mac.sh
+```
+Find the output in `dist/Oligool.app`.
+
+#### 🪟 Windows (.exe)
+Build a single-file executable for Windows (must run on Windows):
+```batch
+scripts\build_win.bat
+```
+Find the output in `dist\Oligool.exe`.
+
+---
+
+## 🔒 Privacy & Persistence
+All credentials (NCBI Key, IDT API) and design configurations are stored locally on your machine via `localStorage`. No sensitive data is transmitted to the cloud except for direct API calls to NCBI/IDT.
