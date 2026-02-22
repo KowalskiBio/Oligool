@@ -8,6 +8,14 @@ echo   Oligoool Windows App Builder
 echo ==================================================
 echo Project ROOT: %ROOT%
 
+:: --- Cleanup Running Instances ---
+echo Stopping any running instances to prevent file locking...
+taskkill /fi "WINDOWTITLE eq Oligool-Backend*" /f >nul 2>&1
+taskkill /fi "WINDOWTITLE eq Oligool-Frontend*" /f >nul 2>&1
+taskkill /IM Oligool.exe /F >nul 2>&1
+:: Wait 1 second to ensure file handles are released
+ping 127.0.0.1 -n 2 > nul
+
 :: --- 0. Node.js Environment (if needed) ---
 echo [0/5] Checking for Node.js...
 if exist "%ROOT%\.bin\node\node-v22.14.0-win-x64\node.exe" (
