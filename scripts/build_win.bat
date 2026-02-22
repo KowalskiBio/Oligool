@@ -75,7 +75,20 @@ echo [5/5] Bundling application with PyInstaller...
 if exist build rmdir /s /q build
 if exist dist rmdir /s /q dist
 
-pyinstaller --noconfirm --clean "%ROOT%\oligool.spec"
+set "SPEC_FILE="
+if exist "%ROOT%\oligool.spec" (
+    set "SPEC_FILE=%ROOT%\oligool.spec"
+) else if exist "%ROOT%\primerool.spec" (
+    set "SPEC_FILE=%ROOT%\primerool.spec"
+)
+
+if not defined SPEC_FILE (
+    echo [ERROR] Neither oligool.spec nor primerool.spec found!
+    set "FAIL_STEP=finding pyinstaller spec file"
+    goto :error
+)
+
+pyinstaller --noconfirm --clean "%SPEC_FILE%"
 if %ERRORLEVEL% neq 0 ( set "FAIL_STEP=pyinstaller bundling" & goto :error )
 
 echo.

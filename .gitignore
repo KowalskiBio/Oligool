@@ -26,7 +26,6 @@ test.fasta
 # PyInstaller Outputs
 build/
 dist/
-*.spec
 
 # Build Environments
 build_venv/
