@@ -30,6 +30,9 @@ dist/
 # Build Environments
 build_venv/
 tmp_mafft/
+mypip/
+mypip2/
+venv_pdf/
 
 # Frontend
 frontend/dist/

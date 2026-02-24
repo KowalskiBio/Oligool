@@ -45,8 +45,60 @@ if %ERRORLEVEL% neq 0 ( set "FAIL_STEP=npm run build" & goto :error )
 :: --- 2. Python Environment ---
 echo [2/5] Setting up Python packaging environment...
 cd /d "%ROOT%"
+
+set "PYTHON_CMD="
+python --version >nul 2>&1
+if not errorlevel 1 (
+    set "PYTHON_CMD=python"
+    goto python_found
+)
+py --version >nul 2>&1
+if not errorlevel 1 (
+    set "PYTHON_CMD=py"
+    goto python_found
+)
+
+echo [INFO] Python is not installed or the Windows Store alias is interfering.
+echo [INFO] Commencing automatic Python 3.12 installation...
+winget --version >nul 2>&1
+if not errorlevel 1 (
+    winget install -e --id Python.Python.3.12 --accept-source-agreements --accept-package-agreements
+) else (
+    powershell -command "Invoke-WebRequest -Uri 'https://www.python.org/ftp/python/3.12.9/python-3.12.9-amd64.exe' -OutFile '%TEMP%\python_installer.exe'"
+    start /wait %TEMP%\python_installer.exe /passive PrependPath=1
+)
+
+:: Re-check python
+python --version >nul 2>&1
+if not errorlevel 1 (
+    set "PYTHON_CMD=python"
+    goto python_found
+)
+py --version >nul 2>&1
+if not errorlevel 1 (
+    set "PYTHON_CMD=py"
+    goto python_found
+)
+
+:: Try explicit paths
+set "PYTHON_EXE="
+if exist "%LOCALAPPDATA%\Programs\Python\Python312\python.exe" set "PYTHON_EXE=%LOCALAPPDATA%\Programs\Python\Python312\python.exe"
+if exist "%PROGRAMFILES%\Python312\python.exe" set "PYTHON_EXE=%PROGRAMFILES%\Python312\python.exe"
+
+if defined PYTHON_EXE (
+    set "PYTHON_CMD=%PYTHON_EXE%"
+    goto python_found
+)
+
+echo [ERROR] Python installation failed or python executable could not be found.
+echo Please install Python manually from https://python.org.
+set "FAIL_STEP=finding python executable"
+goto :error
+
+:python_found
+echo Using Python command: %PYTHON_CMD%
 if exist build_venv rmdir /s /q build_venv
-python -m venv build_venv
+%PYTHON_CMD% -m venv build_venv
 if %ERRORLEVEL% neq 0 ( set "FAIL_STEP=python venv creation" & goto :error )
 call "%ROOT%\build_venv\Scripts\activate.bat"
 

@@ -54,7 +54,12 @@ Build a single-file executable for Windows (must run on Windows):
 ```batch
 scripts\build_win.bat
 ```
-Find the output in `dist\Oligool.exe`.
+Find the output in `dist\Oligool.exe`. 
+
+*Note: If you do not have Python, Node.js, or MAFFT installed, the build script will automatically download and install everything required to package the application.*
+
+#### 🏃 Running from Source (Windows)
+Double-click `start.bat`. This script will automatically check for Python, Node.js, and MAFFT. If any are missing, it will silently download and install them in the background before launching the application.
 
 ---
 

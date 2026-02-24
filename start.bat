@@ -8,9 +8,51 @@ cd /d "%ROOT%"
 echo [..] Checking dependencies...
 
 REM -- 1. Python -------------------------
-where python >nul 2>&1
-if not errorlevel 1 goto python_done
-echo [ERROR] Python is required but not found. Install from https://python.org
+set "PYTHON_CMD="
+python --version >nul 2>&1
+if not errorlevel 1 (
+    set "PYTHON_CMD=python"
+    goto python_done
+)
+py --version >nul 2>&1
+if not errorlevel 1 (
+    set "PYTHON_CMD=py"
+    goto python_done
+)
+echo [INFO] Python is not installed or the Windows Store alias is interfering.
+echo [INFO] Commencing automatic Python 3.12 installation...
+winget --version >nul 2>&1
+if not errorlevel 1 (
+    winget install -e --id Python.Python.3.12 --accept-source-agreements --accept-package-agreements
+) else (
+    powershell -command "Invoke-WebRequest -Uri 'https://www.python.org/ftp/python/3.12.9/python-3.12.9-amd64.exe' -OutFile '%TEMP%\python_installer.exe'"
+    start /wait %TEMP%\python_installer.exe /passive PrependPath=1
+)
+
+:: Re-check python
+python --version >nul 2>&1
+if not errorlevel 1 (
+    set "PYTHON_CMD=python"
+    goto python_done
+)
+py --version >nul 2>&1
+if not errorlevel 1 (
+    set "PYTHON_CMD=py"
+    goto python_done
+)
+
+:: Try explicit paths
+set "PYTHON_EXE="
+if exist "%LOCALAPPDATA%\Programs\Python\Python312\python.exe" set "PYTHON_EXE=%LOCALAPPDATA%\Programs\Python\Python312\python.exe"
+if exist "%PROGRAMFILES%\Python312\python.exe" set "PYTHON_EXE=%PROGRAMFILES%\Python312\python.exe"
+
+if defined PYTHON_EXE (
+    set "PYTHON_CMD=%PYTHON_EXE%"
+    goto python_done
+)
+
+echo [ERROR] Python installation failed or python executable could not be found.
+echo Please install Python manually from https://python.org.
 pause
 exit /b 1
 :python_done
@@ -48,14 +90,14 @@ del "%ROOT%.bin\node\node.zip"
 set "PATH=%ROOT%.bin\node\node-v22.14.0-win-x64;%PATH%"
 :node_done
 
-for /f "tokens=*" %%v in ('python --version 2^>^&1') do echo [OK] %%v
+for /f "tokens=*" %%v in ('%PYTHON_CMD% --version 2^>^&1') do echo [OK] %%v
 for /f "tokens=*" %%v in ('node --version 2^>^&1') do echo [OK] Node %%v
 echo [OK] MAFFT installed
 
 REM -- 4. Python Environment -------------
 if exist "%ROOT%.venv" goto venv_done
 echo [..] Creating Python virtual environment...
-python -m venv "%ROOT%.venv"
+%PYTHON_CMD% -m venv "%ROOT%.venv"
 :venv_done
 
 echo [..] Installing Python dependencies...
