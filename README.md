@@ -2,7 +2,7 @@
 
 Oligool is a native desktop application for molecular biologists designed to streamline the design, alignment, and analysis of genetic sequences and oligos.
 
-## 🚀 Core Capabilities
+## Core Capabilities
 
 ### 1. Dual-Source Search & Fetch
 - **NCBI & Ensembl Integration**: Toggle between data sources to find genes, transcripts, and sequences across thousands of organisms.
@@ -23,7 +23,7 @@ Oligool is a native desktop application for molecular biologists designed to str
 
 ---
 
-## 🛠 Setup & Development
+## Setup & Development
 
 ### Local Development
 ```bash
@@ -42,14 +42,14 @@ python3 webview_app.py
 
 ### Native Application Bundling
 
-#### 🍎 macOS (.app / .dmg)
+#### macOS (.app / .dmg)
 Build a standalone Mac bundle with a native transparent icon:
 ```bash
 ./scripts/build_mac.sh
 ```
 Find the output in `dist/Oligool.app`.
 
-#### 🪟 Windows (.exe)
+#### Windows (.exe)
 Build a single-file executable for Windows (must run on Windows):
 ```batch
 scripts\build_win.bat
@@ -58,10 +58,10 @@ Find the output in `dist\Oligool.exe`.
 
 *Note: If you do not have Python, Node.js, or MAFFT installed, the build script will automatically download and install everything required to package the application.*
 
-#### 🏃 Running from Source (Windows)
+#### Running from Source (Windows)
 Double-click `start.bat`. This script will automatically check for Python, Node.js, and MAFFT. If any are missing, it will silently download and install them in the background before launching the application.
 
 ---
 
-## 🔒 Privacy & Persistence
+## Privacy & Persistence
 All credentials (NCBI Key, IDT API) and design configurations are stored locally on your machine via `localStorage`. No sensitive data is transmitted to the cloud except for direct API calls to NCBI/IDT.
