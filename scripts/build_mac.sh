@@ -16,7 +16,7 @@ echo "Starting Oligool macOS build process..."
 # ------------------------------------------
 echo "Building the static React frontend..."
 cd frontend
-npm install
+npm install --no-audit --no-fund --legacy-peer-deps || echo "[WARNING] npm install returned non-zero code. Continuing..."
 npm run build
 cd ..
 

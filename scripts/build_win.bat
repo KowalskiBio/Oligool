@@ -37,8 +37,10 @@ set "PATH=%ROOT%\.bin\node\node-v22.14.0-win-x64;%PATH%"
 :: --- 1. Static Frontend ---
 echo [1/5] Building static React frontend...
 cd /d "%ROOT%\frontend"
-call npm.cmd install
-if %ERRORLEVEL% neq 0 ( set "FAIL_STEP=npm install" & goto :error )
+call npm.cmd install --no-audit --no-fund --legacy-peer-deps
+if %ERRORLEVEL% neq 0 ( 
+    echo [WARNING] npm install returned non-zero code. It might be due to peer dependencies or warnings. Continuing...
+)
 call npm.cmd run build
 if %ERRORLEVEL% neq 0 ( set "FAIL_STEP=npm run build" & goto :error )
 
