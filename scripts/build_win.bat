@@ -47,13 +47,15 @@ echo [2/5] Setting up Python packaging environment...
 cd /d "%ROOT%"
 
 set "PYTHON_CMD="
-python --version >nul 2>&1
-if not errorlevel 1 (
+set "PY_CHECK="
+for /f "delims=" %%i in ('python -c "import venv; print('OK')" 2^>nul') do set "PY_CHECK=%%i"
+if "%PY_CHECK%"=="OK" (
     set "PYTHON_CMD=python"
     goto python_found
 )
-py --version >nul 2>&1
-if not errorlevel 1 (
+set "PY_CHECK="
+for /f "delims=" %%i in ('py -c "import venv; print('OK')" 2^>nul') do set "PY_CHECK=%%i"
+if "%PY_CHECK%"=="OK" (
     set "PYTHON_CMD=py"
     goto python_found
 )
@@ -69,13 +71,15 @@ if not errorlevel 1 (
 )
 
 :: Re-check python
-python --version >nul 2>&1
-if not errorlevel 1 (
+set "PY_CHECK="
+for /f "delims=" %%i in ('python -c "import venv; print('OK')" 2^>nul') do set "PY_CHECK=%%i"
+if "%PY_CHECK%"=="OK" (
     set "PYTHON_CMD=python"
     goto python_found
 )
-py --version >nul 2>&1
-if not errorlevel 1 (
+set "PY_CHECK="
+for /f "delims=" %%i in ('py -c "import venv; print('OK')" 2^>nul') do set "PY_CHECK=%%i"
+if "%PY_CHECK%"=="OK" (
     set "PYTHON_CMD=py"
     goto python_found
 )

@@ -9,13 +9,15 @@ echo [..] Checking dependencies...
 
 REM -- 1. Python -------------------------
 set "PYTHON_CMD="
-python --version >nul 2>&1
-if not errorlevel 1 (
+set "PY_CHECK="
+for /f "delims=" %%i in ('python -c "import venv; print('OK')" 2^>nul') do set "PY_CHECK=%%i"
+if "%PY_CHECK%"=="OK" (
     set "PYTHON_CMD=python"
     goto python_done
 )
-py --version >nul 2>&1
-if not errorlevel 1 (
+set "PY_CHECK="
+for /f "delims=" %%i in ('py -c "import venv; print('OK')" 2^>nul') do set "PY_CHECK=%%i"
+if "%PY_CHECK%"=="OK" (
     set "PYTHON_CMD=py"
     goto python_done
 )
@@ -30,13 +32,15 @@ if not errorlevel 1 (
 )
 
 :: Re-check python
-python --version >nul 2>&1
-if not errorlevel 1 (
+set "PY_CHECK="
+for /f "delims=" %%i in ('python -c "import venv; print('OK')" 2^>nul') do set "PY_CHECK=%%i"
+if "%PY_CHECK%"=="OK" (
     set "PYTHON_CMD=python"
     goto python_done
 )
-py --version >nul 2>&1
-if not errorlevel 1 (
+set "PY_CHECK="
+for /f "delims=" %%i in ('py -c "import venv; print('OK')" 2^>nul') do set "PY_CHECK=%%i"
+if "%PY_CHECK%"=="OK" (
     set "PYTHON_CMD=py"
     goto python_done
 )
