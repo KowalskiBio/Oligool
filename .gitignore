@@ -33,10 +33,17 @@ tmp_mafft/
 mypip/
 mypip2/
 venv_pdf/
+localnpm/
+localnpm_cache/
 
 # Frontend
 frontend/dist/
 frontend/build_log.txt
+
+# Temp / data
+temp_public/
+data/
+test_*.js
 
 # Downloaded Archives
 *.zip

@@ -1,13 +1,20 @@
+import sys
+import os
+# Robustly add project root to sys.path
+root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+if root_dir not in sys.path:
+    sys.path.insert(0, root_dir)
+
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional
 from backend.alignment import run_msa
 from backend.blast import run_blast
-import sys
+import json
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
-import os
+
 
 app = FastAPI()
 
@@ -437,9 +444,21 @@ async def analyze_idt_oligos(request: IdtAnalyzeRequest):
         elif endpoint == "HeteroDimer":
             # HeteroDimer: both sequences as query parameters
             params = {"primary": seq1, "secondary": seq2}
+        elif endpoint == "Analyze":
+            # Analyze: requires full payload for valid response
+            payload = {
+                "Sequence": seq1,
+                "NaConc": 50.0,
+                "MgConc": request.mg_conc,
+                "dNTPsConc": 0.0,
+                "OligoConc": 0.25,
+                "NucleotideType": "DNA"
+            }
             
         try:
+            # IDT endpoints generally require POST, even if payload is empty or None
             response = requests.post(url, json=payload, params=params, headers=headers, timeout=15)
+            
             if not response.ok:
                 return {"error": f"IDT {endpoint} Error: {response.status_code} - {response.text}"}
             return response.json()
@@ -451,49 +470,73 @@ async def analyze_idt_oligos(request: IdtAnalyzeRequest):
     # that return DeltaG directly, instead of the general /Analyze endpoint.
     m1_hairpin = hit_idt("Hairpin", request.p1_seq)
     m1_selfdimer = hit_idt("SelfDimer", request.p1_seq)
+    m1_analyze = hit_idt("Analyze", request.p1_seq)
     m2_hairpin = hit_idt("Hairpin", request.p2_seq)
     m2_selfdimer = hit_idt("SelfDimer", request.p2_seq)
+    m2_analyze = hit_idt("Analyze", request.p2_seq)
     hetero = hit_idt("HeteroDimer", request.p1_seq, request.p2_seq)
+
+    # Use ViennaRNA to add dot-bracket structure to hairpins since IDT does not provide visual coordinates
+    try:
+        import RNA
+        def add_dot_bracket(seq, hp_data):
+            if isinstance(hp_data, list) and len(hp_data) > 0:
+                # Configure for DNA at 25°C (matching IDT hairpin analysis conditions)
+                md = RNA.md()
+                md.temperature = 25.0   # IDT uses 25°C for hairpin folding
+                md.noGU = 1             # Disable GU wobble pairs (DNA, not RNA)
+                fc = RNA.fold_compound(seq, md)
+                structure, mfe = fc.mfe()
+                hp_data[0]["DotBracket"] = structure
+            return hp_data
+            
+        m1_hairpin = add_dot_bracket(request.p1_seq, m1_hairpin)
+        m2_hairpin = add_dot_bracket(request.p2_seq, m2_hairpin)
+    except Exception as e:
+        print(f"ViennaRNA integration error: {e}")
 
     # DEBUG: Log raw responses to understand structure
     import json as _json
     print("=== IDT RAW RESPONSES ===")
     print(f"M1 Hairpin: {_json.dumps(m1_hairpin, indent=2, default=str)}")
     print(f"M1 SelfDimer: {_json.dumps(m1_selfdimer, indent=2, default=str)}")
+    print(f"M1 Analyze: {_json.dumps(m1_analyze, indent=2, default=str)}")
     print(f"M2 Hairpin: {_json.dumps(m2_hairpin, indent=2, default=str)}")
     print(f"M2 SelfDimer: {_json.dumps(m2_selfdimer, indent=2, default=str)}")
+    print(f"M2 Analyze: {_json.dumps(m2_analyze, indent=2, default=str)}")
     print(f"HeteroDimer: {_json.dumps(hetero, indent=2, default=str)}")
     print("=== END IDT RAW RESPONSES ===")
 
     # Each specific endpoint (Hairpin, SelfDimer, HeteroDimer) should return
     # DeltaG directly in its response. We use find_dg to robustly extract it
-    # regardless of exact response format variations.
-    def find_dg(data):
-        """Extract DeltaG from a single-endpoint response."""
+    # regardless of exact response format variations. We also return the raw data
+    # for rendering visualizations on the frontend.
+    def find_dg_and_raw(data):
+        """Extract DeltaG and return raw data from a single-endpoint response."""
         if not data or isinstance(data, str):
-            return {"DeltaG": None}
+            return {"DeltaG": None, "raw": None}
         if isinstance(data, dict) and "error" in data:
             return data
         
         # If response is an array (multiple structures found), pick lowest DeltaG
         if isinstance(data, list):
             if len(data) == 0:
-                return {"DeltaG": None}
-            best = None
+                return {"DeltaG": None, "raw": data}
+            best_dg = None
+            best_item = None
             for item in data:
                 dg = _extract_delta_g(item)
-                if dg is not None and (best is None or dg < best):
-                    best = dg
-            return {"DeltaG": best}
+                if dg is not None and (best_dg is None or dg < best_dg):
+                    best_dg = dg
+                    best_item = item
+            return {"DeltaG": best_dg, "raw": best_item if best_item else data}
         
         # If response is a dict, DeltaG should be at top level
         if isinstance(data, dict):
             dg = _extract_delta_g(data)
-            if dg is not None:
-                return {"DeltaG": dg}
-            return data
+            return {"DeltaG": dg, "raw": data}
         
-        return {"DeltaG": None}
+        return {"DeltaG": None, "raw": None}
     
     def _extract_delta_g(obj):
         """Extract DeltaG from a dict, trying common key names."""
@@ -509,16 +552,17 @@ async def analyze_idt_oligos(request: IdtAnalyzeRequest):
 
     return {
         "m1": {
-            "hairpin": find_dg(m1_hairpin),
-            "self_dimer": find_dg(m1_selfdimer)
+            "hairpin": find_dg_and_raw(m1_hairpin),
+            "self_dimer": find_dg_and_raw(m1_selfdimer),
+            "analyze": m1_analyze
         },
         "m2": {
-            "hairpin": find_dg(m2_hairpin),
-            "self_dimer": find_dg(m2_selfdimer)
+            "hairpin": find_dg_and_raw(m2_hairpin),
+            "self_dimer": find_dg_and_raw(m2_selfdimer),
+            "analyze": m2_analyze
         },
-        "pairwise": find_dg(hetero)
+        "pairwise": find_dg_and_raw(hetero)
     }
-
 
 if __name__ == "__main__":
     import uvicorn

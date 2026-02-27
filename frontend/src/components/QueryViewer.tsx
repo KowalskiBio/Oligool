@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import PrimerizePanel from './PrimerizePanel';
+import HairpinSVG from './HairpinSVG';
 
 interface QueryViewerProps {
     data: { id: string; seq: string; start: number; end: number };
@@ -15,9 +16,9 @@ interface QueryViewerProps {
 }
 
 interface IdtData {
-    m1: { hairpin: any; self_dimer: any };
-    m2: { hairpin: any; self_dimer: any };
-    pairwise: any;
+    m1: { hairpin: { DeltaG?: number, raw?: any }; self_dimer: { DeltaG?: number, raw?: any }; analyze: any };
+    m2: { hairpin: { DeltaG?: number, raw?: any }; self_dimer: { DeltaG?: number, raw?: any }; analyze: any };
+    pairwise: { DeltaG?: number, raw?: any };
 }
 
 interface Primer {
@@ -59,10 +60,10 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, idtCredent
         const saved = localStorage.getItem('oligo_search_params');
         if (saved) return JSON.parse(saved);
         return {
-            min_len: 40,
-            max_l: 60,
-            tm_min: 47.0,
-            tm_max: 58.0,
+            min_len: 15,
+            max_l: 35,
+            tm_min: 60.0,
+            tm_max: 63.0,
             tm_diff: 1.5
         };
     });
@@ -258,15 +259,113 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, idtCredent
         return 'text-emerald-500 font-bold';
     };
 
-    const renderIdtCard = (title: string, data: any) => {
+
+
+    const buildDimerAscii = (raw: any, seq1?: string, seq2?: string) => {
+        if (!raw || !raw.Bonds || !seq1) return undefined;
+
+        const topPad = raw.TopLinePadding || 0;
+        const botPad = raw.BottomLinePadding || 0;
+        const bondPad = raw.BondLinePadding || 0;
+        const bonds = raw.Bonds || [];
+
+        const topStr = "5' " + " ".repeat(topPad) + seq1 + " 3'";
+        const isHetero = seq2 !== undefined;
+        const botSeqObj = isHetero ? seq2! : seq1;
+        const botSeq = botSeqObj.split('').reverse().join('');
+        const botStr = "3' " + " ".repeat(botPad) + botSeq + " 5'";
+
+        let bLine = "";
+        for (const b of bonds) {
+            if (b === 2) bLine += "|";
+            else if (b === 1) bLine += ":";
+            else bLine += " ";
+        }
+        const bondStr = "   " + " ".repeat(bondPad) + bLine;
+
+        return [topStr, bondStr, botStr].join('\n');
+    };
+
+    const renderIdtCard = (title: string, data: any, seq1?: string, seq2?: string) => {
         if (!data || data.error) return <div className="text-sm text-red-400">{data?.error || 'N/A'}</div>;
-        const dg = data.DeltaG;
+
+        // Extract DG and Visual from the structure { DeltaG, raw }
+        let dg = data.DeltaG;
+        let raw = data.raw;
+        let asciiStructure: string | undefined = undefined;
+        let hairpinDotBracket: string | undefined = undefined;
+        let hairpinSeq: string | undefined = undefined;
+
+        if (raw) {
+            asciiStructure = raw.AsciiStructure || raw.VisualPrint || raw.asciiStructure || raw.visualPrint || raw.Ascii || raw.ascii;
+        } else if (data.AsciiStructure || data.VisualPrint) {
+            asciiStructure = data.AsciiStructure || data.VisualPrint;
+        }
+
+        // Handle case where data is an array
+        if (Array.isArray(raw) && raw.length > 0) {
+            const first = raw[0];
+            asciiStructure = first.AsciiStructure || first.VisualPrint || first.asciiStructure || first.visualPrint;
+
+            // If still no ASCII but we have Dimer Bonds
+            if (!asciiStructure && first.Bonds && seq1) {
+                asciiStructure = buildDimerAscii(first, seq1, seq2);
+            } else if (!asciiStructure && first.DotBracket && seq1) {
+                // Use SVG hairpin instead of ASCII
+                hairpinDotBracket = first.DotBracket;
+                hairpinSeq = seq1;
+            }
+        } else if (raw && raw.Bonds && seq1) {
+            // If it's a single dict and has Bonds
+            if (!asciiStructure) asciiStructure = buildDimerAscii(raw, seq1, seq2);
+        } else if (raw && raw.DotBracket && seq1) {
+            if (!asciiStructure) {
+                hairpinDotBracket = raw.DotBracket;
+                hairpinSeq = seq1;
+            }
+        }
+
         return (
-            <div className="flex justify-between items-center text-sm">
-                <span className="text-slate-500">{title}:</span>
-                <span className={getIdtStatusColor(dg)}>{dg !== undefined ? `${dg.toFixed(2)}` : 'N/A'}</span>
+            <div className="flex flex-col gap-1 mb-2">
+                <div className="flex justify-between items-center text-sm">
+                    <span className="text-slate-500">{title}:</span>
+                    <span className={getIdtStatusColor(dg)}>{dg !== undefined && dg !== null ? `${dg.toFixed(2)}` : 'N/A'}</span>
+                </div>
+                {hairpinDotBracket && hairpinSeq && (
+                    <div className="mt-1 w-full overflow-x-auto bg-slate-100 dark:bg-slate-800 rounded p-2">
+                        <HairpinSVG seq={hairpinSeq} dotBracket={hairpinDotBracket} />
+                    </div>
+                )}
+                {asciiStructure && !hairpinDotBracket && (
+                    <div className="mt-1 w-full overflow-x-auto bg-slate-100 dark:bg-slate-800 rounded p-2 text-[10px] sm:text-xs">
+                        <pre className="font-mono text-slate-700 dark:text-slate-300 whitespace-pre leading-[1.15] tracking-tighter">
+                            {asciiStructure}
+                        </pre>
+                    </div>
+                )}
             </div>
         );
+    };
+
+    const extractTm = (analyzeData: any) => {
+        if (!analyzeData || analyzeData.error) return null;
+
+        const getTmFromObj = (obj: any) => {
+            if (obj === null || typeof obj !== 'object') return null;
+            return obj.Tm !== undefined ? obj.Tm
+                : obj.MeltingTemperature !== undefined ? obj.MeltingTemperature
+                    : obj.MeltTemp !== undefined ? obj.MeltTemp
+                        : obj.tm !== undefined ? obj.tm
+                            : obj.meltingTemperature !== undefined ? obj.meltingTemperature
+                                : obj.meltTemp !== undefined ? obj.meltTemp
+                                    : null;
+        };
+
+        // Analyze returns an array usually, or a dict. Try to find Tm
+        if (Array.isArray(analyzeData) && analyzeData.length > 0) {
+            return getTmFromObj(analyzeData[0]);
+        }
+        return getTmFromObj(analyzeData);
     };
 
     return (
@@ -423,9 +522,15 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, idtCredent
                                         <div className="font-mono text-sm text-slate-700 dark:text-slate-300 break-all bg-amber-50/50 dark:bg-amber-900/10 p-2 rounded line-clamp-2 min-h-[3rem] flex items-center">{primers.p2.seq}</div>
                                     </div>
                                     <div className="mt-3 flex items-center justify-between border-t border-slate-100 dark:border-slate-700 pt-2">
-                                        <div className="flex gap-3 text-xs text-slate-500 dark:text-slate-400">
+                                        <div className="flex gap-3 text-xs text-slate-500 dark:text-slate-400 items-center">
                                             <span>Len: <b className="text-slate-700 dark:text-slate-200">{primers.p2.len}</b></span>
-                                            <span>Tm: <b className="text-slate-700 dark:text-slate-200">{primers.p2.tm}°C</b></span>
+                                            {idtResults?.m2?.analyze ? (
+                                                <span title="IDT Tm" className="bg-indigo-50 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 px-1.5 py-0.5 rounded border border-indigo-200 dark:border-indigo-800">
+                                                    IDT Tm: <b className="font-bold">{extractTm(idtResults.m2.analyze)?.toFixed(1) || 'N/A'}°C</b>
+                                                </span>
+                                            ) : (
+                                                <span title="Primer3 Tm">Tm: <b className="text-slate-700 dark:text-slate-200">{primers.p2.tm}°C</b></span>
+                                            )}
                                         </div>
                                         <div className="flex bg-slate-100 dark:bg-slate-700 rounded border border-slate-200 dark:border-slate-600 overflow-hidden shadow-sm">
                                             <button onClick={() => setMoligo2Len(prev => Math.max(10, prev - 1))} className="w-8 h-7 flex items-center justify-center hover:bg-white dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition-colors font-bold border-r border-slate-200 dark:border-slate-600">-</button>
@@ -448,9 +553,15 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, idtCredent
                                         <div className="font-mono text-sm text-slate-700 dark:text-slate-300 break-all bg-green-50/50 dark:bg-green-900/10 p-2 rounded line-clamp-2 min-h-[3rem] flex items-center">{primers.p1.seq}</div>
                                     </div>
                                     <div className="mt-3 flex items-center justify-between border-t border-slate-100 dark:border-slate-700 pt-2">
-                                        <div className="flex gap-3 text-xs text-slate-500 dark:text-slate-400">
+                                        <div className="flex gap-3 text-xs text-slate-500 dark:text-slate-400 items-center">
                                             <span>Len: <b className="text-slate-700 dark:text-slate-200">{primers.p1.len}</b></span>
-                                            <span>Tm: <b className="text-slate-700 dark:text-slate-200">{primers.p1.tm}°C</b></span>
+                                            {idtResults?.m1?.analyze ? (
+                                                <span title="IDT Tm" className="bg-indigo-50 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 px-1.5 py-0.5 rounded border border-indigo-200 dark:border-indigo-800">
+                                                    IDT Tm: <b className="font-bold">{extractTm(idtResults.m1.analyze)?.toFixed(1) || 'N/A'}°C</b>
+                                                </span>
+                                            ) : (
+                                                <span title="Primer3 Tm">Tm: <b className="text-slate-700 dark:text-slate-200">{primers.p1.tm}°C</b></span>
+                                            )}
                                         </div>
                                         <div className="flex bg-slate-100 dark:bg-slate-700 rounded border border-slate-200 dark:border-slate-600 overflow-hidden shadow-sm">
                                             <button onClick={() => setMoligo1Len(prev => Math.max(10, prev - 1))} className="w-8 h-7 flex items-center justify-center hover:bg-white dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition-colors font-bold border-r border-slate-200 dark:border-slate-600">-</button>
@@ -510,19 +621,19 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, idtCredent
                                     <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                                         <div className="bg-slate-50 dark:bg-slate-900/40 p-3 rounded border border-slate-100 dark:border-slate-800">
                                             <div className="text-xs font-bold text-slate-500 uppercase mb-1">Oligo 2 Stability</div>
-                                            {renderIdtCard("Hairpin ΔG", idtResults.m2.hairpin)}
-                                            {renderIdtCard("Self-Dimer ΔG", idtResults.m2.self_dimer)}
+                                            {renderIdtCard("Hairpin ΔG", idtResults.m2.hairpin, primers.p2.seq)}
+                                            {renderIdtCard("Self-Dimer ΔG", idtResults.m2.self_dimer, primers.p2.seq)}
                                             <div className="text-[10px] text-slate-400 mt-1 italic">kcal/mol</div>
                                         </div>
                                         <div className="bg-slate-50 dark:bg-slate-900/40 p-3 rounded border border-slate-100 dark:border-slate-800">
                                             <div className="text-xs font-bold text-slate-500 uppercase mb-1">Oligo 1 Stability</div>
-                                            {renderIdtCard("Hairpin ΔG", idtResults.m1.hairpin)}
-                                            {renderIdtCard("Self-Dimer ΔG", idtResults.m1.self_dimer)}
+                                            {renderIdtCard("Hairpin ΔG", idtResults.m1.hairpin, primers.p1.seq)}
+                                            {renderIdtCard("Self-Dimer ΔG", idtResults.m1.self_dimer, primers.p1.seq)}
                                             <div className="text-[10px] text-slate-400 mt-1 italic">kcal/mol</div>
                                         </div>
                                         <div className="bg-indigo-50/30 dark:bg-indigo-900/20 p-3 rounded border border-indigo-100/50 dark:border-indigo-900/30">
                                             <div className="text-xs font-bold text-indigo-500 uppercase mb-1">Cross-Dimer Pairwise</div>
-                                            {renderIdtCard("Hetero-Dimer ΔG", idtResults.pairwise)}
+                                            {renderIdtCard("Hetero-Dimer ΔG", idtResults.pairwise, primers.p1.seq, primers.p2.seq)}
                                             <div className="text-[10px] text-slate-400 mt-1 italic">kcal/mol</div>
                                         </div>
                                     </div>

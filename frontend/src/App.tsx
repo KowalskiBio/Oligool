@@ -331,21 +331,6 @@ function App() {
                 <p className="text-[10px] text-slate-400 dark:text-slate-500">
                   Required for IDT OligoAnalyzer features. Obtain from <a href="https://www.idtdna.com/pages/scitools/plus-api" target="_blank" rel="noopener noreferrer" className="text-indigo-500 underline">IDT SciTools Plus API</a>.
                 </p>
-                <div className="flex items-center gap-3 mt-2">
-                  <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase w-24">
-                    Mg²⁺ (mM)
-                  </label>
-                  <input
-                    type="number"
-                    step="0.1"
-                    min="0"
-                    value={idtMgConc}
-                    onChange={(e) => { setIdtMgConc(e.target.value); localStorage.setItem('idt_mg_conc', e.target.value); }}
-                    placeholder="0"
-                    className="w-24 rounded-lg border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-xs p-2 border font-mono"
-                  />
-                  <span className="text-[10px] text-slate-400 dark:text-slate-500">Magnesium concentration for IDT Hairpin analysis</span>
-                </div>
               </div>
             </div>
           </div>
