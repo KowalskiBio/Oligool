@@ -26,6 +26,7 @@ function App() {
   const [idtClientSecret, setIdtClientSecret] = useState(() => localStorage.getItem('idt_client_secret') || '');
   const [idtUsername, setIdtUsername] = useState(() => localStorage.getItem('idt_username') || '');
   const [idtPassword, setIdtPassword] = useState(() => localStorage.getItem('idt_password') || '');
+  const [idtMgConc, setIdtMgConc] = useState(() => localStorage.getItem('idt_mg_conc') || '0');
   const [showSettings, setShowSettings] = useState(!localStorage.getItem('ncbi_api_key'));
   const [maxHitsPreset, setMaxHitsPreset] = useState(() => localStorage.getItem('max_hits_preset') || '50');
   const [customHits, setCustomHits] = useState(() => localStorage.getItem('custom_hits') || '');
@@ -59,6 +60,17 @@ function App() {
   useEffect(() => { localStorage.setItem('max_hits_preset', maxHitsPreset); }, [maxHitsPreset]);
   useEffect(() => { localStorage.setItem('custom_hits', customHits); }, [customHits]);
   useEffect(() => { localStorage.setItem('job_name', jobName); }, [jobName]);
+  useEffect(() => { localStorage.setItem('idt_mg_conc', idtMgConc); }, [idtMgConc]);
+
+  // Sync Mg²⁺ changes from QueryViewer's inline input back to App state
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const val = (e as CustomEvent).detail;
+      setIdtMgConc(val);
+    };
+    window.addEventListener('idt-mg-change', handler);
+    return () => window.removeEventListener('idt-mg-change', handler);
+  }, []);
 
   const maxHits = maxHitsPreset === 'custom'
     ? parseInt(customHits, 10) || 50
@@ -319,6 +331,21 @@ function App() {
                 <p className="text-[10px] text-slate-400 dark:text-slate-500">
                   Required for IDT OligoAnalyzer features. Obtain from <a href="https://www.idtdna.com/pages/scitools/plus-api" target="_blank" rel="noopener noreferrer" className="text-indigo-500 underline">IDT SciTools Plus API</a>.
                 </p>
+                <div className="flex items-center gap-3 mt-2">
+                  <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase w-24">
+                    Mg²⁺ (mM)
+                  </label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    min="0"
+                    value={idtMgConc}
+                    onChange={(e) => { setIdtMgConc(e.target.value); localStorage.setItem('idt_mg_conc', e.target.value); }}
+                    placeholder="0"
+                    className="w-24 rounded-lg border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-xs p-2 border font-mono"
+                  />
+                  <span className="text-[10px] text-slate-400 dark:text-slate-500">Magnesium concentration for IDT Hairpin analysis</span>
+                </div>
               </div>
             </div>
           </div>
@@ -603,7 +630,8 @@ function App() {
                     clientId: idtClientId,
                     clientSecret: idtClientSecret,
                     username: idtUsername,
-                    password: idtPassword
+                    password: idtPassword,
+                    mgConc: parseFloat(idtMgConc) || 0
                   }}
                 />
               )}

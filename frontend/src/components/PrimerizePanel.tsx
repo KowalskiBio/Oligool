@@ -10,10 +10,6 @@ export interface PrimerizeProps {
     onTagChange?: (val: string) => void;
     onFwdChange?: (val: string) => void;
     onRevChange?: (val: string) => void;
-    onCreatePrimersClick?: (fwdPcr: string, revPcr: string) => void;
-    isPrimerIdtLoading?: boolean;
-    primerIdtResults?: any;
-    primerIdtError?: string | null;
 }
 
 const C = {
@@ -30,8 +26,7 @@ export default function PrimerizePanel({
     templateSeq,
     moligo1Seq, moligo2Seq,
     tagSeq, fwdPrimer, revPrimer,
-    onTagChange, onFwdChange, onRevChange,
-    onCreatePrimersClick, isPrimerIdtLoading, primerIdtResults, primerIdtError
+    onTagChange, onFwdChange, onRevChange
 }: PrimerizeProps) {
 
     const [isSeqMode, setIsSeqMode] = useState(() => localStorage.getItem('primerize_seq_mode') === 'true');
@@ -85,9 +80,8 @@ export default function PrimerizePanel({
     const maxArmDx = Math.max(leftArmDx, rightArmDx);
     const tmplY = Math.max(50, maxArmDx + 20); // Tightened vertical space
     const stH = 12;
-    const gap = 6;
 
-    const VH = tmplY + stH * 2 + gap + 15; // Tightened bottom margin
+    const VH = tmplY + stH + 15; // Single template strand + margin
 
     // ── Polygon Math for Perfect Miter & Perpendicular Joints ──
     const hw = 7; // half-width (stroke thickness 14)
@@ -151,8 +145,8 @@ export default function PrimerizePanel({
         return s.split('').reverse().map(c => dict[c] || c).join('');
     };
 
-    const tmplTop = reverseComplement(moligo2Seq + moligo1Seq);
-    const tmplBot = (moligo2Seq + moligo1Seq);
+    // Template is the forward strand (oligos are now 5'→3' matching it)
+    const tmplFwd = moligo2Seq + moligo1Seq;
 
     const renderSeqChars = (seq: string, p0: { x: number, y: number }, p1: { x: number, y: number }, color: string) => {
         if (!seq || seq.length === 0) return null;
@@ -210,26 +204,16 @@ export default function PrimerizePanel({
                     style={{ display: 'block', fontFamily: 'inherit' }}
                     aria-label="Oligo primerize schematic">
 
-                    {/* ═══ TEMPLATE STRANDS (+ / −) ═══ */}
+                    {/* ═══ TEMPLATE STRAND (5' → 3') ═══ */}
                     <rect x={tmplX0} y={tmplY} width={tmplW} height={stH}
                         rx="3" fill={C.tmplFill} stroke={C.tmpl} strokeWidth="1.5"
                         opacity={isSeqMode ? 0.3 : 1} />
-                    <rect x={tmplX0} y={tmplY + stH + gap} width={tmplW} height={stH}
-                        rx="3" fill={C.tmplFill} stroke={C.tmpl} strokeWidth="1.5"
-                        opacity={isSeqMode ? 0.3 : 1} />
 
-                    {/* + / − labels */}
+                    {/* 5' / 3' labels */}
                     <text x={tmplX0 - 6} y={tmplY + stH / 2 + 3} textAnchor="end"
                         fontSize="9" fontWeight="bold" fill={C.tmpl}>5'</text>
                     <text x={tmplX1 + 6} y={tmplY + stH / 2 + 3} textAnchor="start"
                         fontSize="9" fontWeight="bold" fill={C.tmpl}>3'</text>
-
-                    <text x={tmplX0 - 6} y={tmplY + stH + gap + stH / 2 + 3} textAnchor="end"
-                        fontSize="9" fontWeight="bold" fill={C.tmpl}>3'</text>
-                    <text x={tmplX1 + 6} y={tmplY + stH + gap + stH / 2 + 3} textAnchor="start"
-                        fontSize="9" fontWeight="bold" fill={C.tmpl}>5'</text>
-
-                    {/* + / − labels */}
 
                     {/* ═══ Left Side: Rev BS + TAG + Oligo 2 ═══ */}
                     <g opacity={isSeqMode ? 0.15 : 0.85}>
@@ -247,9 +231,8 @@ export default function PrimerizePanel({
                     {/* ═══ Seq Mode Letters ═══ */}
                     {isSeqMode && (
                         <g>
-                            {/* Template Sequences */}
-                            {renderSeqChars(tmplTop, { x: tmplX0, y: tmplY + stH / 2 }, { x: tmplX1, y: tmplY + stH / 2 }, C.tmpl)}
-                            {renderSeqChars(tmplBot, { x: tmplX0, y: tmplY + stH + gap + stH / 2 }, { x: tmplX1, y: tmplY + stH + gap + stH / 2 }, C.tmpl)}
+                            {/* Template Sequence (5'→3') */}
+                            {renderSeqChars(tmplFwd, { x: tmplX0, y: tmplY + stH / 2 }, { x: tmplX1, y: tmplY + stH / 2 }, C.tmpl)}
 
                             {/* Probes/Primers */}
                             {renderSeqChars(revPrimer || "", L, S, C.revBs)}
@@ -373,17 +356,6 @@ export default function PrimerizePanel({
             <div className="mt-6 p-4 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl">
                 <div className="flex items-center justify-between mb-4">
                     <h3 className="text-sm font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">PCR Amplification Primers</h3>
-                    <button
-                        onClick={() => {
-                            if (fwdPrimer && revPrimer) {
-                                onCreatePrimersClick?.(reverseComplement(fwdPrimer), reverseComplement(revPrimer));
-                            }
-                        }}
-                        disabled={isPrimerIdtLoading || !fwdPrimer || !revPrimer}
-                        className="px-4 py-2 text-xs font-bold rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white shadow-md transition-colors disabled:opacity-50"
-                    >
-                        {isPrimerIdtLoading ? 'Analyzing...' : 'Analyze primers'}
-                    </button>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -407,51 +379,6 @@ export default function PrimerizePanel({
                         </div>
                     </div>
                 </div>
-
-                {primerIdtError && <div className="mt-4 text-xs text-red-500 bg-red-50 dark:bg-red-900/20 p-2 rounded border border-red-100 dark:border-red-900/30">Error: {primerIdtError}</div>}
-                {primerIdtResults && (
-                    <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-3">
-                        <div className="bg-white dark:bg-slate-900/40 p-3 rounded border border-slate-200 dark:border-slate-700 shadow-sm">
-                            <div className="text-xs font-bold text-slate-500 uppercase mb-1">Forward Primer</div>
-                            <div className="flex justify-between items-center text-sm">
-                                <span className="text-slate-500">Hairpin ΔG:</span>
-                                <span className={primerIdtResults.m1.hairpin?.DeltaG < -9 ? 'text-red-500 font-bold' : primerIdtResults.m1.hairpin?.DeltaG < -6 ? 'text-amber-500 font-bold' : 'text-emerald-500 font-bold'}>
-                                    {primerIdtResults.m1.hairpin?.DeltaG !== undefined ? primerIdtResults.m1.hairpin.DeltaG.toFixed(2) : 'N/A'}
-                                </span>
-                            </div>
-                            <div className="flex justify-between items-center text-sm mt-1">
-                                <span className="text-slate-500">Self-Dimer ΔG:</span>
-                                <span className={primerIdtResults.m1.self_dimer?.DeltaG < -9 ? 'text-red-500 font-bold' : primerIdtResults.m1.self_dimer?.DeltaG < -6 ? 'text-amber-500 font-bold' : 'text-emerald-500 font-bold'}>
-                                    {primerIdtResults.m1.self_dimer?.DeltaG !== undefined ? primerIdtResults.m1.self_dimer.DeltaG.toFixed(2) : 'N/A'}
-                                </span>
-                            </div>
-                        </div>
-                        <div className="bg-white dark:bg-slate-900/40 p-3 rounded border border-slate-200 dark:border-slate-700 shadow-sm">
-                            <div className="text-xs font-bold text-slate-500 uppercase mb-1">Reverse Primer</div>
-                            <div className="flex justify-between items-center text-sm">
-                                <span className="text-slate-500">Hairpin ΔG:</span>
-                                <span className={primerIdtResults.m2.hairpin?.DeltaG < -9 ? 'text-red-500 font-bold' : primerIdtResults.m2.hairpin?.DeltaG < -6 ? 'text-amber-500 font-bold' : 'text-emerald-500 font-bold'}>
-                                    {primerIdtResults.m2.hairpin?.DeltaG !== undefined ? primerIdtResults.m2.hairpin.DeltaG.toFixed(2) : 'N/A'}
-                                </span>
-                            </div>
-                            <div className="flex justify-between items-center text-sm mt-1">
-                                <span className="text-slate-500">Self-Dimer ΔG:</span>
-                                <span className={primerIdtResults.m2.self_dimer?.DeltaG < -9 ? 'text-red-500 font-bold' : primerIdtResults.m2.self_dimer?.DeltaG < -6 ? 'text-amber-500 font-bold' : 'text-emerald-500 font-bold'}>
-                                    {primerIdtResults.m2.self_dimer?.DeltaG !== undefined ? primerIdtResults.m2.self_dimer.DeltaG.toFixed(2) : 'N/A'}
-                                </span>
-                            </div>
-                        </div>
-                        <div className="bg-indigo-50/50 dark:bg-indigo-900/20 p-3 rounded border border-indigo-100 dark:border-indigo-900/30">
-                            <div className="text-xs font-bold text-indigo-500 uppercase mb-1">Cross-Dimer Pairwise</div>
-                            <div className="flex justify-between items-center text-sm">
-                                <span className="text-slate-500">Hetero-Dimer ΔG:</span>
-                                <span className={primerIdtResults.pairwise?.DeltaG < -9 ? 'text-red-500 font-bold' : primerIdtResults.pairwise?.DeltaG < -6 ? 'text-amber-500 font-bold' : 'text-emerald-500 font-bold'}>
-                                    {primerIdtResults.pairwise?.DeltaG !== undefined ? primerIdtResults.pairwise.DeltaG.toFixed(2) : 'N/A'}
-                                </span>
-                            </div>
-                        </div>
-                    </div>
-                )}
             </div>
 
         </div>

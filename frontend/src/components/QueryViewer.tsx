@@ -10,6 +10,7 @@ interface QueryViewerProps {
         clientSecret: string;
         username?: string;
         password?: string;
+        mgConc?: number;
     };
 }
 
@@ -44,15 +45,10 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, idtCredent
     const [idtResults, setIdtResults] = useState<IdtData | null>(null);
     const [idtError, setIdtError] = useState<string | null>(null);
 
-    // Primer IDT Analysis State
-    const [isPrimerIdtLoading, setIsPrimerIdtLoading] = useState(false);
-    const [primerIdtResults, setPrimerIdtResults] = useState<IdtData | null>(null);
-    const [primerIdtError, setPrimerIdtError] = useState<string | null>(null);
-
     // Controls - Shift Logic
     const [moligoShift, setMoligoShift] = useState(() => Number(localStorage.getItem('moligo_shift')) || 0);
-    const [moligo1Len, setMoligo1Len] = useState(() => Number(localStorage.getItem('moligo_1_len')) || 50);
-    const [moligo2Len, setMoligo2Len] = useState(() => Number(localStorage.getItem('moligo_2_len')) || 50);
+    const [moligo1Len, setMoligo1Len] = useState(() => Number(localStorage.getItem('moligo_1_len')) || 20);
+    const [moligo2Len, setMoligo2Len] = useState(() => Number(localStorage.getItem('moligo_2_len')) || 20);
 
     const [primers, setPrimers] = useState<OligizeResponse | null>(null);
     const [loading, setLoading] = useState(false);
@@ -91,8 +87,6 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, idtCredent
             // Keep lengths and shift persistent if the user wants them to stay
             setIdtResults(null);
             setIdtError(null);
-            setPrimerIdtResults(null);
-            setPrimerIdtError(null);
             onPrimersUpdate(null);
         }
     }, [data?.id, data?.seq]);
@@ -242,7 +236,8 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, idtCredent
                 body: JSON.stringify({
                     p1_seq: primers.p1.seq,
                     p2_seq: primers.p2.seq,
-                    token: access_token
+                    token: access_token,
+                    mg_conc: idtCredentials.mgConc ?? 0
                 })
             });
             if (!aRes.ok) throw new Error("IDT Analysis Failed");
@@ -255,48 +250,6 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, idtCredent
         }
     };
 
-    const runPrimerIdtAnalysis = async (fwd_seq: string, rev_seq: string) => {
-        if (!idtCredentials || !idtCredentials.clientId || !idtCredentials.clientSecret) {
-            setPrimerIdtError("No IDT credentials provided. Add them in settings.");
-            return;
-        }
-        setIsPrimerIdtLoading(true);
-        setPrimerIdtError(null);
-        try {
-            const tRes = await fetch(((import.meta.env.VITE_API_BASE as string) || "") + '/idt/token', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    client_id: idtCredentials.clientId,
-                    client_secret: idtCredentials.clientSecret,
-                    username: idtCredentials.username,
-                    password: idtCredentials.password
-                })
-            });
-            if (!tRes.ok) {
-                const errorData = await tRes.json();
-                throw new Error(errorData.detail || "IDT Auth Failed");
-            }
-            const { access_token } = await tRes.json();
-
-            const aRes = await fetch(((import.meta.env.VITE_API_BASE as string) || "") + '/idt/analyze', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    p1_seq: fwd_seq,
-                    p2_seq: rev_seq,
-                    token: access_token
-                })
-            });
-            if (!aRes.ok) throw new Error("IDT Analysis Failed");
-            const results = await aRes.json();
-            setPrimerIdtResults(results);
-        } catch (err: any) {
-            setPrimerIdtError(err.message);
-        } finally {
-            setIsPrimerIdtLoading(false);
-        }
-    };
 
     const getIdtStatusColor = (dg: number | undefined) => {
         if (dg === undefined) return 'text-slate-400';
@@ -522,21 +475,35 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, idtCredent
                                 onTagChange={setTagSeq}
                                 onFwdChange={setFwdPrimer}
                                 onRevChange={setRevPrimer}
-                                onCreatePrimersClick={runPrimerIdtAnalysis}
-                                isPrimerIdtLoading={isPrimerIdtLoading}
-                                primerIdtResults={primerIdtResults}
-                                primerIdtError={primerIdtError}
                             />
                         )}
 
                         {primers && idtCredentials && (
                             <div className="mt-4 border-t border-slate-100 dark:border-slate-700 pt-4">
-                                <div className="flex items-center justify-between mb-3">
+                                <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
                                     <h4 className="text-sm font-bold text-slate-400 uppercase tracking-widest">IDT OligoAnalyzer Results</h4>
-                                    {!idtResults && !isIdtLoading && (
-                                        <button onClick={runIdtAnalysis} className="text-xs font-bold bg-indigo-50 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-400 px-3 py-1.5 rounded hover:bg-indigo-100 transition-colors border border-indigo-200 dark:border-indigo-800">Run Full IDT Analysis</button>
-                                    )}
-                                    {isIdtLoading && <div className="animate-pulse text-xs text-indigo-500 font-medium">Analyzing with IDT API...</div>}
+                                    <div className="flex items-center gap-3">
+                                        <div className="flex items-center gap-1.5">
+                                            <label className="text-[10px] font-bold text-slate-400 uppercase">Mg²⁺ (mM)</label>
+                                            <input
+                                                type="number"
+                                                step="0.1"
+                                                min="0"
+                                                value={idtCredentials.mgConc ?? 0}
+                                                onChange={(e) => {
+                                                    const val = e.target.value;
+                                                    localStorage.setItem('idt_mg_conc', val);
+                                                    // Trigger re-render via the parent state
+                                                    window.dispatchEvent(new CustomEvent('idt-mg-change', { detail: val }));
+                                                }}
+                                                className="w-16 rounded border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 text-xs p-1 border font-mono text-center"
+                                            />
+                                        </div>
+                                        {!idtResults && !isIdtLoading && (
+                                            <button onClick={runIdtAnalysis} className="text-xs font-bold bg-indigo-50 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-400 px-3 py-1.5 rounded hover:bg-indigo-100 transition-colors border border-indigo-200 dark:border-indigo-800">Run Full IDT Analysis</button>
+                                        )}
+                                        {isIdtLoading && <div className="animate-pulse text-xs text-indigo-500 font-medium">Analyzing with IDT API...</div>}
+                                    </div>
                                 </div>
                                 {idtError && <div className="text-xs text-red-500 bg-red-50 dark:bg-red-900/20 p-2 rounded mb-3 border border-red-100 dark:border-red-900/30">Error: {idtError}</div>}
                                 {idtResults && (

@@ -164,8 +164,8 @@ class MoligizeRequest(BaseModel):
     sequence: str
     moligo1_shift: int = 0
     moligo2_shift: int = 0
-    moligo1_len: int = 50
-    moligo2_len: int = 50
+    moligo1_len: int = 20
+    moligo2_len: int = 20
     # Search params
     search_params: Optional[Dict] = None # {min_len: 18, max_len: 30, tm_min: 47, tm_max: 58, tm_diff: 1.5}
 
@@ -202,7 +202,7 @@ async def moligize_sequence(request: MoligizeRequest):
     # If the user hasn't manually adjusted lengths (they are at 50), and sequence is < 100
     l1 = request.moligo1_len
     l2 = request.moligo2_len
-    if l1 == 50 and l2 == 50 and len(window_seq) < 100:
+    if l1 == 20 and l2 == 20 and len(window_seq) < 40:
         l1 = l2 = len(window_seq) // 2
 
     def get_stats(s, start_idx, end_idx):
@@ -240,10 +240,7 @@ async def moligize_sequence(request: MoligizeRequest):
         m2_fwd = window_seq[m2_start:m2_end]
         m1_fwd = window_seq[m1_start:m1_end]
         
-        m2_rc = str(Seq(m2_fwd).reverse_complement())
-        m1_rc = str(Seq(m1_fwd).reverse_complement())
-        
-        return m1_rc, m2_rc, m1_start, m1_end, m2_start, m2_end
+        return m1_fwd, m2_fwd, m1_start, m1_end, m2_start, m2_end
 
     moligo1_final, moligo2_final, m1_start, m1_end, m2_start, m2_end = get_deterministic(request.moligo1_shift, request.moligo2_shift, l1, l2)
     params_not_met = False
@@ -260,27 +257,9 @@ async def moligize_sequence(request: MoligizeRequest):
         best_pair = None
         best_score = float('inf') # Lower is better (closest to center)
 
-        # If user has manually adjusted lengths away from 20, should search respect it?
-        # User requested + and - "for both search and search by params".
-        # If they are in search mode, "Search by params" panel defines min/max for the search itself.
-        # But the +/- buttons are "manual prolonging".
-        # Let's override min_l/max_l with exact request.moligo1_len/moligo2_len if they were manually touched?
-        # Or just search and then allow manual tweeks?
-        # User says: "When + clicked, it prolonges the oligo...".
-        # Let's make search respect the exact lengths if the user specifically requested them (not 20).
-        # Actually, it's probably easier to search first, then apply length adjustments as a post-process.
-        # BUT the user wants the tool to "search in the region provided by user for appropriate oligos".
-        # Let's keep search flexible but prioritize exact manual lengths if they are specified?
-        # No, let's keep it simple: search uses its own min/max. The +/- buttons in the UI will update the 'min_len' and 'max_len' of the search if in search mode? 
-        # No, user wants independent buttons.
-        
-        # We will search based on min/max_l ONLY if the lengths are exactly 50 (defaults).
-        # Actually, since the UI allows the user to +/- length AND shift, they expect the lengths to remain rigid while shifting.
-        # If the user touched the lengths, OR they clicked shift (which we want to preserve lengths for), 
-        # it is safest to just search for the exact lengths they currently have configured in the UI state!
-        # The frontend tracks and sends request.moligo1_len and request.moligo2_len reliably.
-        m1_search_range = [request.moligo1_len]
-        m2_search_range = [request.moligo2_len]
+        # Search across the full min_len to max_len range for both oligos
+        m1_search_range = list(range(min_l, max_l + 1))
+        m2_search_range = list(range(min_l, max_l + 1))
 
         subs_m1 = []
         subs_m2 = []
@@ -290,20 +269,18 @@ async def moligize_sequence(request: MoligizeRequest):
             for l in m2_search_range:
                 if i + l <= len(window_seq):
                     s = window_seq[i:i+l]
-                    rc = str(Seq(s).reverse_complement())
-                    tm = primer3.calc_tm(rc)
+                    tm = primer3.calc_tm(s)
                     if tm_min <= tm <= tm_max:
-                        subs_m2.append({'start': i, 'end': i + l, 'tm': tm, 'seq': rc, 'len': l})
+                        subs_m2.append({'start': i, 'end': i + l, 'tm': tm, 'seq': s, 'len': l})
 
         # Precompute for M1
         for i in range(len(window_seq)):
             for l in m1_search_range:
                 if i + l <= len(window_seq):
                     s = window_seq[i:i+l]
-                    rc = str(Seq(s).reverse_complement())
-                    tm = primer3.calc_tm(rc)
+                    tm = primer3.calc_tm(s)
                     if tm_min <= tm <= tm_max:
-                        subs_m1.append({'start': i, 'end': i + l, 'tm': tm, 'seq': rc, 'len': l})
+                        subs_m1.append({'start': i, 'end': i + l, 'tm': tm, 'seq': s, 'len': l})
         
         # The shifts are inputs, we want the split point (M2 end, M1 start) to shift accordingly
         target_split_m2 = split_idx_in_window + request.moligo2_shift
@@ -380,6 +357,7 @@ class IdtAnalyzeRequest(BaseModel):
     p1_seq: str
     p2_seq: str
     token: str
+    mg_conc: float = 0
 
 
 @app.post("/idt/token")
@@ -450,7 +428,7 @@ async def analyze_idt_oligos(request: IdtAnalyzeRequest):
                 "Sequence": seq1,
                 "NaConc": 50.0,
                 "FoldingTemp": 25.0,
-                "MgConc": 1.5,
+                "MgConc": request.mg_conc,
                 "NucleotideType": "DNA"
             }
         elif endpoint == "SelfDimer":
