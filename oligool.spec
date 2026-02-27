@@ -12,16 +12,17 @@ icon_path = os.path.join('frontend', 'public', f'rabbit_oligool.{icon_ext}')
 # Note: the build_mac.sh creates this .icns file before running pyinstaller
 
 datas_primer3, binaries_primer3, hiddenimports_primer3 = collect_all('primer3')
+datas_rna, binaries_rna, hiddenimports_rna = collect_all('RNA')
 
 a = Analysis(
     ['webview_app.py'],
     pathex=[os.path.abspath('.')],
-    binaries=[] + binaries_primer3,
+    binaries=[] + binaries_primer3 + binaries_rna,
     datas=[
         ('frontend/dist', 'frontend/dist'),
         ('.bin/mafft', '.bin/mafft')
-    ] + datas_primer3,
-    hiddenimports=['uvicorn', 'fastapi'] + hiddenimports_primer3,
+    ] + datas_primer3 + datas_rna,
+    hiddenimports=['uvicorn', 'fastapi'] + hiddenimports_primer3 + hiddenimports_rna,
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
