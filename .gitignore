@@ -35,6 +35,7 @@ mypip2/
 venv_pdf/
 localnpm/
 localnpm_cache/
+scripts/deploy.sh
 
 # Frontend
 frontend/dist/

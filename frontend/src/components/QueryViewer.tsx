@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import PrimerizePanel from './PrimerizePanel';
+import MOLigoPanel from './MOLigoPanel';
 import HairpinSVG from './HairpinSVG';
 
 interface QueryViewerProps {
@@ -35,6 +35,7 @@ interface OligizeResponse {
     p2: Primer;
     split_idx: number;
     params_not_met?: boolean;
+    param_warnings?: string[];
 }
 
 export default function QueryViewer({ data, jobName, onPrimersUpdate, idtCredentials }: QueryViewerProps) {
@@ -69,8 +70,8 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, idtCredent
     });
     const [paramsNotMet, setParamsNotMet] = useState(false);
 
-    // Primerize state
-    const [showPrimerize, setShowPrimerize] = useState(() => localStorage.getItem('show_primerize') === 'true');
+    // MOLigo state
+    const [showMOLigo, setShowMOLigo] = useState(() => localStorage.getItem('show_moligo_prov') === 'true');
     const [tagSeq, setTagSeq] = useState(() => localStorage.getItem('tag_seq') || 'taattgaattgaaagataagtgt');
     const [fwdPrimer, setFwdPrimer] = useState(() => localStorage.getItem('fwd_primer') || 'CGCGGTAGTAAGAAGTGAGA');
     const [revPrimer, setRevPrimer] = useState(() => localStorage.getItem('rev_primer') || 'ACTCGTAGGGAATAAACCGT');
@@ -187,7 +188,7 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, idtCredent
 
     useEffect(() => { localStorage.setItem('show_search_params', String(showParams)); }, [showParams]);
     useEffect(() => { localStorage.setItem('oligo_search_params', JSON.stringify(searchParams)); }, [searchParams]);
-    useEffect(() => { localStorage.setItem('show_primerize', String(showPrimerize)); }, [showPrimerize]);
+    useEffect(() => { localStorage.setItem('show_moligo_prov', String(showMOLigo)); }, [showMOLigo]);
     useEffect(() => { localStorage.setItem('tag_seq', tagSeq); }, [tagSeq]);
     useEffect(() => { localStorage.setItem('fwd_primer', fwdPrimer); }, [fwdPrimer]);
     useEffect(() => { localStorage.setItem('rev_primer', revPrimer); }, [revPrimer]);
@@ -418,13 +419,13 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, idtCredent
 
                     {primers && (
                         <button
-                            onClick={() => setShowPrimerize(!showPrimerize)}
-                            className={`ml-2 px-3 py-1 text-xs font-bold rounded-full border transition-all ${showPrimerize
-                                ? 'bg-rose-500 text-white border-rose-500 shadow-md ring-2 ring-rose-100 dark:ring-rose-900/40'
-                                : 'bg-white dark:bg-slate-700 text-rose-500 dark:text-rose-400 border-rose-200 dark:border-rose-800 hover:border-rose-400 hover:bg-rose-50 dark:hover:bg-rose-900/20'
+                            onClick={() => setShowMOLigo(!showMOLigo)}
+                            className={`ml-2 px-3 py-1 text-xs font-bold rounded-full border transition-all ${showMOLigo
+                                ? 'bg-teal-500 text-white border-teal-500 shadow-md ring-2 ring-teal-100 dark:ring-teal-900/40'
+                                : 'bg-white dark:bg-slate-700 text-teal-500 dark:text-teal-400 border-teal-200 dark:border-teal-800 hover:border-teal-400 hover:bg-teal-50 dark:hover:bg-teal-900/20'
                                 }`}
                         >
-                            🧬 Primerize!
+                            🔬 MOLigize!
                         </button>
                     )}
                 </div>
@@ -497,17 +498,22 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, idtCredent
                             </div>
                         )}
 
-                        {paramsNotMet && (
-                            <div className="mb-4 px-3 py-2 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/50 rounded-md text-amber-700 dark:text-amber-400 text-xs flex items-center gap-2">
-                                <span className="text-sm">⚠️</span>
-                                <b>Params too strict, no oligos found.</b> Showing default center-split oligos instead.
+                        {paramsNotMet && primers?.param_warnings && primers.param_warnings.length > 0 && (
+                            <div className="mb-4 px-3 py-2 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/50 rounded-md text-amber-700 dark:text-amber-400 text-xs flex flex-col gap-1">
+                                <div className="flex items-center gap-2 font-bold">
+                                    <span className="text-sm">⚠️</span>
+                                    Oligos outside search parameters:
+                                </div>
+                                <ul className="ml-5 list-disc text-[11px] space-y-0.5">
+                                    {primers.param_warnings.map((w, i) => <li key={i}>{w}</li>)}
+                                </ul>
                             </div>
                         )}
 
                         {error && <div className="text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 p-2 rounded mb-4 border border-red-100 dark:border-red-900/30">{error}</div>}
 
                         {primers ? (
-                            <div className={`grid grid-cols-1 md:grid-cols-2 gap-4 transition-opacity duration-200 ${loading ? 'opacity-60 pointer-events-none' : 'opacity-100'}`}>
+                            <div className={`grid grid-cols-1 md:grid-cols-2 gap-4 transition-opacity duration-200 ${loading ? 'opacity-60' : 'opacity-100'}`}>
                                 <div className="bg-white dark:bg-slate-800 rounded-lg border border-amber-200 dark:border-amber-900/30 p-3 shadow-sm relative group flex flex-col justify-between">
                                     <div>
                                         <div className="flex justify-between items-start mb-2">
@@ -574,9 +580,11 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, idtCredent
                             loading && <div className="flex items-center justify-center p-8"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600"></div></div>
                         )}
 
-                        {/* ── Primerize Panel ─────────────────────────────── */}
-                        {primers && showPrimerize && (
-                            <PrimerizePanel
+
+
+                        {/* ── MOLigo Provenance Panel ────────────────────── */}
+                        {primers && showMOLigo && (
+                            <MOLigoPanel
                                 templateSeq={rawSeq}
                                 moligo1Seq={primers.p1.seq}
                                 moligo2Seq={primers.p2.seq}
@@ -610,8 +618,10 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, idtCredent
                                                 className="w-16 rounded border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 text-xs p-1 border font-mono text-center"
                                             />
                                         </div>
-                                        {!idtResults && !isIdtLoading && (
-                                            <button onClick={runIdtAnalysis} className="text-xs font-bold bg-indigo-50 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-400 px-3 py-1.5 rounded hover:bg-indigo-100 transition-colors border border-indigo-200 dark:border-indigo-800">Run Full IDT Analysis</button>
+                                        {!isIdtLoading && (
+                                            <button onClick={() => { setIdtResults(null); setIdtError(null); setTimeout(runIdtAnalysis, 0); }} className={`text-xs font-bold px-3 py-1.5 rounded transition-colors border ${idtResults ? 'bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 border-amber-200 dark:border-amber-800 hover:bg-amber-100' : 'bg-indigo-50 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-400 border-indigo-200 dark:border-indigo-800 hover:bg-indigo-100'}`}>
+                                                {idtResults ? '↻ Re-run IDT Analysis' : 'Run Full IDT Analysis'}
+                                            </button>
                                         )}
                                         {isIdtLoading && <div className="animate-pulse text-xs text-indigo-500 font-medium">Analyzing with IDT API...</div>}
                                     </div>

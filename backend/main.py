@@ -251,93 +251,40 @@ async def moligize_sequence(request: MoligizeRequest):
 
     moligo1_final, moligo2_final, m1_start, m1_end, m2_start, m2_end = get_deterministic(request.moligo1_shift, request.moligo2_shift, l1, l2)
     params_not_met = False
+    param_warnings = []  # Per-oligo violation messages
 
-    # 3. Parameter-based Search
-    if request.search_params is not None:
+    # 3. Parameter Validation (always use deterministic result, just check compliance)
+    if request.search_params is not None and moligo1_final and moligo2_final:
         p: Dict = request.search_params
         min_l = int(p.get('min_len', 18))
-        max_l = int(p.get('max_len', 60)) # increased max for 50nt defaults
+        max_l = int(p.get('max_len', 60))
         tm_min = float(p.get('tm_min', 47.0))
         tm_max = float(p.get('tm_max', 58.0))
         tm_diff = float(p.get('tm_diff', 1.5))
-        
-        best_pair = None
-        best_score = float('inf') # Lower is better (closest to center)
 
-        # Search across the full min_len to max_len range for both oligos
-        m1_search_range = list(range(min_l, max_l + 1))
-        m2_search_range = list(range(min_l, max_l + 1))
+        tm1 = primer3.calc_tm(moligo1_final)
+        tm2 = primer3.calc_tm(moligo2_final)
+        len1_actual = len(moligo1_final)
+        len2_actual = len(moligo2_final)
 
-        subs_m1 = []
-        subs_m2 = []
-        
-        # Precompute for M2
-        for i in range(len(window_seq)):
-            for l in m2_search_range:
-                if i + l <= len(window_seq):
-                    s = window_seq[i:i+l]
-                    tm = primer3.calc_tm(s)
-                    if tm_min <= tm <= tm_max:
-                        subs_m2.append({'start': i, 'end': i + l, 'tm': tm, 'seq': s, 'len': l})
+        # Check Oligo 1
+        if len1_actual < min_l or len1_actual > max_l:
+            param_warnings.append(f"Oligo 1 length ({len1_actual}nt) outside range [{min_l}–{max_l}]")
+        if tm1 < tm_min or tm1 > tm_max:
+            param_warnings.append(f"Oligo 1 Tm ({tm1:.1f}°C) outside range [{tm_min:.1f}–{tm_max:.1f}]")
 
-        # Precompute for M1
-        for i in range(len(window_seq)):
-            for l in m1_search_range:
-                if i + l <= len(window_seq):
-                    s = window_seq[i:i+l]
-                    tm = primer3.calc_tm(s)
-                    if tm_min <= tm <= tm_max:
-                        subs_m1.append({'start': i, 'end': i + l, 'tm': tm, 'seq': s, 'len': l})
-        
-        # The shifts are inputs, we want the split point (M2 end, M1 start) to shift accordingly
-        target_split_m2 = split_idx_in_window + request.moligo2_shift
-        target_split_m1 = split_idx_in_window + request.moligo1_shift
+        # Check Oligo 2
+        if len2_actual < min_l or len2_actual > max_l:
+            param_warnings.append(f"Oligo 2 length ({len2_actual}nt) outside range [{min_l}–{max_l}]")
+        if tm2 < tm_min or tm2 > tm_max:
+            param_warnings.append(f"Oligo 2 Tm ({tm2:.1f}°C) outside range [{tm_min:.1f}–{tm_max:.1f}]")
 
-        for s2 in subs_m2: # Left
-            for s1 in subs_m1: # Right
-                # We strictly want them to be contiguous, meaning M2 ends exactly where M1 begins.
-                # Even if shifted, they shift together relative to the window.
-                if s1['start'] == s2['end']: 
-                     if abs(s1['tm'] - s2['tm']) <= tm_diff:
-                         dist_m2 = abs(s2['end'] - target_split_m2)
-                         dist_m1 = abs(s1['start'] - target_split_m1)
-                         score = dist_m2 + dist_m1
-                         if score < best_score:
-                             best_score = score
-                             best_pair = (s1, s2)
-        
-        if best_pair:
-            s1, s2 = best_pair
-            moligo1_final = s1['seq']
-            moligo2_final = s2['seq']
-            m1_start, m1_end = s1['start'], s1['end']
-            m2_start, m2_end = s2['start'], s2['end']
-        else:
+        # Check Tm difference
+        if abs(tm1 - tm2) > tm_diff:
+            param_warnings.append(f"Tm difference ({abs(tm1 - tm2):.1f}°C) exceeds max ({tm_diff:.1f}°C)")
+
+        if param_warnings:
             params_not_met = True
-
-    # FINAL STEP: Apply manual length fine-tuning if NOT in search mode (or even if in search mode?)
-    # If in search mode, the search already found the best lengths within min/max.
-    # If the user clicks + on a result, they want to extend it.
-    # Let's ALWAYS respect moligoX_len if they are different from what the logic found?
-    # This is tricky because search creates its own lengths.
-    # Let's make it so that if showParams is OFF, we use deterministic with the manual lengths.
-    # If showParams is ON, we search.
-    # How to combine?
-    # If the user clicks + in search mode, it should probably increment/decrement the search's min/max?
-    # Or just let them refine the static ones.
-    # User's request: "prolonges the oligo... Moligo 2... to left, moligo 1... to right".
-    # I'll implement it so that the frontend tracks the length and sends it.
-    # For search, I will adjust the found result by the requested length.
-    
-    if request.search_params is None:
-        # Re-run deterministic with specific shifts (Connectivity is inherently preserved in deterministic logic)
-        # But wait, deterministic logic above already uses request.moligoX_len.
-        pass
-    else:
-        # If search found something, but the user requested a specific length DIFFERENT from what search found...
-        # This gets messy. Let's make the search target exactly moligo1_len/moligo2_len if they were manually set?
-        # Let's stick to: Search uses min/max. Deterministic uses moligoX_len.
-        pass
 
     # Absolute indices
     abs_m2_start = start_w + m2_start
@@ -349,7 +296,8 @@ async def moligize_sequence(request: MoligizeRequest):
         "p1": get_stats(moligo1_final, abs_m1_start, abs_m1_end),
         "p2": get_stats(moligo2_final, abs_m2_start, abs_m2_end),
         "split_idx": absolute_split,
-        "params_not_met": params_not_met
+        "params_not_met": params_not_met,
+        "param_warnings": param_warnings
     }
 
 
