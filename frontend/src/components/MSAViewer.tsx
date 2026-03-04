@@ -43,6 +43,7 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
     const [copyFeedback, setCopyFeedback] = useState('');
     const [selectionRange, setSelectionRange] = useState<{ start: number; end: number } | null>(null);
     const [hoverCol, setHoverCol] = useState<number | null>(null);
+    const [showOverview, setShowOverview] = useState(true);
 
     /* ── parse FASTA ────────────────────────────────────── */
     const sequences = useMemo<ParsedSequence[]>(() => {
@@ -1039,6 +1040,23 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
                             <ClipboardIcon /> {startCol + 1}–{endCol + 1}
                         </button>
                     </div>
+                    <button
+                        onClick={() => setShowOverview((v) => !v)}
+                        className={`px-2 py-1 text-xs font-medium rounded-md border transition-colors flex items-center gap-1 ${showOverview
+                                ? 'border-indigo-300 dark:border-indigo-800 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/30'
+                                : 'border-slate-300 dark:border-slate-600 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'
+                            }`}
+                        title={showOverview ? 'Hide overview bar' : 'Show overview bar'}
+                    >
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
+                            {showOverview
+                                ? <path d="M10 12a2 2 0 100-4 2 2 0 000 4z" />
+                                : <path fillRule="evenodd" d="M3.707 2.293a1 1 0 00-1.414 1.414l14 14a1 1 0 001.414-1.414l-1.473-1.473A10.014 10.014 0 0019.542 10C18.268 5.943 14.478 3 10 3a9.958 9.958 0 00-4.512 1.074l-1.78-1.781zm4.261 4.26l1.514 1.515a2.003 2.003 0 012.45 2.45l1.514 1.514a4 4 0 00-5.478-5.478z" clipRule="evenodd" />
+                            }
+                            <path d="M10 18a8 8 0 100-16 8 8 0 000 16zM10 4a6 6 0 100 12 6 6 0 000-12z" opacity={showOverview ? 0 : 0.3} />
+                        </svg>
+                        {showOverview ? 'Hide overview' : 'Show overview'}
+                    </button>
                     {copyFeedback && (
                         <span className="text-xs text-emerald-600 dark:text-emerald-400 font-medium animate-pulse">{copyFeedback}</span>
                     )}
@@ -1097,15 +1115,17 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
             </div>
 
             {/* ── minimap navigator ── */}
-            <div className="border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900">
-                <canvas
-                    ref={minimapRef}
-                    style={{ display: 'block', cursor: 'crosshair' }}
-                    onMouseDown={handleMinimapMouseDown}
-                    onMouseMove={handleMinimapMouseMove}
-                    onMouseLeave={handleMinimapMouseLeave}
-                />
-            </div>
+            {showOverview && (
+                <div className="border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900">
+                    <canvas
+                        ref={minimapRef}
+                        style={{ display: 'block', cursor: 'crosshair' }}
+                        onMouseDown={handleMinimapMouseDown}
+                        onMouseMove={handleMinimapMouseMove}
+                        onMouseLeave={handleMinimapMouseLeave}
+                    />
+                </div>
+            )}
 
             {/* ── legend ── */}
             <div className="px-5 py-1.5 border-b border-slate-100 dark:border-slate-700 bg-white dark:bg-slate-800 flex items-center gap-4 text-xs text-slate-500 dark:text-slate-400">

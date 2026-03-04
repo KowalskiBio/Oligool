@@ -667,6 +667,7 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, idtCredent
                                     <div className="mt-3 flex items-center justify-between border-t border-slate-100 dark:border-slate-700 pt-2">
                                         <div className="flex gap-3 text-xs text-slate-500 dark:text-slate-400 items-center">
                                             <span>Len: <b className="text-slate-700 dark:text-slate-200">{primers.p2.len}</b></span>
+                                            <span>GC: <b className="text-slate-700 dark:text-slate-200">{primers.p2.gc != null ? primers.p2.gc.toFixed(1) : ((primers.p2.seq.match(/[GCgc]/g) || []).length / primers.p2.seq.length * 100).toFixed(1)}%</b></span>
                                             {idtResults?.m2?.analyze ? (
                                                 <span title="IDT Tm" className="bg-indigo-50 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 px-1.5 py-0.5 rounded border border-indigo-200 dark:border-indigo-800">
                                                     IDT Tm: <b className="font-bold">{extractTm(idtResults.m2.analyze)?.toFixed(1) || 'N/A'}°C</b>
@@ -698,6 +699,7 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, idtCredent
                                     <div className="mt-3 flex items-center justify-between border-t border-slate-100 dark:border-slate-700 pt-2">
                                         <div className="flex gap-3 text-xs text-slate-500 dark:text-slate-400 items-center">
                                             <span>Len: <b className="text-slate-700 dark:text-slate-200">{primers.p1.len}</b></span>
+                                            <span>GC: <b className="text-slate-700 dark:text-slate-200">{primers.p1.gc != null ? primers.p1.gc.toFixed(1) : ((primers.p1.seq.match(/[GCgc]/g) || []).length / primers.p1.seq.length * 100).toFixed(1)}%</b></span>
                                             {idtResults?.m1?.analyze ? (
                                                 <span title="IDT Tm" className="bg-indigo-50 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 px-1.5 py-0.5 rounded border border-indigo-200 dark:border-indigo-800">
                                                     IDT Tm: <b className="font-bold">{extractTm(idtResults.m1.analyze)?.toFixed(1) || 'N/A'}°C</b>
