@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import MOLigoPanel from './MOLigoPanel';
 import HairpinSVG from './HairpinSVG';
 
@@ -48,9 +48,15 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, idtCredent
     const [idtError, setIdtError] = useState<string | null>(null);
 
     // Controls - Shift Logic
-    const [moligoShift, setMoligoShift] = useState(() => Number(localStorage.getItem('moligo_shift')) || 0);
+    const [moligo1Shift, setMoligo1Shift] = useState(() => Number(localStorage.getItem('moligo1_shift')) || 0);
+    const [moligo2Shift, setMoligo2Shift] = useState(() => Number(localStorage.getItem('moligo2_shift')) || 0);
     const [moligo1Len, setMoligo1Len] = useState(() => Number(localStorage.getItem('moligo_1_len')) || 20);
     const [moligo2Len, setMoligo2Len] = useState(() => Number(localStorage.getItem('moligo_2_len')) || 20);
+
+    // Interactive Sequence Table Drag State
+    const [dragState, setDragState] = useState<{ id: 'p1' | 'p2', type: 'move' | 'left' | 'right', startX: number, deltaChars: number, initShift: number, initLen: number } | null>(null);
+    const containerRef = useRef<HTMLDivElement>(null);
+    const charWidthRef = useRef<number>(7); // Approximation of monospace char width in px
 
     const [primers, setPrimers] = useState<OligizeResponse | null>(null);
     const [loading, setLoading] = useState(false);
@@ -124,8 +130,8 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, idtCredent
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         sequence: raw,
-                        moligo1_shift: moligoShift,
-                        moligo2_shift: moligoShift,
+                        moligo1_shift: moligo1Shift,
+                        moligo2_shift: moligo2Shift,
                         moligo1_len: moligo1Len,
                         moligo2_len: moligo2Len,
                         search_params: showParams ? {
@@ -134,7 +140,7 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, idtCredent
                             tm_min: Number(searchParams.tm_min),
                             tm_max: Number(searchParams.tm_max),
                             tm_diff: Number(searchParams.tm_diff),
-                            moligoShift: moligoShift
+                            moligoShift: moligo2Shift // Backend uses this for fallback if not split, but we pass exact shifts above
                         } : null
                     })
                 });
@@ -178,10 +184,11 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, idtCredent
 
         const debounce = setTimeout(fetchPrimers, 200);
         return () => clearTimeout(debounce);
-    }, [data, showOligizer, moligoShift, showParams, searchParams, moligo1Len, moligo2Len]);
+    }, [data, showOligizer, moligo1Shift, moligo2Shift, showParams, searchParams, moligo1Len, moligo2Len]);
 
     // Persistence
-    useEffect(() => { localStorage.setItem('moligo_shift', String(moligoShift)); }, [moligoShift]);
+    useEffect(() => { localStorage.setItem('moligo1_shift', String(moligo1Shift)); }, [moligo1Shift]);
+    useEffect(() => { localStorage.setItem('moligo2_shift', String(moligo2Shift)); }, [moligo2Shift]);
     useEffect(() => { localStorage.setItem('moligo_1_len', String(moligo1Len)); }, [moligo1Len]);
     useEffect(() => { localStorage.setItem('moligo_2_len', String(moligo2Len)); }, [moligo2Len]);
     useEffect(() => { localStorage.setItem('show_oligizer', String(showOligizer)); }, [showOligizer]);
@@ -196,19 +203,165 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, idtCredent
     if (!data) return null;
     const rawSeq = data.seq.replace(/-/g, '');
 
+    const handleSeqMouseDown = (e: React.MouseEvent, id: 'p1' | 'p2', type: 'move' | 'left' | 'right') => {
+        e.preventDefault();
+        e.stopPropagation();
+
+        if (containerRef.current) {
+            const span = containerRef.current.querySelector('span');
+            if (span) {
+                charWidthRef.current = span.getBoundingClientRect().width;
+            }
+        }
+
+        setDragState({
+            id, type, startX: e.clientX, deltaChars: 0,
+            initShift: id === 'p1' ? moligo1Shift : moligo2Shift,
+            initLen: id === 'p1' ? moligo1Len : moligo2Len
+        });
+    };
+
+    useEffect(() => {
+        const handleMouseMove = (e: MouseEvent) => {
+            if (!dragState) return;
+            const deltaX = e.clientX - dragState.startX;
+            const deltaChars = Math.round(deltaX / charWidthRef.current);
+            setDragState(prev => prev ? { ...prev, deltaChars } : null);
+        };
+
+        const handleMouseUp = () => {
+            if (dragState) {
+                const D = dragState.deltaChars;
+                if (D !== 0) {
+                    let newShift = dragState.initShift;
+                    let newLen = dragState.initLen;
+                    const id = dragState.id;
+                    const type = dragState.type;
+
+                    if (id === 'p1') {
+                        // Backend M1 starts at split + shift.
+                        if (type === 'move') { newShift += D; }
+                        else if (type === 'left') { newShift += D; newLen -= D; }
+                        else if (type === 'right') { newLen += D; }
+
+                        if (newLen < 10) { const diff = 10 - newLen; newLen = 10; if (type === 'left') newShift -= diff; }
+                        if (newLen > 60) { const diff = newLen - 60; newLen = 60; if (type === 'left') newShift += diff; }
+
+                        setMoligo1Shift(newShift);
+                        setMoligo1Len(newLen);
+                    } else {
+                        // Backend M2 ends at split + shift.
+                        if (type === 'move') { newShift += D; }
+                        else if (type === 'left') { newLen -= D; }
+                        else if (type === 'right') { newShift += D; newLen += D; }
+
+                        if (newLen < 10) { const diff = 10 - newLen; newLen = 10; if (type === 'right') newShift -= diff; }
+                        if (newLen > 60) { const diff = newLen - 60; newLen = 60; if (type === 'right') newShift += diff; }
+
+                        setMoligo2Shift(newShift);
+                        setMoligo2Len(newLen);
+                    }
+                }
+            }
+            setDragState(null);
+        };
+
+        if (dragState) {
+            window.addEventListener('mousemove', handleMouseMove);
+            window.addEventListener('mouseup', handleMouseUp);
+            return () => {
+                window.removeEventListener('mousemove', handleMouseMove);
+                window.removeEventListener('mouseup', handleMouseUp);
+            };
+        }
+    }, [dragState]);
+
     const renderSequence = () => {
         if (!primers) return rawSeq;
-        const chars = rawSeq.split('');
-        return chars.map((char, i) => {
-            let className = '';
-            if (i >= primers.p1.start && i < primers.p1.end) {
-                className = 'bg-green-200 dark:bg-green-900/40 text-green-900 dark:text-green-300 font-bold';
+
+        let p1Start = primers.p1.start;
+        let p1End = primers.p1.end;
+        let p2Start = primers.p2.start;
+        let p2End = primers.p2.end;
+
+        if (dragState) {
+            const D = dragState.deltaChars;
+            if (dragState.id === 'p1') {
+                if (dragState.type === 'move') { p1Start += D; p1End += D; }
+                else if (dragState.type === 'left') { p1Start += D; }
+                else if (dragState.type === 'right') { p1End += D; }
+
+                if (p1End - p1Start < 10) {
+                    if (dragState.type === 'left') p1Start = p1End - 10;
+                    else p1End = p1Start + 10;
+                }
+                if (p1End - p1Start > 60) {
+                    if (dragState.type === 'left') p1Start = p1End - 60;
+                    else p1End = p1Start + 60;
+                }
+            } else {
+                if (dragState.type === 'move') { p2Start += D; p2End += D; }
+                else if (dragState.type === 'left') { p2Start += D; }
+                else if (dragState.type === 'right') { p2End += D; }
+
+                if (p2End - p2Start < 10) {
+                    if (dragState.type === 'left') p2Start = p2End - 10;
+                    else p2End = p2Start + 10;
+                }
+                if (p2End - p2Start > 60) {
+                    if (dragState.type === 'left') p2Start = p2End - 60;
+                    else p2End = p2Start + 60;
+                }
             }
-            else if (i >= primers.p2.start && i < primers.p2.end) {
-                className = 'bg-amber-200 dark:bg-amber-900/40 text-amber-900 dark:text-amber-300 font-bold';
-            }
-            return <span key={i} className={className}>{char}</span>;
-        });
+        }
+
+        // Find the bounding box of both oligos + 50bp padding
+        const minStart = Math.min(p1Start, p2Start);
+        const maxEnd = Math.max(p1End, p2End);
+
+        let viewStart = Math.max(0, minStart - 50);
+        let viewEnd = Math.min(rawSeq.length, maxEnd + 50);
+
+        const chars = rawSeq.substring(viewStart, viewEnd).split('');
+
+        return (
+            <div ref={containerRef} className="break-all whitespace-pre-wrap select-none relative" style={{ cursor: dragState ? 'grabbing' : 'auto' }}>
+                {chars.map((char, indexWithinSlice) => {
+                    const i = viewStart + indexWithinSlice; // The absolute index in rawSeq
+                    let className = '';
+                    let handlers = {};
+
+                    const isP1 = i >= p1Start && i < p1End;
+                    const isP2 = i >= p2Start && i < p2End;
+                    const isP1Start = i === p1Start;
+                    const isP1End = i === p1End - 1;
+                    const isP2Start = i === p2Start;
+                    const isP2End = i === p2End - 1;
+
+                    if (isP1) {
+                        className = `bg-green-200 dark:bg-green-900/40 text-green-900 dark:text-green-300 font-bold hover:bg-green-300 dark:hover:bg-green-800/60 ${isP1Start || isP1End ? 'cursor-ew-resize' : 'cursor-grab active:cursor-grabbing'}`;
+                        if (isP1Start) {
+                            handlers = { onMouseDown: (e: React.MouseEvent) => handleSeqMouseDown(e, 'p1', 'left') };
+                        } else if (isP1End) {
+                            handlers = { onMouseDown: (e: React.MouseEvent) => handleSeqMouseDown(e, 'p1', 'right') };
+                        } else {
+                            handlers = { onMouseDown: (e: React.MouseEvent) => handleSeqMouseDown(e, 'p1', 'move') };
+                        }
+                    }
+                    else if (isP2) {
+                        className = `bg-amber-200 dark:bg-amber-900/40 text-amber-900 dark:text-amber-300 font-bold hover:bg-amber-300 dark:hover:bg-amber-800/60 ${isP2Start || isP2End ? 'cursor-ew-resize' : 'cursor-grab active:cursor-grabbing'}`;
+                        if (isP2Start) {
+                            handlers = { onMouseDown: (e: React.MouseEvent) => handleSeqMouseDown(e, 'p2', 'left') };
+                        } else if (isP2End) {
+                            handlers = { onMouseDown: (e: React.MouseEvent) => handleSeqMouseDown(e, 'p2', 'right') };
+                        } else {
+                            handlers = { onMouseDown: (e: React.MouseEvent) => handleSeqMouseDown(e, 'p2', 'move') };
+                        }
+                    }
+                    return <span key={i} className={className + " transition-colors duration-75"} {...handlers}>{char}</span>;
+                })}
+            </div>
+        );
     };
 
     const runIdtAnalysis = async () => {
@@ -389,23 +542,7 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, idtCredent
                         ⚡ Oligize!
                     </button>
 
-                    {showOligizer && (
-                        <div className="flex items-center gap-1 ml-4 bg-white dark:bg-slate-700 border border-purple-200 dark:border-purple-800 rounded-lg px-2 py-0.5 shadow-sm">
-                            <span className="text-[10px] uppercase text-slate-400 font-bold mr-1">Shift Both</span>
-                            <button
-                                onClick={() => setMoligoShift(prev => prev - 1)}
-                                className={`w-7 h-7 flex items-center justify-center bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-900 rounded text-slate-600 dark:text-slate-400 font-bold text-sm transition-colors ${loading ? 'opacity-50 cursor-not-allowed' : ''}`}
-                                title="Move All Left"
-                                disabled={loading}
-                            >&lt;</button>
-                            <button
-                                onClick={() => setMoligoShift(prev => prev + 1)}
-                                className={`w-7 h-7 flex items-center justify-center bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-900 rounded text-slate-600 dark:text-slate-400 font-bold text-sm transition-colors ${loading ? 'opacity-50 cursor-not-allowed' : ''}`}
-                                title="Move All Right"
-                                disabled={loading}
-                            >&gt;</button>
-                        </div>
-                    )}
+                    {/* Previous bulk shift buttons removed in favor of InteractiveSequenceMap */}
 
                     <button
                         onClick={() => setShowParams(!showParams)}
@@ -580,22 +717,22 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, idtCredent
                             loading && <div className="flex items-center justify-center p-8"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600"></div></div>
                         )}
 
+                        <div className="mt-4 p-5 bg-slate-50/50 dark:bg-slate-900/50 rounded-lg border border-slate-200 dark:border-slate-700">
+                            <div
+                                ref={containerRef}
+                                className="font-mono text-xs text-slate-600 dark:text-slate-400 leading-relaxed max-h-60 overflow-y-auto p-4 bg-white dark:bg-slate-800 rounded-lg shadow-inner"
+                            >
+                                {showOligizer ? renderSequence() : rawSeq}
+                            </div>
+                            {primers && showOligizer && (
+                                <div className="text-[10px] text-slate-400 text-center mt-2 font-medium flex justify-center gap-4">
+                                    <span><span className="inline-block w-2 h-2 bg-amber-400 rounded-sm mr-1"></span><span className="inline-block w-2 h-2 bg-green-400 rounded-sm mr-1"></span> Drag center string to shift</span>
+                                    <span> Drag edges to resize</span>
+                                </div>
+                            )}
+                        </div>
 
-
-                        {/* ── MOLigo Provenance Panel ────────────────────── */}
-                        {primers && showMOLigo && (
-                            <MOLigoPanel
-                                templateSeq={rawSeq}
-                                moligo1Seq={primers.p1.seq}
-                                moligo2Seq={primers.p2.seq}
-                                tagSeq={tagSeq}
-                                fwdPrimer={fwdPrimer}
-                                revPrimer={revPrimer}
-                                onTagChange={setTagSeq}
-                                onFwdChange={setFwdPrimer}
-                                onRevChange={setRevPrimer}
-                            />
-                        )}
+                        {/* MOLigo Provenance Panel was moved to the very bottom */}
 
                         {primers && idtCredentials && (
                             <div className="mt-4 border-t border-slate-100 dark:border-slate-700 pt-4">
@@ -653,11 +790,22 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, idtCredent
                     </div>
                 )}
 
-                <div className="p-5 bg-slate-50/50 dark:bg-slate-900/50">
-                    <div className="font-mono text-xs text-slate-600 dark:text-slate-400 break-all leading-relaxed max-h-60 overflow-y-auto p-4 bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 shadow-inner">
-                        {showOligizer ? renderSequence() : rawSeq}
+                {/* ── MOLigo Provenance Panel ────────────────────── */}
+                {primers && showMOLigo && (
+                    <div className="border-t border-slate-200 dark:border-slate-700">
+                        <MOLigoPanel
+                            templateSeq={rawSeq}
+                            moligo1Seq={primers.p1.seq}
+                            moligo2Seq={primers.p2.seq}
+                            tagSeq={tagSeq}
+                            fwdPrimer={fwdPrimer}
+                            revPrimer={revPrimer}
+                            onTagChange={setTagSeq}
+                            onFwdChange={setFwdPrimer}
+                            onRevChange={setRevPrimer}
+                        />
                     </div>
-                </div>
+                )}
             </div>
         </div >
     );

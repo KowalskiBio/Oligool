@@ -42,6 +42,7 @@ function App() {
 
   const [jobName, setJobName] = useState(() => localStorage.getItem('job_name') || 'Query');
   const [selectedPrimers, setSelectedPrimers] = useState<{ p1: { start: number, end: number }, p2: { start: number, end: number } } | null>(null);
+  const [showSecrets, setShowSecrets] = useState(false);
 
   useEffect(() => {
     if (isDarkMode) {
@@ -259,15 +260,34 @@ function App() {
 
         {/* NCBI API Key Settings */}
         {showSettings && (
-          <div className="mb-6 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-sm p-4 animate-in fade-in slide-in-from-top-2 duration-300">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="mb-6 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-sm animate-in fade-in slide-in-from-top-2 duration-300">
+            <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center bg-slate-50/50 dark:bg-slate-900/50 rounded-t-xl">
+              <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300">API Credentials</h3>
+              <label className="flex items-center gap-2 cursor-pointer group">
+                <div className="relative">
+                  <input
+                    type="checkbox"
+                    className="sr-only"
+                    checked={showSecrets}
+                    onChange={(e) => setShowSecrets(e.target.checked)}
+                    aria-label="Show Secrets"
+                  />
+                  <div className={`block w-8 h-4 rounded-full transition-colors ${showSecrets ? 'bg-indigo-500' : 'bg-slate-300 dark:bg-slate-600'}`}></div>
+                  <div className={`absolute left-0.5 top-0.5 bg-white w-3 h-3 rounded-full transition-transform ${showSecrets ? 'translate-x-4' : ''}`}></div>
+                </div>
+                <span className="text-xs font-medium text-slate-500 dark:text-slate-400 group-hover:text-slate-700 dark:group-hover:text-slate-300 transition-colors">
+                  Show Passwords
+                </span>
+              </label>
+            </div>
+            <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-3">
                 <div className="flex items-center gap-3">
                   <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase w-24">
                     NCBI Key
                   </label>
                   <input
-                    type="password"
+                    type={showSecrets ? "text" : "password"}
                     value={apiKey}
                     onChange={(e) => handleApiKeyChange(e.target.value)}
                     placeholder="NCBI API key"
@@ -285,7 +305,7 @@ function App() {
                     IDT Client ID
                   </label>
                   <input
-                    type="password"
+                    type={showSecrets ? "text" : "password"}
                     value={idtClientId}
                     onChange={(e) => handleIdtIdChange(e.target.value)}
                     placeholder="OligoAnalyzer Client ID"
@@ -297,7 +317,7 @@ function App() {
                     IDT Secret
                   </label>
                   <input
-                    type="password"
+                    type={showSecrets ? "text" : "password"}
                     value={idtClientSecret}
                     onChange={(e) => handleIdtSecretChange(e.target.value)}
                     placeholder="OligoAnalyzer Client Secret"
@@ -321,7 +341,7 @@ function App() {
                     IDT Pass
                   </label>
                   <input
-                    type="password"
+                    type={showSecrets ? "text" : "password"}
                     value={idtPassword}
                     onChange={(e) => handleIdtPasswordChange(e.target.value)}
                     placeholder="IDT Account Password"
