@@ -444,40 +444,64 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, idtCredent
     const renderIdtCard = (title: string, data: any, seq1?: string, seq2?: string) => {
         if (!data || data.error) return <div className="text-sm text-red-400">{data?.error || 'N/A'}</div>;
 
-        // Extract DG and Visual from the structure { DeltaG, raw }
+        // Extract DG and Visual from the structure { DeltaG, all_DeltaG, raw }
         let dg = data.DeltaG;
         let raw = data.raw;
-        let asciiStructure: string | undefined = undefined;
-        let hairpinDotBracket: string | undefined = undefined;
-        let hairpinSeq: string | undefined = undefined;
+        let viennaDg = undefined as number | undefined;
 
-        if (raw) {
-            asciiStructure = raw.AsciiStructure || raw.VisualPrint || raw.asciiStructure || raw.visualPrint || raw.Ascii || raw.ascii;
-        } else if (data.AsciiStructure || data.VisualPrint) {
-            asciiStructure = data.AsciiStructure || data.VisualPrint;
-        }
+        // Render individual items (hairpins, dimers, etc.)
+        const renderItem = (item: any, seq: string | undefined, idx: number, itemDg?: number) => {
+            let asciiStructure: string | undefined = undefined;
+            let hairpinDotBracket: string | undefined = undefined;
+            let hairpinSeq: string | undefined = undefined;
 
-        // Handle case where data is an array
+            if (item) {
+                asciiStructure = item.AsciiStructure || item.VisualPrint || item.asciiStructure || item.visualPrint || item.Ascii || item.ascii;
+
+                if (!asciiStructure && item.Bonds && seq) {
+                    asciiStructure = buildDimerAscii(item, seq, seq2);
+                } else if (!asciiStructure && item.DotBracket && seq) {
+                    hairpinDotBracket = item.DotBracket;
+                    hairpinSeq = seq;
+                }
+
+                if (item.ViennaRNA_DeltaG !== undefined) {
+                    viennaDg = item.ViennaRNA_DeltaG;
+                }
+            }
+
+            return (
+                <div key={idx}>
+                    {itemDg !== undefined && itemDg !== null && (
+                        <div className="text-[10px] text-slate-400 mb-0.5">
+                            Hairpin {idx + 1}: <span className={getIdtStatusColor(itemDg)}>{itemDg.toFixed(2)} kcal/mol</span>
+                        </div>
+                    )}
+                    {hairpinDotBracket && hairpinSeq && (
+                        <div className="mt-1 w-full overflow-x-auto bg-slate-100 dark:bg-slate-800 rounded p-2">
+                            <HairpinSVG seq={hairpinSeq} dotBracket={hairpinDotBracket} />
+                        </div>
+                    )}
+                    {asciiStructure && !hairpinDotBracket && (
+                        <div className="mt-1 w-full overflow-x-auto overflow-y-auto max-h-32 bg-slate-100 dark:bg-slate-800 rounded p-2 text-[10px] sm:text-xs">
+                            <pre className="font-mono text-slate-700 dark:text-slate-300 whitespace-pre leading-[1.15] tracking-tighter">
+                                {asciiStructure}
+                            </pre>
+                        </div>
+                    )}
+                </div>
+            );
+        };
+
+        // Check if raw is an array of multiple items
+        const items: React.ReactNode[] = [];
         if (Array.isArray(raw) && raw.length > 0) {
-            const first = raw[0];
-            asciiStructure = first.AsciiStructure || first.VisualPrint || first.asciiStructure || first.visualPrint;
-
-            // If still no ASCII but we have Dimer Bonds
-            if (!asciiStructure && first.Bonds && seq1) {
-                asciiStructure = buildDimerAscii(first, seq1, seq2);
-            } else if (!asciiStructure && first.DotBracket && seq1) {
-                // Use SVG hairpin instead of ASCII
-                hairpinDotBracket = first.DotBracket;
-                hairpinSeq = seq1;
-            }
-        } else if (raw && raw.Bonds && seq1) {
-            // If it's a single dict and has Bonds
-            if (!asciiStructure) asciiStructure = buildDimerAscii(raw, seq1, seq2);
-        } else if (raw && raw.DotBracket && seq1) {
-            if (!asciiStructure) {
-                hairpinDotBracket = raw.DotBracket;
-                hairpinSeq = seq1;
-            }
+            const allDgs = data.all_DeltaG || [];
+            raw.forEach((item: any, idx: number) => {
+                items.push(renderItem(item, seq1, idx, allDgs[idx]));
+            });
+        } else if (raw) {
+            items.push(renderItem(raw, seq1, 0));
         }
 
         return (
@@ -486,18 +510,12 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, idtCredent
                     <span className="text-slate-500">{title}:</span>
                     <span className={getIdtStatusColor(dg)}>{dg !== undefined && dg !== null ? `${dg.toFixed(2)}` : 'N/A'}</span>
                 </div>
-                {hairpinDotBracket && hairpinSeq && (
-                    <div className="mt-1 w-full overflow-x-auto bg-slate-100 dark:bg-slate-800 rounded p-2">
-                        <HairpinSVG seq={hairpinSeq} dotBracket={hairpinDotBracket} />
+                {viennaDg !== undefined && (
+                    <div className="text-[10px] text-slate-400">
+                        ViennaRNA ΔG: <span className="text-slate-300">{viennaDg.toFixed(2)} kcal/mol</span>
                     </div>
                 )}
-                {asciiStructure && !hairpinDotBracket && (
-                    <div className="mt-1 w-full overflow-x-auto bg-slate-100 dark:bg-slate-800 rounded p-2 text-[10px] sm:text-xs">
-                        <pre className="font-mono text-slate-700 dark:text-slate-300 whitespace-pre leading-[1.15] tracking-tighter">
-                            {asciiStructure}
-                        </pre>
-                    </div>
-                )}
+                {items}
             </div>
         );
     };

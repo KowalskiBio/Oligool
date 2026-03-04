@@ -184,6 +184,16 @@ async def moligize_sequence(request: MoligizeRequest):
     except ImportError:
         raise HTTPException(status_code=500, detail="primer3-py or biopython is not installed.")
 
+    # Primer3 Tm calculation parameters (SantaLucia NN model)
+    TM_PARAMS = {
+        'mv_conc': 50.0,       # 50 mM Na+ (monovalent)
+        'dv_conc': 10.0,       # 10 mM Mg2+ (divalent)
+        'dntp_conc': 0.0,      # 0 mM dNTPs
+        'dna_conc': 250.0,     # 0.25 µM oligo concentration (primer3 expects nM: 0.25 µM = 250 nM, matches IDT OligoConc)
+        'tm_method': 'santalucia',      # SantaLucia NN (1)
+        'salt_corrections_method': 'santalucia',  # SantaLucia salt corrections (1)
+    }
+
     seq = request.sequence.upper().replace(" ", "").replace("\n", "").replace("-", "")
     if not seq:
         raise HTTPException(status_code=400, detail="Sequence is empty.")
@@ -217,7 +227,7 @@ async def moligize_sequence(request: MoligizeRequest):
         return {
             "seq": s,
             "len": len(s),
-            "tm": round(primer3.calc_tm(s), 1),
+            "tm": round(primer3.calc_tm(s, **TM_PARAMS), 1),
             "gc": round((s.count("G") + s.count("C")) / len(s) * 100, 1),
             "start": start_idx,
             "end": end_idx
@@ -279,7 +289,7 @@ async def moligize_sequence(request: MoligizeRequest):
             for start in range(0, len(window_seq) - length + 1):
                 end = start + length
                 s = window_seq[start:end]
-                tm = primer3.calc_tm(s)
+                tm = primer3.calc_tm(s, **TM_PARAMS)
                 if tm_min <= tm <= tm_max:
                     # This candidate could be a left oligo (keyed by its end)
                     left_by_end.setdefault(end, []).append((s, start, end, tm, length))
@@ -329,8 +339,8 @@ async def moligize_sequence(request: MoligizeRequest):
             )
             # Validate and generate warnings
             if moligo1_final and moligo2_final:
-                tm1 = primer3.calc_tm(moligo1_final)
-                tm2 = primer3.calc_tm(moligo2_final)
+                tm1 = primer3.calc_tm(moligo1_final, **TM_PARAMS)
+                tm2 = primer3.calc_tm(moligo2_final, **TM_PARAMS)
                 len1_actual = len(moligo1_final)
                 len2_actual = len(moligo2_final)
 
@@ -492,7 +502,7 @@ async def analyze_idt_oligos(request: IdtAnalyzeRequest):
     m2_analyze = hit_idt("Analyze", request.p2_seq)
     hetero = hit_idt("HeteroDimer", request.p1_seq, request.p2_seq)
 
-    # Use ViennaRNA to add dot-bracket structure to hairpins since IDT does not provide visual coordinates
+    # Use ViennaRNA to add dot-bracket structure AND ΔG to hairpins
     try:
         import RNA
         def add_dot_bracket(seq, hp_data):
@@ -504,6 +514,7 @@ async def analyze_idt_oligos(request: IdtAnalyzeRequest):
                 fc = RNA.fold_compound(seq, md)
                 structure, mfe = fc.mfe()
                 hp_data[0]["DotBracket"] = structure
+                hp_data[0]["ViennaRNA_DeltaG"] = round(mfe, 2)
             return hp_data
             
         m1_hairpin = add_dot_bracket(request.p1_seq, m1_hairpin)
@@ -528,24 +539,26 @@ async def analyze_idt_oligos(request: IdtAnalyzeRequest):
     # regardless of exact response format variations. We also return the raw data
     # for rendering visualizations on the frontend.
     def find_dg_and_raw(data):
-        """Extract DeltaG and return raw data from a single-endpoint response."""
+        """Extract DeltaG and return raw data from a single-endpoint response.
+        For arrays (multiple hairpins), return ALL items with their individual ΔG values."""
         if not data or isinstance(data, str):
             return {"DeltaG": None, "raw": None}
         if isinstance(data, dict) and "error" in data:
             return data
         
-        # If response is an array (multiple structures found), pick lowest DeltaG
+        # If response is an array (multiple structures found), return ALL with best DeltaG as summary
         if isinstance(data, list):
             if len(data) == 0:
                 return {"DeltaG": None, "raw": data}
             best_dg = None
-            best_item = None
+            all_dgs = []
             for item in data:
                 dg = _extract_delta_g(item)
+                all_dgs.append(dg)
                 if dg is not None and (best_dg is None or dg < best_dg):
                     best_dg = dg
-                    best_item = item
-            return {"DeltaG": best_dg, "raw": best_item if best_item else data}
+            # Return all hairpins in raw (not just best), plus best DeltaG as summary
+            return {"DeltaG": best_dg, "all_DeltaG": all_dgs, "raw": data}
         
         # If response is a dict, DeltaG should be at top level
         if isinstance(data, dict):
