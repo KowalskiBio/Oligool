@@ -249,42 +249,110 @@ async def moligize_sequence(request: MoligizeRequest):
         
         return m1_fwd, m2_fwd, m1_start, m1_end, m2_start, m2_end
 
-    moligo1_final, moligo2_final, m1_start, m1_end, m2_start, m2_end = get_deterministic(request.moligo1_shift, request.moligo2_shift, l1, l2)
     params_not_met = False
-    param_warnings = []  # Per-oligo violation messages
+    param_warnings = []
 
-    # 3. Parameter Validation (always use deterministic result, just check compliance)
-    if request.search_params is not None and moligo1_final and moligo2_final:
+    # ── Tm-priority search when search_params is provided ──
+    if request.search_params is not None:
         p: Dict = request.search_params
-        min_l = int(p.get('min_len', 18))
-        max_l = int(p.get('max_len', 60))
-        tm_min = float(p.get('tm_min', 47.0))
-        tm_max = float(p.get('tm_max', 58.0))
+        min_l = int(p.get('min_len', 15))
+        max_l = int(p.get('max_len', 35))
+        tm_min = float(p.get('tm_min', 58.0))
+        tm_max = float(p.get('tm_max', 63.0))
         tm_diff = float(p.get('tm_diff', 1.5))
+        preferred_len = (l1 + l2) / 2  # user's preferred length (default 20)
 
-        tm1 = primer3.calc_tm(moligo1_final)
-        tm2 = primer3.calc_tm(moligo2_final)
-        len1_actual = len(moligo1_final)
-        len2_actual = len(moligo2_final)
+        split_pt = split_idx_in_window
 
-        # Check Oligo 1
-        if len1_actual < min_l or len1_actual > max_l:
-            param_warnings.append(f"Oligo 1 length ({len1_actual}nt) outside range [{min_l}–{max_l}]")
-        if tm1 < tm_min or tm1 > tm_max:
-            param_warnings.append(f"Oligo 1 Tm ({tm1:.1f}°C) outside range [{tm_min:.1f}–{tm_max:.1f}]")
+        # Search across ALL reasonable lengths (10–60), filter strictly by Tm
+        # Length preference is applied during scoring, NOT as a hard filter
+        search_min = 10
+        search_max = min(60, len(window_seq))
 
-        # Check Oligo 2
-        if len2_actual < min_l or len2_actual > max_l:
-            param_warnings.append(f"Oligo 2 length ({len2_actual}nt) outside range [{min_l}–{max_l}]")
-        if tm2 < tm_min or tm2 > tm_max:
-            param_warnings.append(f"Oligo 2 Tm ({tm2:.1f}°C) outside range [{tm_min:.1f}–{tm_max:.1f}]")
+        # Build a dict: for each possible split position, collect left and right candidates
+        # Left candidate (p2) ends at position `sp`, right candidate (p1) starts at `sp`
+        # This enforces contiguity by construction
+        left_by_end = {}   # end_pos -> list of (seq, start, end, tm, length)
+        right_by_start = {}  # start_pos -> list of (seq, start, end, tm, length)
 
-        # Check Tm difference
-        if abs(tm1 - tm2) > tm_diff:
-            param_warnings.append(f"Tm difference ({abs(tm1 - tm2):.1f}°C) exceeds max ({tm_diff:.1f}°C)")
+        for length in range(search_min, search_max + 1):
+            for start in range(0, len(window_seq) - length + 1):
+                end = start + length
+                s = window_seq[start:end]
+                tm = primer3.calc_tm(s)
+                if tm_min <= tm <= tm_max:
+                    # This candidate could be a left oligo (keyed by its end)
+                    left_by_end.setdefault(end, []).append((s, start, end, tm, length))
+                    # This candidate could also be a right oligo (keyed by its start)
+                    right_by_start.setdefault(start, []).append((s, start, end, tm, length))
 
-        if param_warnings:
+        # Find best contiguous pair: iterate over split positions where both
+        # a left candidate ends and a right candidate starts (contiguity by construction)
+        best_pair = None
+        best_score = float('inf')
+
+        for sp in left_by_end:
+            if sp not in right_by_start:
+                continue
+            for lc in left_by_end[sp]:
+                for rc in right_by_start[sp]:
+                    # Tm difference check
+                    if abs(rc[3] - lc[3]) > tm_diff:
+                        continue
+                    # Score: prefer lengths closest to user preference, position near split
+                    len_score = abs(rc[4] - preferred_len) + abs(lc[4] - preferred_len)
+                    pos_score = abs(sp - split_pt)
+                    score = len_score * 10 + pos_score * 0.1
+                    if score < best_score:
+                        best_score = score
+                        best_pair = (rc, lc)
+
+        if best_pair:
+            rc, lc = best_pair
+            moligo1_final = rc[0]
+            m1_start, m1_end = rc[1], rc[2]
+            moligo2_final = lc[0]
+            m2_start, m2_end = lc[1], lc[2]
+            # Warn if lengths are outside user's preferred range (but Tm was matched)
+            len1_actual = len(moligo1_final)
+            len2_actual = len(moligo2_final)
+            if len1_actual < min_l or len1_actual > max_l:
+                param_warnings.append(f"Oligo 1 length ({len1_actual}nt) outside range [{min_l}–{max_l}] (Tm matched)")
+            if len2_actual < min_l or len2_actual > max_l:
+                param_warnings.append(f"Oligo 2 length ({len2_actual}nt) outside range [{min_l}–{max_l}] (Tm matched)")
+            if param_warnings:
+                params_not_met = True
+        else:
+            # Fallback to deterministic
+            moligo1_final, moligo2_final, m1_start, m1_end, m2_start, m2_end = get_deterministic(
+                request.moligo1_shift, request.moligo2_shift, l1, l2
+            )
+            # Validate and generate warnings
+            if moligo1_final and moligo2_final:
+                tm1 = primer3.calc_tm(moligo1_final)
+                tm2 = primer3.calc_tm(moligo2_final)
+                len1_actual = len(moligo1_final)
+                len2_actual = len(moligo2_final)
+
+                if len1_actual < min_l or len1_actual > max_l:
+                    param_warnings.append(f"Oligo 1 length ({len1_actual}nt) outside range [{min_l}–{max_l}]")
+                if tm1 < tm_min or tm1 > tm_max:
+                    param_warnings.append(f"Oligo 1 Tm ({tm1:.1f}°C) outside range [{tm_min:.1f}–{tm_max:.1f}]")
+                if len2_actual < min_l or len2_actual > max_l:
+                    param_warnings.append(f"Oligo 2 length ({len2_actual}nt) outside range [{min_l}–{max_l}]")
+                if tm2 < tm_min or tm2 > tm_max:
+                    param_warnings.append(f"Oligo 2 Tm ({tm2:.1f}°C) outside range [{tm_min:.1f}–{tm_max:.1f}]")
+                if abs(tm1 - tm2) > tm_diff:
+                    param_warnings.append(f"Tm difference ({abs(tm1 - tm2):.1f}°C) exceeds max ({tm_diff:.1f}°C)")
+
+            if not param_warnings:
+                param_warnings.append("No oligo pair found matching all Tm/length criteria in this region")
             params_not_met = True
+    else:
+        # ── Manual mode: deterministic placement (unchanged) ──
+        moligo1_final, moligo2_final, m1_start, m1_end, m2_start, m2_end = get_deterministic(
+            request.moligo1_shift, request.moligo2_shift, l1, l2
+        )
 
     # Absolute indices
     abs_m2_start = start_w + m2_start

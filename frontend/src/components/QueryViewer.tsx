@@ -233,6 +233,7 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, idtCredent
             if (dragState) {
                 const D = dragState.deltaChars;
                 if (D !== 0) {
+                    setShowParams(false);
                     let newShift = dragState.initShift;
                     let newLen = dragState.initLen;
                     const id = dragState.id;
@@ -677,8 +678,8 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, idtCredent
                                             )}
                                         </div>
                                         <div className="flex bg-slate-100 dark:bg-slate-700 rounded border border-slate-200 dark:border-slate-600 overflow-hidden shadow-sm">
-                                            <button onClick={() => setMoligo2Len(prev => Math.max(10, prev - 1))} className="w-8 h-7 flex items-center justify-center hover:bg-white dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition-colors font-bold border-r border-slate-200 dark:border-slate-600">-</button>
-                                            <button onClick={() => setMoligo2Len(prev => Math.min(60, prev + 1))} className="w-8 h-7 flex items-center justify-center hover:bg-white dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition-colors font-bold">+</button>
+                                            <button onClick={() => { setShowParams(false); setMoligo2Len(prev => Math.max(10, prev - 1)); }} className="w-8 h-7 flex items-center justify-center hover:bg-white dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition-colors font-bold border-r border-slate-200 dark:border-slate-600">-</button>
+                                            <button onClick={() => { setShowParams(false); setMoligo2Len(prev => Math.min(60, prev + 1)); }} className="w-8 h-7 flex items-center justify-center hover:bg-white dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition-colors font-bold">+</button>
                                         </div>
                                     </div>
                                 </div>
@@ -709,8 +710,8 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, idtCredent
                                             )}
                                         </div>
                                         <div className="flex bg-slate-100 dark:bg-slate-700 rounded border border-slate-200 dark:border-slate-600 overflow-hidden shadow-sm">
-                                            <button onClick={() => setMoligo1Len(prev => Math.max(10, prev - 1))} className="w-8 h-7 flex items-center justify-center hover:bg-white dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition-colors font-bold border-r border-slate-200 dark:border-slate-600">-</button>
-                                            <button onClick={() => setMoligo1Len(prev => Math.min(60, prev + 1))} className="w-8 h-7 flex items-center justify-center hover:bg-white dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition-colors font-bold">+</button>
+                                            <button onClick={() => { setShowParams(false); setMoligo1Len(prev => Math.max(10, prev - 1)); }} className="w-8 h-7 flex items-center justify-center hover:bg-white dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition-colors font-bold border-r border-slate-200 dark:border-slate-600">-</button>
+                                            <button onClick={() => { setShowParams(false); setMoligo1Len(prev => Math.min(60, prev + 1)); }} className="w-8 h-7 flex items-center justify-center hover:bg-white dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition-colors font-bold">+</button>
                                         </div>
                                     </div>
                                 </div>
