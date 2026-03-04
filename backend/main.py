@@ -188,8 +188,8 @@ async def moligize_sequence(request: MoligizeRequest):
     TM_PARAMS = {
         'mv_conc': 50.0,       # 50 mM Na+ (monovalent)
         'dv_conc': 10.0,       # 10 mM Mg2+ (divalent)
-        'dntp_conc': 0.0,      # 0 mM dNTPs
-        'dna_conc': 250.0,     # 0.25 µM oligo concentration (primer3 expects nM: 0.25 µM = 250 nM, matches IDT OligoConc)
+        'dntp_conc': 0.8,      # 0 mM dNTPs
+        'dna_conc': 1000.0,     # 0.25 µM oligo concentration (primer3 expects nM: 0.25 µM = 250 nM, matches IDT OligoConc)
         'tm_method': 'santalucia',      # SantaLucia NN (1)
         'salt_corrections_method': 'santalucia',  # SantaLucia salt corrections (1)
     }
@@ -390,7 +390,9 @@ class IdtAnalyzeRequest(BaseModel):
     p1_seq: str
     p2_seq: str
     token: str
-    mg_conc: float = 0
+    mg_conc: float = 10.0
+    mv_conc: float = 50.0
+    dntp_conc: float = 0.8
 
 
 @app.post("/idt/token")
@@ -502,25 +504,125 @@ async def analyze_idt_oligos(request: IdtAnalyzeRequest):
     m2_analyze = hit_idt("Analyze", request.p2_seq)
     hetero = hit_idt("HeteroDimer", request.p1_seq, request.p2_seq)
 
-    # Use ViennaRNA to add dot-bracket structure AND ΔG to hairpins
+    # Use ViennaRNA to add dot-bracket structure AND local ΔG to hairpins
     try:
         import RNA
-        def add_dot_bracket(seq, hp_data):
-            if isinstance(hp_data, list) and len(hp_data) > 0:
-                # Configure for DNA at 25°C (matching IDT hairpin analysis conditions)
+        import math
+        
+        # Load DNA parameters (Mathews 2004)
+        RNA.params_load_DNA_Mathews2004()
+        
+        def add_vienna_analysis(seq, hp_data):
+            if isinstance(hp_data, list):
+                # Configure for DNA at user specified temperature with mfold-compatible dangles
                 md = RNA.md()
-                md.temperature = 25.0   # IDT uses 25°C for hairpin folding
-                md.noGU = 1             # Disable GU wobble pairs (DNA, not RNA)
+                base_temp = request.temp if hasattr(request, "temp") and request.temp is not None else 34.0
+                md.temperature = base_temp
+                md.noGU = 1
+                md.dangles = 2
+                
+                # Pre-calculate salt correction factors
+                mv_m, dv_m, dntp_m = request.mv_conc/1000.0, request.mg_conc/1000.0, request.dntp_conc/1000.0
+                na_eq = mv_m + 120.0 * math.sqrt(max(0, dv_m - dntp_m))
+                
+                # 1. Get ALL suboptimal structures from ViennaRNA
                 fc = RNA.fold_compound(seq, md)
-                structure, mfe = fc.mfe()
-                hp_data[0]["DotBracket"] = structure
-                hp_data[0]["ViennaRNA_DeltaG"] = round(mfe, 2)
+                subs = fc.subopt(500) # within 5.0 kcal/mol of MFE
+                mfe_struct, mfe_energy = fc.mfe()
+                
+                # 2. Helper: derive Tm for a SPECIFIC structure via binary search
+                # Uses eval_structure() to evaluate the same structure at varying T
+                def vienna_tm_for_structure(structure):
+                    if '(' not in structure:
+                        return None
+                    lo, hi = 0.0, 100.0
+                    md_t = RNA.md()
+                    md_t.noGU = 1
+                    md_t.dangles = 2
+                    for _ in range(40):
+                        mid = (lo + hi) / 2.0
+                        md_t.temperature = mid
+                        fc_t = RNA.fold_compound(seq, md_t)
+                        dg_t = fc_t.eval_structure(structure)
+                        if dg_t < 0:
+                            lo = mid
+                        else:
+                            hi = mid
+                    return round(lo, 1) if lo > 1.0 else None
+                
+                # 3. Helper: compute salt-corrected ViennaRNA ΔG for a structure
+                def vienna_dg_for_structure(structure, energy=None):
+                    if energy is None:
+                        if '(' not in structure:
+                            return 0.0
+                        energy = fc.eval_structure(structure)
+                    num_pairs = structure.count("(")
+                    if na_eq > 0 and num_pairs > 0:
+                        salt_bonus = 0.1 * num_pairs * math.log(na_eq)
+                        return round(float(energy) - salt_bonus, 2)
+                    return round(float(energy), 2)
+
+                # 4. Build the final list
+                final_hairpins = []
+                seen_structures = set()
+                
+                # MFE ΔG and Tm (shared across IDT items)
+                mfe_dg = vienna_dg_for_structure(mfe_struct, mfe_energy)
+                mfe_tm = vienna_tm_for_structure(mfe_struct)
+                
+                # Process IDT hairpins: keep their IDT data, add ViennaRNA MFE for SVG
+                for idt_item in hp_data:
+                    idt_tm = idt_item.get("thermo") or idt_item.get("MeltingTemperature")
+                    if idt_tm is None:
+                        idt_tm = idt_item.get("Tm") or idt_item.get("tm") or idt_item.get("MeltTemp")
+                    idt_item["IDT_Tm"] = idt_tm
+                    idt_item["Sequence"] = seq
+                    
+                    # Use ViennaRNA MFE structure for SVG rendering
+                    idt_item["DotBracket"] = mfe_struct
+                    idt_item["ViennaRNA_DeltaG"] = mfe_dg
+                    idt_item["Local_Tm"] = mfe_tm
+                    
+                    # Remove ASCII fields to prevent fallback rendering
+                    idt_item.pop("AsciiStructure", None)
+                    idt_item.pop("VisualPrint", None)
+                    idt_item.pop("asciiStructure", None)
+                    idt_item.pop("visualPrint", None)
+                    
+                    final_hairpins.append(idt_item)
+                
+                seen_structures.add(mfe_struct)
+                
+                # Append ViennaRNA suboptimal structures (unique, with base pairs)
+                added = 0
+                for sub in subs:
+                    if added >= max(0, 5 - len(hp_data)):
+                        break
+                    if sub.structure in seen_structures:
+                        continue
+                    if '(' not in sub.structure:
+                        continue
+                    
+                    seen_structures.add(sub.structure)
+                    sub_dg = vienna_dg_for_structure(sub.structure, sub.energy)
+                    new_item = {
+                        "DotBracket": sub.structure,
+                        "Sequence": seq,
+                        "ViennaRNA_DeltaG": sub_dg,
+                        "Local_Tm": vienna_tm_for_structure(sub.structure),
+                        "DeltaG": None,
+                        "IDT_Tm": None
+                    }
+                    final_hairpins.append(new_item)
+                    added += 1
+
+                return final_hairpins
             return hp_data
             
-        m1_hairpin = add_dot_bracket(request.p1_seq, m1_hairpin)
-        m2_hairpin = add_dot_bracket(request.p2_seq, m2_hairpin)
+        m1_hairpin = add_vienna_analysis(request.p1_seq, m1_hairpin)
+        m2_hairpin = add_vienna_analysis(request.p2_seq, m2_hairpin)
     except Exception as e:
-        print(f"ViennaRNA integration error: {e}")
+        print(f"ViennaRNA optimization error: {e}")
 
     # DEBUG: Log raw responses to understand structure
     import json as _json
@@ -540,41 +642,56 @@ async def analyze_idt_oligos(request: IdtAnalyzeRequest):
     # for rendering visualizations on the frontend.
     def find_dg_and_raw(data):
         """Extract DeltaG and return raw data from a single-endpoint response.
-        For arrays (multiple hairpins), return ALL items with their individual ΔG values."""
+        For arrays (multiple hairpins), return TOP 5 items with their individual ΔG values."""
         if not data or isinstance(data, str):
             return {"DeltaG": None, "raw": None}
         if isinstance(data, dict) and "error" in data:
             return data
         
-        # If response is an array (multiple structures found), return ALL with best DeltaG as summary
+        # If response is an array (multiple structures found), return TOP 5 with best DeltaG as summary
         if isinstance(data, list):
             if len(data) == 0:
                 return {"DeltaG": None, "raw": data}
-            best_dg = None
-            all_dgs = []
+            
+            # Sort items by IDT DeltaG (most stable first)
+            scored_items = []
             for item in data:
-                dg = _extract_delta_g(item)
-                all_dgs.append(dg)
-                if dg is not None and (best_dg is None or dg < best_dg):
-                    best_dg = dg
-            # Return all hairpins in raw (not just best), plus best DeltaG as summary
-            return {"DeltaG": best_dg, "all_DeltaG": all_dgs, "raw": data}
+                idt_dg = _extract_idt_delta_g(item)
+                scored_items.append((idt_dg if idt_dg is not None else 999.0, item))
+            
+            scored_items.sort(key=lambda x: x[0])
+            top_items = [x[1] for x in scored_items[:5]]
+            top_idt_dgs = [x[0] if x[0] != 999.0 else None for x in scored_items[:5]]
+            top_vienna_dgs = [x[1].get("ViennaRNA_DeltaG") for x in scored_items[:5]]
+            top_idt_tms = [x[1].get("IDT_Tm") for x in scored_items[:5]]
+            top_local_tms = [x[1].get("Local_Tm") for x in scored_items[:5]]
+            
+            return {
+                "DeltaG": top_idt_dgs[0] if top_idt_dgs else None,
+                "all_DeltaG": top_idt_dgs,
+                "all_ViennaRNA_DeltaG": top_vienna_dgs,
+                "all_IDT_Tm": top_idt_tms,
+                "all_Local_Tm": top_local_tms,
+                "raw": top_items
+            }
         
-        # If response is a dict, DeltaG should be at top level
+        # If response is a dict, DeltaG and Tm should be at top level
         if isinstance(data, dict):
-            dg = _extract_delta_g(data)
+            dg = _extract_idt_delta_g(data)
             return {"DeltaG": dg, "raw": data}
         
         return {"DeltaG": None, "raw": None}
     
-    def _extract_delta_g(obj):
-        """Extract DeltaG from a dict, trying common key names."""
+    def _extract_idt_delta_g(obj):
+        """Extract IDT DeltaG from a dict (ignoring ViennaRNA_DeltaG)."""
         if not isinstance(obj, dict):
             return None
         for k in ["DeltaG", "deltaG", "deltag", "delta_g", "dG", "Energy", "energy"]:
             if k in obj:
                 try:
-                    return float(obj[k])
+                    val = obj[k]
+                    if val is not None:
+                        return float(val)
                 except (ValueError, TypeError):
                     pass
         return None

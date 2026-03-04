@@ -393,7 +393,9 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, idtCredent
                     p1_seq: primers.p1.seq,
                     p2_seq: primers.p2.seq,
                     token: access_token,
-                    mg_conc: idtCredentials.mgConc ?? 0
+                    mg_conc: idtCredentials.mgConc ?? 10.0,
+                    mv_conc: 50.0,
+                    dntp_conc: 0.8
                 })
             });
             if (!aRes.ok) throw new Error("IDT Analysis Failed");
@@ -447,40 +449,55 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, idtCredent
         // Extract DG and Visual from the structure { DeltaG, all_DeltaG, raw }
         let dg = data.DeltaG;
         let raw = data.raw;
-        let viennaDg = undefined as number | undefined;
 
         // Render individual items (hairpins, dimers, etc.)
-        const renderItem = (item: any, seq: string | undefined, idx: number, itemDg?: number) => {
+        const renderItem = (item: any, seq: string | undefined, idx: number, itemDg?: number, itemViennaDg?: number, itemIdtTmVal?: number, itemLocalTmVal?: number) => {
             let asciiStructure: string | undefined = undefined;
             let hairpinDotBracket: string | undefined = undefined;
             let hairpinSeq: string | undefined = undefined;
 
             if (item) {
-                asciiStructure = item.AsciiStructure || item.VisualPrint || item.asciiStructure || item.visualPrint || item.Ascii || item.ascii;
-
-                if (!asciiStructure && item.Bonds && seq) {
-                    asciiStructure = buildDimerAscii(item, seq, seq2);
-                } else if (!asciiStructure && item.DotBracket && seq) {
+                // Always prefer DotBracket SVG rendering over ASCII for hairpins
+                if (item.DotBracket) {
                     hairpinDotBracket = item.DotBracket;
-                    hairpinSeq = seq;
+                    hairpinSeq = seq || item.Sequence || '';
+                } else if (item.Bonds && seq) {
+                    // Dimers use ASCII rendering via Bonds
+                    asciiStructure = buildDimerAscii(item, seq, seq2);
                 }
-
-                if (item.ViennaRNA_DeltaG !== undefined) {
-                    viennaDg = item.ViennaRNA_DeltaG;
-                }
+                // No ASCII fallback for hairpins — AsciiStructure is stripped by the backend
             }
 
             return (
-                <div key={idx}>
-                    {itemDg !== undefined && itemDg !== null && (
-                        <div className="text-[10px] text-slate-400 mb-0.5">
-                            Hairpin {idx + 1}: <span className={getIdtStatusColor(itemDg)}>{itemDg.toFixed(2)} kcal/mol</span>
+                <div key={idx} className="border-t border-slate-200 dark:border-slate-700 pt-2 mt-2 first:mt-0 first:border-0 first:pt-0">
+                    <div className="flex flex-col gap-1 text-[10px] text-slate-400 mb-1">
+                        <div className="flex justify-between items-center">
+                            <span className="font-semibold">{title} {idx + 1}:</span>
+                            <div className="flex gap-3">
+                                {itemDg !== undefined && itemDg !== null && (
+                                    <span>IDT ΔG: <span className={getIdtStatusColor(itemDg)}>{itemDg.toFixed(2)}</span></span>
+                                )}
+                                {itemViennaDg !== undefined && itemViennaDg !== null && (
+                                    <span>Vienna ΔG: <span className="text-slate-500 dark:text-slate-400 font-medium">{itemViennaDg.toFixed(2)}</span></span>
+                                )}
+                            </div>
                         </div>
-                    )}
-                    {hairpinDotBracket && hairpinSeq && (
+                        <div className="flex justify-end gap-3 text-[9px] opacity-80">
+                            {itemIdtTmVal !== undefined && itemIdtTmVal !== null && (
+                                <span>IDT Tm: <span className="text-slate-500 dark:text-slate-400 font-medium">{Number(itemIdtTmVal).toFixed(1)}°C</span></span>
+                            )}
+                            {itemLocalTmVal !== undefined && itemLocalTmVal !== null && (
+                                <span>Vienna Tm: <span className="text-slate-500 dark:text-slate-400 font-medium">{Number(itemLocalTmVal).toFixed(1)}°C</span></span>
+                            )}
+                        </div>
+                    </div>
+                    {hairpinDotBracket && hairpinSeq != null && hairpinSeq.length > 0 && (
                         <div className="mt-1 w-full overflow-x-auto bg-slate-100 dark:bg-slate-800 rounded p-2">
                             <HairpinSVG seq={hairpinSeq} dotBracket={hairpinDotBracket} />
                         </div>
+                    )}
+                    {hairpinDotBracket && (!hairpinSeq || hairpinSeq.length === 0) && (
+                        <div className="mt-1 text-[10px] text-slate-400 italic">Structure found but sequence unavailable for SVG</div>
                     )}
                     {asciiStructure && !hairpinDotBracket && (
                         <div className="mt-1 w-full overflow-x-auto overflow-y-auto max-h-32 bg-slate-100 dark:bg-slate-800 rounded p-2 text-[10px] sm:text-xs">
@@ -488,6 +505,9 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, idtCredent
                                 {asciiStructure}
                             </pre>
                         </div>
+                    )}
+                    {!hairpinDotBracket && !asciiStructure && (
+                        <div className="mt-1 text-[10px] text-slate-400 italic">No secondary structure predicted</div>
                     )}
                 </div>
             );
@@ -497,8 +517,11 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, idtCredent
         const items: React.ReactNode[] = [];
         if (Array.isArray(raw) && raw.length > 0) {
             const allDgs = data.all_DeltaG || [];
+            const allViennaDgs = data.all_ViennaRNA_DeltaG || [];
+            const allIdtTms = data.all_IDT_Tm || [];
+            const allLocalTms = data.all_Local_Tm || [];
             raw.forEach((item: any, idx: number) => {
-                items.push(renderItem(item, seq1, idx, allDgs[idx]));
+                items.push(renderItem(item, seq1, idx, allDgs[idx], allViennaDgs[idx], allIdtTms[idx], allLocalTms[idx]));
             });
         } else if (raw) {
             items.push(renderItem(raw, seq1, 0));
@@ -506,15 +529,10 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, idtCredent
 
         return (
             <div className="flex flex-col gap-1 mb-2">
-                <div className="flex justify-between items-center text-sm">
-                    <span className="text-slate-500">{title}:</span>
-                    <span className={getIdtStatusColor(dg)}>{dg !== undefined && dg !== null ? `${dg.toFixed(2)}` : 'N/A'}</span>
+                <div className="flex justify-between items-center text-sm font-medium border-b border-slate-200 dark:border-slate-700 pb-1 mb-1">
+                    <span className="text-slate-600 dark:text-slate-300">Summary {title}:</span>
+                    <span className={getIdtStatusColor(dg)}>{dg !== undefined && dg !== null ? `${dg.toFixed(2)} kcal/mol` : 'N/A'}</span>
                 </div>
-                {viennaDg !== undefined && (
-                    <div className="text-[10px] text-slate-400">
-                        ViennaRNA ΔG: <span className="text-slate-300">{viennaDg.toFixed(2)} kcal/mol</span>
-                    </div>
-                )}
                 {items}
             </div>
         );
