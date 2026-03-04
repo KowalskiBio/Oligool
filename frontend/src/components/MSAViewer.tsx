@@ -26,6 +26,9 @@ const MINIMAP_RULER_H = 14;
 const MINIMAP_HANDLE_H = 8;
 const MINIMAP_HEIGHT = MINIMAP_GC_H + MINIMAP_RULER_H + 50 + MINIMAP_HANDLE_H;
 
+const MAIN_GC_TRACK_H = 40;
+const MAIN_MSA_TRACK_H = 30;
+
 const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, primers, isDarkMode }) => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const minimapRef = useRef<HTMLCanvasElement>(null);
@@ -68,7 +71,7 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
     const totalVirtualW = seqAreaW / viewFraction;
     const cellW = seqLen > 0 ? totalVirtualW / seqLen : 1;
     const visibleBases = seqLen * viewFraction;
-    const totalH = RULER_HEIGHT + sequences.length * ROW_HEIGHT + 4;
+    const totalH = MAIN_GC_TRACK_H + MAIN_MSA_TRACK_H + RULER_HEIGHT + sequences.length * ROW_HEIGHT + 4;
 
     /* ── viewport fractions ────────────────────────────── */
     const startFrac = totalVirtualW > 0 ? scrollLeft / totalVirtualW : 0;
@@ -210,7 +213,7 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
         const mmSeqW = availableWidth - LABEL_WIDTH - RIGHT_PADDING;
         const rowsTop = MINIMAP_GC_H + MINIMAP_RULER_H;
         const rowAreaH = MINIMAP_HEIGHT - rowsTop - MINIMAP_HANDLE_H; // subtract handle height
-        const rowH = Math.max(1, Math.min(3, rowAreaH / sequences.length));
+        const rowH = Math.max(1, rowAreaH / sequences.length);
 
         // We use the isDark defined at the component level
 
@@ -561,15 +564,76 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
         ctx.rect(LABEL_WIDTH, 0, availableWidth - LABEL_WIDTH, totalH);
         ctx.clip();
 
-        /* ── ruler ── */
+        // ── GC content track (scaled) ──
         ctx.fillStyle = isDark ? '#1e293b' : '#f8fafc';
-        // Extend background to full width to cover padding
-        ctx.fillRect(LABEL_WIDTH, 0, availableWidth - LABEL_WIDTH, RULER_HEIGHT);
+        ctx.fillRect(LABEL_WIDTH, 0, availableWidth - LABEL_WIDTH, MAIN_GC_TRACK_H);
+        for (let col = firstCol; col <= lastCol; col++) {
+            const x = LABEL_WIDTH + col * cellW - scrollLeft;
+            const w = Math.max(1, cellW);
+            const gc = gcContent[col] || 0;
+            const r = Math.round(255 - gc * 150);
+            const g = Math.round(180 + gc * 60);
+            const b = Math.round(50 + gc * 100);
+            ctx.fillStyle = `rgb(${r},${g},${b})`;
+            const barH = gc * MAIN_GC_TRACK_H;
+            ctx.fillRect(x, MAIN_GC_TRACK_H - barH, w, barH);
+        }
+        ctx.fillStyle = isDark ? '#334155' : '#e2e8f0';
+        ctx.fillRect(LABEL_WIDTH, MAIN_GC_TRACK_H - 0.5, availableWidth - LABEL_WIDTH, 0.5);
+
+        // ── MSA overview track (scaled) ──
+        const msaTop = MAIN_GC_TRACK_H;
+        const msaRowH = Math.max(1, MAIN_MSA_TRACK_H / sequences.length);
+        ctx.fillStyle = isDark ? '#0f172a' : '#f1f5f9';
+        ctx.fillRect(LABEL_WIDTH, msaTop, availableWidth - LABEL_WIDTH, MAIN_MSA_TRACK_H);
+        for (let row = 0; row < sequences.length; row++) {
+            const s = sequences[row];
+            const y = msaTop + row * msaRowH;
+            const isQuery = row === 0;
+            const sStart = seqStart(s.seq);
+            const sEnd = seqEnd(s.seq);
+            // Background bar for the sequence extent
+            if (sStart <= sEnd) {
+                const barX1 = Math.max(LABEL_WIDTH, LABEL_WIDTH + sStart * cellW - scrollLeft);
+                const barX2 = Math.min(LABEL_WIDTH + seqAreaW, LABEL_WIDTH + (sEnd + 1) * cellW - scrollLeft);
+                if (barX2 > barX1) {
+                    ctx.fillStyle = isQuery
+                        ? (isDark ? '#1e3a8a' : '#bfdbfe')
+                        : (isDark ? '#334155' : '#e2e8f0');
+                    ctx.fillRect(barX1, y, barX2 - barX1, Math.max(1, msaRowH - 0.5));
+                }
+            }
+            // Mismatch / indel markers
+            for (let col = firstCol; col <= lastCol; col++) {
+                const ch = (s.seq[col] || '-').toUpperCase();
+                const qch = (querySeq[col] || '-').toUpperCase();
+                if (ch === '-' && !(col >= sStart && col <= sEnd && !isQuery)) continue;
+                const x = LABEL_WIDTH + col * cellW - scrollLeft;
+                const w = Math.max(1, cellW);
+                const h = Math.max(1, msaRowH - 0.5);
+                const isInternalDeletion = !isQuery && ch === '-' && col >= sStart && col <= sEnd;
+                const isInsertion = !isQuery && qch === '-' && ch !== '-';
+                if (isInternalDeletion || isInsertion) {
+                    ctx.fillStyle = '#9333ea';
+                    ctx.fillRect(x, y, w, h);
+                } else if (!isQuery && ch !== '-' && ch !== qch && qch !== '-') {
+                    ctx.fillStyle = '#dc2626';
+                    ctx.fillRect(x, y, w, h);
+                }
+            }
+        }
+        ctx.fillStyle = isDark ? '#334155' : '#e2e8f0';
+        ctx.fillRect(LABEL_WIDTH, msaTop + MAIN_MSA_TRACK_H - 0.5, availableWidth - LABEL_WIDTH, 0.5);
+
+        /* ── ruler ── */
+        const rulerY = MAIN_GC_TRACK_H + MAIN_MSA_TRACK_H;
+        ctx.fillStyle = isDark ? '#1e293b' : '#f8fafc';
+        ctx.fillRect(LABEL_WIDTH, rulerY, availableWidth - LABEL_WIDTH, RULER_HEIGHT);
         ctx.strokeStyle = isDark ? '#334155' : '#e2e8f0';
         ctx.lineWidth = 1;
         ctx.beginPath();
-        ctx.moveTo(LABEL_WIDTH, RULER_HEIGHT - 0.5);
-        ctx.lineTo(availableWidth, RULER_HEIGHT - 0.5);
+        ctx.moveTo(LABEL_WIDTH, rulerY + RULER_HEIGHT - 0.5);
+        ctx.lineTo(availableWidth, rulerY + RULER_HEIGHT - 0.5);
         ctx.stroke();
 
         const tickInterval = cellW >= 4 ? 10 : cellW >= 1 ? 50 : 100;
@@ -581,9 +645,9 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
             if ((col + 1) % tickInterval === 0) {
                 const x = LABEL_WIDTH + col * cellW - scrollLeft;
                 ctx.fillStyle = isDark ? '#334155' : '#cbd5e1';
-                ctx.fillRect(x, RULER_HEIGHT - 6, 1, 6);
+                ctx.fillRect(x, rulerY + RULER_HEIGHT - 6, 1, 6);
                 ctx.fillStyle = '#94a3b8';
-                ctx.fillText(String(col + 1), x, RULER_HEIGHT - 7);
+                ctx.fillText(String(col + 1), x, rulerY + RULER_HEIGHT - 7);
             }
         }
 
@@ -592,18 +656,18 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
             const p1x = LABEL_WIDTH + primers.p1.start * cellW - scrollLeft;
             const p1w = (primers.p1.end - primers.p1.start) * cellW;
             ctx.fillStyle = '#22c55e';
-            ctx.fillRect(p1x, RULER_HEIGHT - 4, p1w, 4);
+            ctx.fillRect(p1x, rulerY + RULER_HEIGHT - 4, p1w, 4);
 
             const p2x = LABEL_WIDTH + primers.p2.start * cellW - scrollLeft;
             const p2w = (primers.p2.end - primers.p2.start) * cellW;
             ctx.fillStyle = '#facc15'; // Yellow
-            ctx.fillRect(p2x, RULER_HEIGHT - 4, p2w, 4);
+            ctx.fillRect(p2x, rulerY + RULER_HEIGHT - 4, p2w, 4);
         }
 
         /* ── row contents (within clip) ── */
         for (let row = 0; row < sequences.length; row++) {
             const s = sequences[row];
-            const y = RULER_HEIGHT + row * ROW_HEIGHT;
+            const y = MAIN_GC_TRACK_H + MAIN_MSA_TRACK_H + RULER_HEIGHT + row * ROW_HEIGHT;
             const isQuery = row === 0;
 
             const sStart = seqStart(s.seq);
@@ -721,10 +785,30 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
 
         ctx.restore(); /* end clip */
 
-        /* ── labels (drawn OUTSIDE clip so they’re never obscured) ── */
+        /* ── labels (drawn OUTSIDE clip so they're never obscured) ── */
+
+        // GC track label
+        ctx.fillStyle = isDark ? '#0f172a' : '#ffffff';
+        ctx.fillRect(0, 0, LABEL_WIDTH - 1, MAIN_GC_TRACK_H);
+        ctx.fillStyle = isDark ? '#94a3b8' : '#64748b';
+        ctx.font = '10px ui-monospace, SFMono-Regular, monospace';
+        ctx.textAlign = 'right';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('GC%', LABEL_WIDTH - 6, MAIN_GC_TRACK_H / 2);
+
+        // MSA overview label
+        ctx.fillStyle = isDark ? '#0f172a' : '#ffffff';
+        ctx.fillRect(0, MAIN_GC_TRACK_H, LABEL_WIDTH - 1, MAIN_MSA_TRACK_H);
+        ctx.fillStyle = isDark ? '#94a3b8' : '#64748b';
+        ctx.font = '10px ui-monospace, SFMono-Regular, monospace';
+        ctx.textAlign = 'right';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('MSA', LABEL_WIDTH - 6, MAIN_GC_TRACK_H + MAIN_MSA_TRACK_H / 2);
+
+        // Sequence row labels
         for (let row = 0; row < sequences.length; row++) {
             const s = sequences[row];
-            const y = RULER_HEIGHT + row * ROW_HEIGHT;
+            const y = MAIN_GC_TRACK_H + MAIN_MSA_TRACK_H + RULER_HEIGHT + row * ROW_HEIGHT;
             const isQuery = row === 0;
 
             ctx.fillStyle = isQuery
@@ -745,7 +829,7 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
 
         ctx.fillStyle = isDark ? '#334155' : '#cbd5e1';
         ctx.fillRect(LABEL_WIDTH - 1, 0, 1, totalH);
-    }, [sequences, querySeq, scrollLeft, cellW, seqAreaW, availableWidth, totalH, seqLen, viewMode, primers, isDarkMode]);
+    }, [sequences, querySeq, scrollLeft, cellW, seqAreaW, availableWidth, totalH, seqLen, viewMode, primers, gcContent, isDarkMode]);
 
     useEffect(() => { draw(); }, [draw]);
 
