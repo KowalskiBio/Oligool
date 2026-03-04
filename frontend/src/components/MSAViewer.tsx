@@ -42,6 +42,7 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
     const [viewMode, setViewMode] = useState<'bars' | 'letters'>('bars');
     const [copyFeedback, setCopyFeedback] = useState('');
     const [selectionRange, setSelectionRange] = useState<{ start: number; end: number } | null>(null);
+    const [hoverCol, setHoverCol] = useState<number | null>(null);
 
     /* ── parse FASTA ────────────────────────────────────── */
     const sequences = useMemo<ParsedSequence[]>(() => {
@@ -222,11 +223,13 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
         ctx.fillRect(0, 0, availableWidth, MINIMAP_HEIGHT);
 
         // ── GC content bar ──
-        ctx.fillStyle = isDark ? '#94a3b8' : '#94a3b8'; // Keep same or slightly lighter?
+        ctx.fillStyle = isDark ? '#94a3b8' : '#94a3b8';
         ctx.font = '7px ui-monospace, SFMono-Regular, monospace';
         ctx.textAlign = 'right';
         ctx.textBaseline = 'middle';
         ctx.fillText('GC%', LABEL_WIDTH - 4, MINIMAP_GC_H / 2);
+        // MSA label
+        ctx.fillText('MSA', LABEL_WIDTH - 4, rowsTop + rowAreaH / 2);
         for (let col = 0; col < seqLen; col++) {
             const x = LABEL_WIDTH + (col / seqLen) * mmSeqW;
             const w = Math.max(1, mmSeqW / seqLen);
@@ -385,9 +388,27 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
             ctx.fillRect(p2x, mmRulerY + mmRulerH - 4, p2w, 4);
         }
 
+        // ── Hover cursor line on minimap ──
+        if (hoverCol !== null && hoverCol >= 0 && hoverCol < seqLen) {
+            const hx = LABEL_WIDTH + ((hoverCol + 0.5) / seqLen) * mmSeqW;
+            // Determine if this column has a mismatch
+            let hasMismatch = false;
+            for (let row = 1; row < sequences.length; row++) {
+                const ch = (sequences[row].seq[hoverCol] || '-').toUpperCase();
+                const qch = (querySeq[hoverCol] || '-').toUpperCase();
+                if (ch !== '-' && qch !== '-' && ch !== qch) { hasMismatch = true; break; }
+            }
+            ctx.strokeStyle = hasMismatch ? '#ef4444' : '#3b82f6';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(Math.floor(hx) + 0.5, 0);
+            ctx.lineTo(Math.floor(hx) + 0.5, MINIMAP_HEIGHT);
+            ctx.stroke();
+        }
+
         ctx.fillStyle = isDark ? '#334155' : '#cbd5e1';
         ctx.fillRect(LABEL_WIDTH - 1, 0, 1, MINIMAP_HEIGHT);
-    }, [sequences, querySeq, seqLen, availableWidth, startFrac, endFrac, gcContent, viewFraction, selectionRange, primers, isDarkMode]);
+    }, [sequences, querySeq, seqLen, availableWidth, startFrac, endFrac, gcContent, viewFraction, selectionRange, primers, hoverCol, isDarkMode]);
 
     useEffect(() => { drawMinimap(); }, [drawMinimap]);
 
@@ -508,13 +529,17 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
         };
     }, []);
 
-    /* ── minimap cursor style ─────────────────────────── */
+    /* ── minimap cursor style + hover column ───────────────── */
     const handleMinimapMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
         const canvas = minimapRef.current;
         if (!canvas) return;
         const rect = canvas.getBoundingClientRect();
         const mmSeqW = rect.width - LABEL_WIDTH - RIGHT_PADDING;
         const mouseXFrac = (e.clientX - rect.left - LABEL_WIDTH) / mmSeqW;
+
+        // Set hover column for cursor line
+        const col = Math.floor(mouseXFrac * seqLen);
+        setHoverCol(col >= 0 && col < seqLen ? col : null);
 
         const curSeqAreaW = availableWidth - LABEL_WIDTH - RIGHT_PADDING;
         const curTotalVW = curSeqAreaW / viewFraction;
@@ -528,12 +553,16 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
             if (Math.abs(mouseXFrac - curStart) < handleZone || Math.abs(mouseXFrac - curEnd) < handleZone) {
                 canvas.style.cursor = 'ew-resize';
             } else {
-                canvas.style.cursor = 'crosshair'; // Selecting is default inside or out
+                canvas.style.cursor = 'crosshair';
             }
         } else {
-            canvas.style.cursor = 'crosshair'; // Always selecting if full view
+            canvas.style.cursor = 'crosshair';
         }
-    }, [seqAreaW, viewFraction, scrollLeft, availableWidth]);
+    }, [seqAreaW, viewFraction, scrollLeft, availableWidth, seqLen]);
+
+    const handleMinimapMouseLeave = useCallback(() => {
+        setHoverCol(null);
+    }, []);
 
     /* ══════════════════════════════════════════════════════
        MAIN CANVAS DRAWING
@@ -827,9 +856,28 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
             ctx.fillText(lbl, LABEL_WIDTH - 6, y + ROW_HEIGHT / 2);
         }
 
+        // ── Hover cursor line on main canvas ──
+        if (hoverCol !== null && hoverCol >= 0 && hoverCol < seqLen) {
+            const hx = LABEL_WIDTH + hoverCol * cellW - scrollLeft + cellW / 2;
+            if (hx >= LABEL_WIDTH && hx <= LABEL_WIDTH + seqAreaW) {
+                let hasMismatch = false;
+                for (let row = 1; row < sequences.length; row++) {
+                    const ch = (sequences[row].seq[hoverCol] || '-').toUpperCase();
+                    const qch = (querySeq[hoverCol] || '-').toUpperCase();
+                    if (ch !== '-' && qch !== '-' && ch !== qch) { hasMismatch = true; break; }
+                }
+                ctx.strokeStyle = hasMismatch ? '#ef4444' : '#3b82f6';
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.moveTo(Math.floor(hx) + 0.5, 0);
+                ctx.lineTo(Math.floor(hx) + 0.5, totalH);
+                ctx.stroke();
+            }
+        }
+
         ctx.fillStyle = isDark ? '#334155' : '#cbd5e1';
         ctx.fillRect(LABEL_WIDTH - 1, 0, 1, totalH);
-    }, [sequences, querySeq, scrollLeft, cellW, seqAreaW, availableWidth, totalH, seqLen, viewMode, primers, gcContent, isDarkMode]);
+    }, [sequences, querySeq, scrollLeft, cellW, seqAreaW, availableWidth, totalH, seqLen, viewMode, primers, gcContent, hoverCol, isDarkMode]);
 
     useEffect(() => { draw(); }, [draw]);
 
@@ -878,7 +926,72 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
         }
     };
 
-    /* ── canvas click → copy sequence ─────────────────── */
+    /* ── main canvas mouse move for hover column ── */
+    const handleCanvasMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+        const cvs = canvasRef.current;
+        if (!cvs) return;
+        const rect = cvs.getBoundingClientRect();
+        const mouseX = e.clientX - rect.left - LABEL_WIDTH;
+        const col = Math.floor((scrollLeft + mouseX) / cellW);
+        setHoverCol(col >= 0 && col < seqLen ? col : null);
+    }, [scrollLeft, cellW, seqLen]);
+
+    const handleCanvasMouseLeave = useCallback(() => {
+        setHoverCol(null);
+    }, []);
+
+    /* ── main canvas mouse down for GC/MSA region selection ── */
+    const handleCanvasMouseDown = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+        const cvs = canvasRef.current;
+        if (!cvs) return;
+        const rect = cvs.getBoundingClientRect();
+        const mouseY = e.clientY - rect.top;
+
+        // Only handle clicks in GC or MSA track area
+        if (mouseY > MAIN_GC_TRACK_H + MAIN_MSA_TRACK_H) return;
+
+        // Convert mouse X to a sequence fraction
+        const curSeqAreaW = availableWidth - LABEL_WIDTH - RIGHT_PADDING;
+        const mouseX = e.clientX - rect.left - LABEL_WIDTH;
+        const curTotalVW = curSeqAreaW / viewFraction;
+        const mouseFrac = (scrollLeft + mouseX) / curTotalVW;
+        const clampedFrac = Math.max(0, Math.min(1, mouseFrac));
+
+        // Start a selection drag (same logic as minimap)
+        setSelectionRange({ start: clampedFrac, end: clampedFrac });
+
+        const onMove = (ev: MouseEvent) => {
+            const newMouseX = ev.clientX - rect.left - LABEL_WIDTH;
+            const newFrac = Math.max(0, Math.min(1, (scrollLeft + newMouseX) / curTotalVW));
+            setSelectionRange({ start: clampedFrac, end: newFrac });
+        };
+
+        const onUp = () => {
+            document.removeEventListener('mousemove', onMove);
+            document.removeEventListener('mouseup', onUp);
+
+            setSelectionRange((prev) => {
+                if (!prev) return null;
+                const s = Math.min(prev.start, prev.end);
+                const e2 = Math.max(prev.start, prev.end);
+                if (e2 - s < 0.005) return null;
+
+                const newVF = e2 - s;
+                const newTotalW = curSeqAreaW / newVF;
+                const newSL = s * newTotalW;
+
+                setViewFraction(newVF);
+                setScrollLeft(newSL);
+                targetScrollRef.current = newSL;
+                return null;
+            });
+        };
+
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('mouseup', onUp);
+        e.preventDefault();
+    }, [availableWidth, viewFraction, scrollLeft, seqAreaW]);
+
     /* ── canvas click → copy sequence OR select ─────────────────── */
     const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
         // If we are in letters mode, we might still want to select? 
@@ -889,7 +1002,8 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
         if (!cvs) return;
         const rect = cvs.getBoundingClientRect();
         const y = e.clientY - rect.top;
-        const row = Math.floor((y - RULER_HEIGHT) / ROW_HEIGHT);
+        const rowsStartY = MAIN_GC_TRACK_H + MAIN_MSA_TRACK_H + RULER_HEIGHT;
+        const row = Math.floor((y - rowsStartY) / ROW_HEIGHT);
 
         if (row >= 0 && row < sequences.length) {
             const seq = sequences[row];
@@ -989,6 +1103,7 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
                     style={{ display: 'block', cursor: 'crosshair' }}
                     onMouseDown={handleMinimapMouseDown}
                     onMouseMove={handleMinimapMouseMove}
+                    onMouseLeave={handleMinimapMouseLeave}
                 />
             </div>
 
@@ -1022,8 +1137,11 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
                 <div style={{ width: `${LABEL_WIDTH + totalVirtualW}px`, height: '1px' }} />
                 <canvas
                     ref={canvasRef}
-                    style={{ display: 'block', position: 'sticky', top: 0, left: 0, cursor: viewMode === 'letters' ? 'pointer' : 'default' }}
+                    style={{ display: 'block', position: 'sticky', top: 0, left: 0, cursor: viewMode === 'letters' ? 'pointer' : 'crosshair' }}
                     onClick={handleCanvasClick}
+                    onMouseDown={handleCanvasMouseDown}
+                    onMouseMove={handleCanvasMouseMove}
+                    onMouseLeave={handleCanvasMouseLeave}
                 />
             </div>
 
