@@ -38,6 +38,7 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
     const isDragging = useRef(false);
     const [availableWidth, setAvailableWidth] = useState(900);
     const [scrollLeft, setScrollLeft] = useState(0);
+    const [scrollTop, setScrollTop] = useState(0);
     const [viewFraction, setViewFraction] = useState(1);
     const [viewMode, setViewMode] = useState<'bars' | 'letters'>('bars');
     const [copyFeedback, setCopyFeedback] = useState('');
@@ -267,8 +268,9 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
         ctx.fillStyle = isDark ? '#334155' : '#e2e8f0';
         ctx.fillRect(LABEL_WIDTH, rowsTop - 0.5, mmSeqW, 0.5);
 
-        // sequence overview rows
-        for (let row = 0; row < sequences.length; row++) {
+        // sequence overview rows (Sampled for massive MSAs to prevent lag)
+        const sampleStep = Math.max(1, Math.floor(sequences.length / 200));
+        for (let row = 0; row < sequences.length; row += sampleStep) {
             const s = sequences[row];
             const y = rowsTop + row * rowH;
             const isQuery = row === 0;
@@ -574,15 +576,20 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
         const ctx = cvs.getContext('2d');
         if (!ctx) return;
 
+        const canvasH = Math.min(totalH, MAX_VIEWER_HEIGHT);
         const dpr = window.devicePixelRatio || 1;
         cvs.width = availableWidth * dpr;
-        cvs.height = totalH * dpr;
+        cvs.height = canvasH * dpr;
         cvs.style.width = `${availableWidth}px`;
-        cvs.style.height = `${totalH}px`;
+        cvs.style.height = `${canvasH}px`;
         ctx.scale(dpr, dpr);
 
         ctx.fillStyle = isDark ? '#0f172a' : '#ffffff';
-        ctx.fillRect(0, 0, availableWidth, totalH);
+        ctx.fillRect(0, 0, availableWidth, canvasH);
+
+        // Virtualize Y rendering using context translation
+        ctx.save();
+        ctx.translate(0, -scrollTop);
 
         const firstCol = Math.max(0, Math.floor(scrollLeft / cellW));
         const lastCol = Math.min(seqLen - 1, Math.ceil((scrollLeft + seqAreaW) / cellW));
@@ -590,8 +597,8 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
         /* ── clip sequence area so it never bleeds into labels ── */
         ctx.save();
         ctx.beginPath();
-        // Allow drawing into the right padding for labels/ticks
-        ctx.rect(LABEL_WIDTH, 0, availableWidth - LABEL_WIDTH, totalH);
+        // Allow drawing into the right padding for labels/ticks, but limit Y to entire virtual height
+        ctx.rect(LABEL_WIDTH, scrollTop, availableWidth - LABEL_WIDTH, canvasH);
         ctx.clip();
 
         // ── GC content track (scaled) ──
@@ -616,7 +623,10 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
         const msaRowH = Math.max(1, MAIN_MSA_TRACK_H / sequences.length);
         ctx.fillStyle = isDark ? '#0f172a' : '#f1f5f9';
         ctx.fillRect(LABEL_WIDTH, msaTop, availableWidth - LABEL_WIDTH, MAIN_MSA_TRACK_H);
-        for (let row = 0; row < sequences.length; row++) {
+        
+        // Sample down rows for overview to prevent crippling lag
+        const sampleStep = Math.max(1, Math.floor(sequences.length / 200));
+        for (let row = 0; row < sequences.length; row += sampleStep) {
             const s = sequences[row];
             const y = msaTop + row * msaRowH;
             const isQuery = row === 0;
@@ -695,7 +705,12 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
         }
 
         /* ── row contents (within clip) ── */
-        for (let row = 0; row < sequences.length; row++) {
+        // Calculate visible rows for Y-virtualization
+        const rowsStartY = MAIN_GC_TRACK_H + MAIN_MSA_TRACK_H + RULER_HEIGHT;
+        const firstRow = Math.max(0, Math.floor((scrollTop - rowsStartY) / ROW_HEIGHT));
+        const lastRow = Math.min(sequences.length - 1, Math.ceil((scrollTop + canvasH - rowsStartY) / ROW_HEIGHT) + 2);
+
+        for (let row = firstRow; row <= lastRow; row++) {
             const s = sequences[row];
             const y = MAIN_GC_TRACK_H + MAIN_MSA_TRACK_H + RULER_HEIGHT + row * ROW_HEIGHT;
             const isQuery = row === 0;
@@ -817,44 +832,52 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
 
         /* ── labels (drawn OUTSIDE clip so they're never obscured) ── */
 
-        // GC track label
+        // To make labels sticky Y but ignore scrollX, we fill a background that covers the scroll offset
         ctx.fillStyle = isDark ? '#0f172a' : '#ffffff';
-        ctx.fillRect(0, 0, LABEL_WIDTH - 1, MAIN_GC_TRACK_H);
+        ctx.fillRect(0, scrollTop, LABEL_WIDTH, canvasH);
+
+        // Border line for labels
+        ctx.fillStyle = isDark ? '#334155' : '#e2e8f0';
+        ctx.fillRect(LABEL_WIDTH - 1, scrollTop, 1, canvasH);
+
+        // GC track label (sticky Y to top)
         ctx.fillStyle = isDark ? '#94a3b8' : '#64748b';
         ctx.font = '10px ui-monospace, SFMono-Regular, monospace';
         ctx.textAlign = 'right';
         ctx.textBaseline = 'middle';
-        ctx.fillText('GC%', LABEL_WIDTH - 6, MAIN_GC_TRACK_H / 2);
+        ctx.fillText('GC%', LABEL_WIDTH - 6, scrollTop + MAIN_GC_TRACK_H / 2);
 
-        // MSA overview label
-        ctx.fillStyle = isDark ? '#0f172a' : '#ffffff';
-        ctx.fillRect(0, MAIN_GC_TRACK_H, LABEL_WIDTH - 1, MAIN_MSA_TRACK_H);
-        ctx.fillStyle = isDark ? '#94a3b8' : '#64748b';
-        ctx.font = '10px ui-monospace, SFMono-Regular, monospace';
-        ctx.textAlign = 'right';
-        ctx.textBaseline = 'middle';
-        ctx.fillText('MSA', LABEL_WIDTH - 6, MAIN_GC_TRACK_H + MAIN_MSA_TRACK_H / 2);
+        // MSA overview label (sticky Y)
+        ctx.fillText('MSA', LABEL_WIDTH - 6, scrollTop + MAIN_GC_TRACK_H + MAIN_MSA_TRACK_H / 2);
 
-        // Sequence row labels
-        for (let row = 0; row < sequences.length; row++) {
-            const s = sequences[row];
+        // Sequence row labels (culled by Y-axis)
+        for (let row = firstRow; row <= lastRow; row++) {
             const y = MAIN_GC_TRACK_H + MAIN_MSA_TRACK_H + RULER_HEIGHT + row * ROW_HEIGHT;
             const isQuery = row === 0;
 
-            ctx.fillStyle = isQuery
-                ? (isDark ? '#0c4a6e' : '#f0f9ff') // Dark blue vs Light blue
-                : (isDark ? '#1e293b' : '#ffffff'); // Slate-800 vs White
-            ctx.fillRect(0, y, LABEL_WIDTH - 1, ROW_HEIGHT);
+            const labelY = y + ROW_HEIGHT / 2;
+            const text = sequences[row].id;
 
-            ctx.fillStyle = isQuery
-                ? (isDark ? '#bae6fd' : '#0369a1') // Light blue vs Dark blue
-                : (isDark ? '#e2e8f0' : '#475569'); // Slate-200 vs Slate-600
-            ctx.font = `${isQuery ? 'bold ' : ''}10px ui-monospace, SFMono-Regular, monospace`;
+            // Optional: skip labels that are offscreen Y
+            if (y > scrollTop + canvasH || y + ROW_HEIGHT < scrollTop) continue;
 
+            const pColor = isQuery
+                ? (isDark ? '#3b82f6' : '#2563eb')
+                : (isDark ? '#94a3b8' : '#64748b');
+
+            ctx.fillStyle = pColor;
+            ctx.font = `${isQuery ? 'bold ' : ''}10px ui-sans-serif, system-ui, sans-serif`;
             ctx.textAlign = 'right';
             ctx.textBaseline = 'middle';
-            const lbl = s.id.length > 16 ? s.id.substring(0, 15) + '…' : s.id;
-            ctx.fillText(lbl, LABEL_WIDTH - 6, y + ROW_HEIGHT / 2);
+
+            let displayTxt = text;
+            if (ctx.measureText(displayTxt).width > LABEL_WIDTH - 20) {
+                while (displayTxt.length > 5 && ctx.measureText(displayTxt + '...').width > LABEL_WIDTH - 20) {
+                    displayTxt = displayTxt.slice(0, -1);
+                }
+                displayTxt += '...';
+            }
+            ctx.fillText(displayTxt, LABEL_WIDTH - 12, labelY);
         }
 
         // ── Hover cursor line on main canvas ──
@@ -870,15 +893,14 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
                 ctx.strokeStyle = hasMismatch ? '#ef4444' : '#3b82f6';
                 ctx.lineWidth = 1;
                 ctx.beginPath();
-                ctx.moveTo(Math.floor(hx) + 0.5, 0);
-                ctx.lineTo(Math.floor(hx) + 0.5, totalH);
+                ctx.moveTo(Math.floor(hx) + 0.5, scrollTop);
+                ctx.lineTo(Math.floor(hx) + 0.5, scrollTop + canvasH);
                 ctx.stroke();
             }
         }
 
-        ctx.fillStyle = isDark ? '#334155' : '#cbd5e1';
-        ctx.fillRect(LABEL_WIDTH - 1, 0, 1, totalH);
-    }, [sequences, querySeq, scrollLeft, cellW, seqAreaW, availableWidth, totalH, seqLen, viewMode, primers, gcContent, hoverCol, isDarkMode]);
+        ctx.restore(); // restore translate
+    }, [sequences, querySeq, scrollLeft, scrollTop, cellW, seqAreaW, availableWidth, totalH, seqLen, viewMode, primers, gcContent, hoverCol, isDarkMode]);
 
     useEffect(() => { draw(); }, [draw]);
 
@@ -886,6 +908,7 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
     const handleScroll = () => {
         if (!isDragging.current && scrollRef.current) {
             setScrollLeft(scrollRef.current.scrollLeft);
+            setScrollTop(scrollRef.current.scrollTop);
         }
     };
 
@@ -1149,15 +1172,15 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
             {/* ── scrollable canvas area ── */}
             <div
                 ref={scrollRef}
-                className={`overflow-y-auto overscroll-contain ${viewFraction >= 0.99 ? 'overflow-x-hidden' : 'overflow-x-auto'}`}
+                className={`overflow-y-auto overscroll-contain relative ${viewFraction >= 0.99 ? 'overflow-x-hidden' : 'overflow-x-auto'}`}
                 style={{ height: `${Math.min(totalH, MAX_VIEWER_HEIGHT)}px` }}
                 onScroll={handleScroll}
                 onWheel={handleWheel}
             >
-                <div style={{ width: `${LABEL_WIDTH + totalVirtualW}px`, height: '1px' }} />
+                <div style={{ width: `${LABEL_WIDTH + totalVirtualW}px`, height: `${totalH}px`, position: 'absolute', pointerEvents: 'none' }} />
                 <canvas
                     ref={canvasRef}
-                    style={{ display: 'block', position: 'sticky', top: 0, left: 0, cursor: viewMode === 'letters' ? 'pointer' : 'crosshair' }}
+                    style={{ display: 'block', position: 'sticky', top: 0, left: 0, zIndex: 10, cursor: viewMode === 'letters' ? 'pointer' : 'crosshair' }}
                     onClick={handleCanvasClick}
                     onMouseDown={handleCanvasMouseDown}
                     onMouseMove={handleCanvasMouseMove}
