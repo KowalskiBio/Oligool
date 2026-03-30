@@ -40,6 +40,27 @@ pip install -r backend/requirements.txt
 python3 webview_app.py
 ```
 
+### Ubuntu Server Setup
+
+To instantly deploy Oligool on a fresh Ubuntu VM:
+
+1. Copy or clone the `Oligool` project folder onto your VM.
+2. Navigate into the root of the project:
+   ```bash
+   cd Oligool
+   ```
+3. Run the automated setup script (requires `sudo` privileges to install system dependencies and set up the service):
+   ```bash
+   chmod +x scripts/setup_ubuntu.sh
+   sudo bash scripts/setup_ubuntu.sh
+   ```
+
+*What the script does:*
+- Installs all system dependencies (Python, Node.js, `mafft`, etc.).
+- Builds the Vite frontend.
+- Sets up a Python virtual environment and installs the FastAPI backend.
+- Automatically creates and starts an `oligool.service` systemd daemon so the app runs in the background on port 8000 and restarts on boot.
+
 ### Native Application Bundling
 
 #### macOS (.app / .dmg)
