@@ -84,7 +84,13 @@ def run_msa(sequences: List[Dict[str, str]]) -> str:
                 env["PATH"] = libexec_dir + os.pathsep + os.path.dirname(mafft_exe) + os.pathsep + env["PATH"]
 
         try:
-            cmd = [mafft_exe, '--auto', '--quiet', input_file]
+            # If we have a massive number of sequences (>100), '--auto' becomes O(N^2)
+            # which can take several minutes on weak VMs and trigger Cloudflare 100s timeouts.
+            # Using '--parttree' provides O(N log N) speed which finishes in seconds.
+            if len(sequences) > 100:
+                cmd = [mafft_exe, '--parttree', '--retree', '1', '--quiet', input_file]
+            else:
+                cmd = [mafft_exe, '--auto', '--quiet', input_file]
             
             # Prevent CMD window from flashing on Windows
             creationflags = 0
@@ -99,7 +105,10 @@ def run_msa(sequences: List[Dict[str, str]]) -> str:
         
     except subprocess.CalledProcessError as e:
         # If MAFFT fails, raise error with details
-        raise RuntimeError(f"MAFFT alignment failed: {e.stderr}")
+        if e.returncode == -9:
+            raise RuntimeError(f"MAFFT alignment failed (Process Killed). This usually means the Raspberry Pi ran out of memory (RAM) while processing a large number of sequences or very long sequences.")
+        else:
+            raise RuntimeError(f"MAFFT alignment failed (Exit {e.returncode}): {e.stderr}")
     except FileNotFoundError:
         # Fallback if shutil.which somehow missed it but subprocess still caught it
         raise RuntimeError("MAFFT executable not found. Please ensure it is installed and in your PATH.")

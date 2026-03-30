@@ -84,5 +84,25 @@ Double-click `start.bat`. This script will automatically check for Python, Node.
 
 ---
 
+## Remote Access (Cloudflare Tunnel)
+
+Since Oligool runs as a standard web service on port `8000`, you can easily expose it securely to the internet without opening router ports.
+
+**If you already have a Cloudflare Tunnel (e.g., on a Raspberry Pi):**
+The easiest method is to go to your **Cloudflare Zero Trust Dashboard** -> **Access** -> **Tunnels**. Click your existing tunnel, go to **Public Hostname**, and add a new hostname:
+- **Subdomain**: `oligool`
+- **Domain**: `yourdomain.com`
+- **Service Type**: `HTTP`
+- **URL**: `YOUR_VM_IP:8000` (e.g., `192.168.1.100:8000`)
+
+**To run a dedicated tunnel directly on the Ubuntu VM:**
+1. Install `cloudflared` on the VM.
+2. Authenticate: `cloudflared tunnel login`
+3. Create a tunnel: `cloudflared tunnel create oligool-tunnel`
+4. Route traffic: `cloudflared tunnel route dns oligool-tunnel oligool.yourdomain.com`
+5. Run the tunnel: `cloudflared tunnel run --url http://localhost:8000 oligool-tunnel`
+
+---
+
 ## Privacy & Persistence
 All credentials (NCBI Key, IDT API) and design configurations are stored locally on your machine via `localStorage`. No sensitive data is transmitted to the cloud except for direct API calls to NCBI/IDT.

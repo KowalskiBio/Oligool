@@ -160,8 +160,19 @@ function App() {
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || 'Search failed');
+        let errorMsg = `Server error: ${response.status} ${response.statusText}`;
+        try {
+          const errorData = await response.json();
+          errorMsg = errorData.detail || errorMsg;
+        } catch (e) {
+          // Fallback if response is not JSON (e.g., Cloudflare 504 HTML page)
+          if (response.status === 504) {
+            errorMsg = "Cloudflare Timeout (504): The NCBI BLAST search took too long. Please add an NCBI API Key in Settings to speed up the search!";
+          } else if (response.status === 502) {
+            errorMsg = "Bad Gateway (502): The Oligool backend is currently down or restarting on your VM.";
+          }
+        }
+        throw new Error(errorMsg);
       }
 
       const data = await response.json();
