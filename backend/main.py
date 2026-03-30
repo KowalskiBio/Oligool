@@ -13,7 +13,8 @@ from backend.alignment import run_msa
 from backend.blast import run_blast
 import json
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
+import asyncio
 
 
 app = FastAPI()
@@ -79,64 +80,82 @@ class BlastHit(BaseModel):
 async def search_and_align(request: SearchRequest):
     """
     Full pipeline: BLAST a query sequence, then run MSA on the top hits.
+    Uses StreamingResponse to send blank spaces periodically, keeping Cloudflare alive 
+    during 100+ second calculations.
     """
     if not request.sequence.strip():
         raise HTTPException(status_code=400, detail="Sequence cannot be empty.")
 
-    try:
-        # Step 1: Run BLAST
-        blast_hits, blast_meta = run_blast(
-            request.sequence,
-            max_hits=request.max_hits,
-            api_key=request.api_key,
-            organism=request.organism,
-            e_value=request.e_value,
-            perc_identity=request.perc_identity,
-        )
+    def run_heavy_pipeline():
+        try:
+            # Step 1: Run BLAST
+            blast_hits, blast_meta = run_blast(
+                request.sequence,
+                max_hits=request.max_hits,
+                api_key=request.api_key,
+                organism=request.organism,
+                e_value=request.e_value,
+                perc_identity=request.perc_identity,
+            )
 
-        if not blast_hits:
-            raise HTTPException(status_code=404, detail="No BLAST hits found.")
+            if not blast_hits:
+                return {"error": True, "detail": "No BLAST hits found."}
 
-        # Step 2: Prepare sequences for MSA (query + hits)
-        # Parse query: if it starts with '>', extract the header, otherwise use "Query"
-        lines = request.sequence.strip().split("\n")
-        if lines[0].startswith(">"):
-            query_id = lines[0][1:].strip()
-            query_seq = "".join(l.strip() for l in lines[1:] if not l.startswith(">"))
-        else:
-            query_id = "Query"
-            query_seq = request.sequence.strip().replace(" ", "").replace("\n", "")
+            # Step 2: Prepare sequences for MSA (query + hits)
+            lines = request.sequence.strip().split("\n")
+            if lines[0].startswith(">"):
+                query_id = lines[0][1:].strip()
+                query_seq = "".join(l.strip() for l in lines[1:] if not l.startswith(">"))
+            else:
+                query_id = "Query"
+                query_seq = request.sequence.strip().replace(" ", "").replace("\n", "")
 
-        msa_input = [{"id": query_id, "seq": query_seq}]
-        for hit in blast_hits:
-            msa_input.append({"id": hit["accession"], "seq": hit["sequence"]})
+            msa_input = [{"id": query_id, "seq": query_seq}]
+            for hit in blast_hits:
+                msa_input.append({"id": hit["accession"], "seq": hit["sequence"]})
 
-        # Step 3: Run MSA
-        alignment = run_msa(msa_input)
+            # Step 3: Run MSA
+            alignment = run_msa(msa_input)
 
-        # Build hit summary for the frontend
-        hit_summary = [
-            {
-                "accession": h["accession"],
-                "description": h["description"],
-                "evalue": h["evalue"],
-                "identity": h["identity"],
-                "query_cover": h["query_cover"],
+            # Build hit summary for the frontend
+            hit_summary = [
+                {
+                    "accession": h["accession"],
+                    "description": h["description"],
+                    "evalue": h["evalue"],
+                    "identity": h["identity"],
+                    "query_cover": h["query_cover"],
+                }
+                for h in blast_hits
+            ]
+
+            return {
+                "blast_hits": hit_summary,
+                "blast_meta": blast_meta,
+                "alignment": alignment,
+                "num_hits": len(blast_hits),
             }
-            for h in blast_hits
-        ]
+        except Exception as e:
+            return {"error": True, "detail": str(e)}
 
-        return {
-            "blast_hits": hit_summary,
-            "blast_meta": blast_meta,
-            "alignment": alignment,
-            "num_hits": len(blast_hits),
-        }
+    async def generate_response():
+        # Schedule the heavy blocking work on a background thread
+        task = asyncio.create_task(asyncio.to_thread(run_heavy_pipeline))
+        
+        while not task.done():
+            # Yield a space character over the TCP stream to prevent Cloudflare Timeout
+            yield b" "
+            
+            # Wait 15 seconds or until the task finishes, whichever comes first
+            done, pending = await asyncio.wait([task], timeout=15.0)
+            if done:
+                break
+                
+        # Send the finalized, perfectly formatted JSON string at the very end
+        result = task.result()
+        yield json.dumps(result).encode("utf-8")
 
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    return StreamingResponse(generate_response(), media_type="application/json")
 
 
 # Keep the old /align endpoint for direct MSA usage

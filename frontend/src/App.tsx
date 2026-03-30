@@ -176,6 +176,10 @@ function App() {
       }
 
       const data = await response.json();
+      if (data.error) {
+        throw new Error(data.detail || 'Search or alignment failed');
+      }
+
       setBlastHits(data.blast_hits);
       setBlastMeta(data.blast_meta);
       setStep('aligning');
