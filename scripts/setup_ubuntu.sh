@@ -11,9 +11,27 @@ if [ ! -d "backend" ] || [ ! -d "frontend" ]; then
     exit 1
 fi
 
-echo ">> [1/4] Installing system dependencies (requires sudo)..."
+echo ">> [1/5] Installing system dependencies (requires sudo)..."
 sudo apt-get update
-sudo apt-get install -y curl python3 python3-venv python3-pip mafft build-essential
+sudo apt-get install -y curl python3 python3-venv python3-pip build-essential wget
+
+# Remove apt mafft if present (it lacks multithreading support)
+sudo apt-get remove -y mafft 2>/dev/null || true
+
+echo ">> [2/5] Building MAFFT from source (with multithreading)..."
+MAFFT_VERSION="7.526"
+cd /tmp
+wget -q "https://mafft.cbrc.jp/alignment/software/mafft-${MAFFT_VERSION}-without-extensions-src.tgz"
+tar xzf "mafft-${MAFFT_VERSION}-without-extensions-src.tgz"
+cd "mafft-${MAFFT_VERSION}-without-extensions/core"
+# Enable multithreading (pthread) — this is what the apt package is missing
+sed -i 's/^# ENABLE_MULTITHREAD/ENABLE_MULTITHREAD/' Makefile
+make clean
+make -j$(nproc)
+sudo make install
+cd /tmp
+rm -rf "mafft-${MAFFT_VERSION}-without-extensions" "mafft-${MAFFT_VERSION}-without-extensions-src.tgz"
+cd -
 
 # Ensure Node.js is installed
 if ! command -v node &> /dev/null || [[ $(node -v) != v20* && $(node -v) != v22* && $(node -v) != v18* ]]; then
@@ -22,13 +40,13 @@ if ! command -v node &> /dev/null || [[ $(node -v) != v20* && $(node -v) != v22*
     sudo apt-get install -y nodejs
 fi
 
-echo ">> [2/4] Building the Frontend (Vite/React)..."
+echo ">> [3/5] Building the Frontend (Vite/React)..."
 cd frontend
 npm install
 npm run build
 cd ..
 
-echo ">> [3/4] Setting up the Python Virtual Environment & Backend..."
+echo ">> [4/5] Setting up the Python Virtual Environment & Backend..."
 python3 -m venv backend/venv
 source backend/venv/bin/activate
 pip install --upgrade pip
@@ -36,7 +54,7 @@ pip install -r backend/requirements.txt
 # Uvicorn is needed for serving via systemd
 pip install uvicorn
 
-echo ">> [4/4] Configuring systemd service (oligool.service)..."
+echo ">> [5/5] Configuring systemd service (oligool.service)..."
 CURRENT_DIR=$(pwd)
 CURRENT_USER=$USER
 
