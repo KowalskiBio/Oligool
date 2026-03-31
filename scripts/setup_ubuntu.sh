@@ -20,6 +20,7 @@ sudo apt-get remove -y mafft 2>/dev/null || true
 
 echo ">> [2/5] Building MAFFT from source (with multithreading)..."
 MAFFT_VERSION="7.525"
+ORIG_DIR=$(pwd)
 cd /tmp
 wget -q "https://mafft.cbrc.jp/alignment/software/mafft-${MAFFT_VERSION}-without-extensions-src.tgz"
 tar xzf "mafft-${MAFFT_VERSION}-without-extensions-src.tgz"
@@ -31,7 +32,7 @@ make -j$(nproc)
 sudo make install
 cd /tmp
 rm -rf "mafft-${MAFFT_VERSION}-without-extensions" "mafft-${MAFFT_VERSION}-without-extensions-src.tgz"
-cd -
+cd "$ORIG_DIR"
 
 # Ensure Node.js is installed
 if ! command -v node &> /dev/null || [[ $(node -v) != v20* && $(node -v) != v22* && $(node -v) != v18* ]]; then
