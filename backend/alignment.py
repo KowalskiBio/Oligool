@@ -88,9 +88,9 @@ def run_msa(sequences: List[Dict[str, str]]) -> str:
             # which can take several minutes on weak VMs and trigger Cloudflare 100s timeouts.
             # Using '--parttree' provides O(N log N) speed which finishes in seconds.
             if len(sequences) > 100:
-                cmd = [mafft_exe, '--parttree', '--retree', '1', '--thread', '-1', '--quiet', input_file]
+                cmd = [mafft_exe, '--parttree', '--retree', '1', '--thread', '-1', '--threadtb', '-1', '--threadit', '-1', '--quiet', input_file]
             else:
-                cmd = [mafft_exe, '--auto', '--thread', '-1', '--quiet', input_file]
+                cmd = [mafft_exe, '--auto', '--thread', '-1', '--threadtb', '-1', '--threadit', '-1', '--quiet', input_file]
             
             # Prevent CMD window from flashing on Windows
             creationflags = 0
