@@ -19,13 +19,13 @@ sudo apt-get install -y curl python3 python3-venv python3-pip build-essential wg
 sudo apt-get remove -y mafft 2>/dev/null || true
 
 echo ">> [2/5] Building MAFFT from source (with multithreading)..."
-MAFFT_VERSION="7.526"
+MAFFT_VERSION="7.525"
 cd /tmp
 wget -q "https://mafft.cbrc.jp/alignment/software/mafft-${MAFFT_VERSION}-without-extensions-src.tgz"
 tar xzf "mafft-${MAFFT_VERSION}-without-extensions-src.tgz"
 cd "mafft-${MAFFT_VERSION}-without-extensions/core"
 # Enable multithreading (pthread) — this is what the apt package is missing
-sed -i 's/^# ENABLE_MULTITHREAD/ENABLE_MULTITHREAD/' Makefile
+sed -i 's/^#\s*ENABLE_MULTITHREAD/ENABLE_MULTITHREAD/' Makefile
 make clean
 make -j$(nproc)
 sudo make install

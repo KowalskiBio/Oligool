@@ -87,10 +87,15 @@ def run_msa(sequences: List[Dict[str, str]]) -> str:
             # If we have a massive number of sequences (>100), '--auto' becomes O(N^2)
             # which can take several minutes on weak VMs and trigger Cloudflare 100s timeouts.
             # Using '--parttree' provides O(N log N) speed which finishes in seconds.
+            # MAFFT's --thread -1 (auto-detect) fails in VMs (e.g. Proxmox) — it sees
+            # 1 physical core instead of the allocated vCPUs. Use Python's os.cpu_count()
+            # which correctly reads the VM's core count.
+            num_threads = str(os.cpu_count() or 1)
+            
             if len(sequences) > 100:
-                cmd = [mafft_exe, '--parttree', '--retree', '1', '--thread', '-1', '--threadtb', '-1', '--threadit', '-1', '--quiet', input_file]
+                cmd = [mafft_exe, '--parttree', '--retree', '1', '--thread', num_threads, '--threadtb', num_threads, '--threadit', num_threads, '--quiet', input_file]
             else:
-                cmd = [mafft_exe, '--auto', '--thread', '-1', '--threadtb', '-1', '--threadit', '-1', '--quiet', input_file]
+                cmd = [mafft_exe, '--auto', '--thread', num_threads, '--threadtb', num_threads, '--threadit', num_threads, '--quiet', input_file]
             
             # Prevent CMD window from flashing on Windows
             creationflags = 0
