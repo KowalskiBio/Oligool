@@ -18,6 +18,7 @@ def run_blast(
     organism: Optional[str] = None,
     e_value: Optional[float] = None,
     perc_identity: Optional[float] = None,
+    filter_matches: bool = False,
 ) -> Tuple[List[Dict], Dict]:
     """
     Run NCBI BLAST search using the REST API and return top hits.
@@ -138,6 +139,10 @@ def run_blast(
     if perc_identity is not None:
         print(f"[BLAST] Filtering by % identity >= {perc_identity}")
         hits = [h for h in hits if h["identity"] >= perc_identity]
+
+    if filter_matches:
+        print(f"[BLAST] Filtering out 100% exact matches")
+        hits = [h for h in hits if h["identity"] < 100.0]
 
     print(f"[BLAST] Returning {len(hits)} hits")
     metadata = {

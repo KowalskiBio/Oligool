@@ -33,6 +33,7 @@ function App() {
   const [organism, setOrganism] = useState(() => localStorage.getItem('organism') || '');
   const [eValue, setEValue] = useState(() => localStorage.getItem('e_value') || '0.05');
   const [percIdentity, setPercIdentity] = useState(() => localStorage.getItem('perc_identity') || '0');
+  const [filterMatches, setFilterMatches] = useState(() => localStorage.getItem('filter_matches') === 'true');
 
   const [isDarkMode, setIsDarkMode] = useState(() => {
     const saved = localStorage.getItem('theme');
@@ -59,6 +60,7 @@ function App() {
   useEffect(() => { localStorage.setItem('organism', organism); }, [organism]);
   useEffect(() => { localStorage.setItem('e_value', eValue); }, [eValue]);
   useEffect(() => { localStorage.setItem('perc_identity', percIdentity); }, [percIdentity]);
+  useEffect(() => { localStorage.setItem('filter_matches', filterMatches.toString()); }, [filterMatches]);
   useEffect(() => { localStorage.setItem('max_hits_preset', maxHitsPreset); }, [maxHitsPreset]);
   useEffect(() => { localStorage.setItem('custom_hits', customHits); }, [customHits]);
   useEffect(() => { localStorage.setItem('job_name', jobName); }, [jobName]);
@@ -162,6 +164,7 @@ function App() {
           organism: organism.trim() || undefined,
           e_value: parseFloat(eValue) || undefined,
           perc_identity: parseFloat(percIdentity) || undefined,
+          filter_matches: filterMatches,
         }),
       });
 
@@ -544,6 +547,34 @@ function App() {
                   />
                 </div>
               </div>
+
+              {/* Filter Matches Toggle */}
+              <div className="flex items-center gap-2">
+                <label className="text-xs font-medium text-slate-500 dark:text-slate-400">Filter matches:</label>
+                <div className="flex rounded-lg overflow-hidden border border-slate-300 dark:border-slate-600">
+                  <button
+                    type="button"
+                    onClick={() => setFilterMatches(true)}
+                    disabled={step !== 'input'}
+                    className={`px-2.5 py-1 text-xs font-medium transition-colors disabled:opacity-50 ${
+                      filterMatches ? 'bg-indigo-500 text-white' : 'bg-white dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-600'
+                    }`}
+                  >
+                    Yes
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFilterMatches(false)}
+                    disabled={step !== 'input'}
+                    className={`px-2.5 py-1 text-xs font-medium transition-colors disabled:opacity-50 border-l border-slate-300 dark:border-slate-600 ${
+                      !filterMatches ? 'bg-indigo-500 text-white' : 'bg-white dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-600'
+                    }`}
+                  >
+                    No
+                  </button>
+                </div>
+              </div>
+
               <div className="flex gap-3">
                 {step !== 'input' && (
                   <button

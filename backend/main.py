@@ -66,6 +66,7 @@ class SearchRequest(BaseModel):
     organism: Optional[str] = None
     e_value: Optional[float] = None
     perc_identity: Optional[float] = None
+    filter_matches: bool = False
 
 
 class BlastHit(BaseModel):
@@ -96,6 +97,7 @@ async def search_and_align(request: SearchRequest):
                 organism=request.organism,
                 e_value=request.e_value,
                 perc_identity=request.perc_identity,
+                filter_matches=request.filter_matches,
             )
 
             if not blast_hits:
