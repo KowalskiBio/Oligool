@@ -1,5 +1,25 @@
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 
+/* ── helpers ────────────────────────────────────────── */
+const getPrettyStep = (minPixels: number, pixelsPerUnit: number) => {
+    const minUnits = minPixels / pixelsPerUnit;
+    // standard clean steps: 1, 2, 5, 10, 25, 50, 100...
+    const steps = [
+        1, 2, 5, 10, 20, 50, 100, 250, 500, 1000, 2500, 5000, 10000, 25000
+    ];
+    return steps.find(s => s >= minUnits) || steps[steps.length - 1];
+};
+
+function seqStart(seq: string): number {
+    for (let i = 0; i < seq.length; i++) if (seq[i] !== '-') return i;
+    return 0;
+}
+
+function seqEnd(seq: string): number {
+    for (let i = seq.length - 1; i >= 0; i--) if (seq[i] !== '-') return i;
+    return seq.length - 1;
+}
+
 export interface ParsedSequence {
     id: string;
     seq: string;
@@ -48,6 +68,10 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
     const hoverRafRef = useRef<number>(0);
     const redrawRef = useRef<() => void>(() => { });
     const [showOverview, setShowOverview] = useState(true);
+
+    // Offscreen canvas for minimap static background
+    const offscreenMinimapRef = useRef<HTMLCanvasElement | null>(null);
+    const staticMinimapDrawnRef = useRef<boolean>(false);
 
     /* ── parse FASTA ────────────────────────────────────── */
     const sequences = useMemo<ParsedSequence[]>(() => {
@@ -215,9 +239,127 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
         return { g, c, a, t, total, gcPct };
     }, [sequences, startCol, endCol]);
 
-    /* ══════════════════════════════════════════════════════
-       MINIMAP DRAWING
-       ══════════════════════════════════════════════════════ */
+    const drawMinimapBackground = useCallback(() => {
+        if (!sequences.length) return;
+        if (!offscreenMinimapRef.current) {
+            offscreenMinimapRef.current = document.createElement('canvas');
+        }
+        const cvs = offscreenMinimapRef.current;
+        const ctx = cvs.getContext('2d', { alpha: false });
+        if (!ctx) return;
+
+        const dpr = window.devicePixelRatio || 1;
+        cvs.width = availableWidth * dpr;
+        cvs.height = MINIMAP_HEIGHT * dpr;
+        ctx.scale(dpr, dpr);
+
+        const mmSeqW = availableWidth - LABEL_WIDTH - RIGHT_PADDING;
+        const rowsTop = MINIMAP_GC_H + MINIMAP_RULER_H;
+        const rowAreaH = MINIMAP_HEIGHT - rowsTop - MINIMAP_HANDLE_H;
+        const rowH = rowAreaH / sequences.length;
+        const rowDrawH = Math.max(1, rowH);
+
+        ctx.fillStyle = isDark ? '#0f172a' : '#f8fafc';
+        ctx.fillRect(0, 0, availableWidth, MINIMAP_HEIGHT);
+
+        ctx.fillStyle = isDark ? '#94a3b8' : '#94a3b8';
+        ctx.font = '7px ui-monospace, SFMono-Regular, monospace';
+        ctx.textAlign = 'right';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('GC%', LABEL_WIDTH - 4, MINIMAP_GC_H / 2);
+        ctx.fillText('MSA', LABEL_WIDTH - 4, rowsTop + rowAreaH / 2);
+
+        for (let col = 0; col < seqLen; col++) {
+            const x = LABEL_WIDTH + (col / seqLen) * mmSeqW;
+            const w = Math.max(1, mmSeqW / seqLen);
+            const gc = gcContent[col] || 0;
+            const r = Math.round(255 - gc * 150);
+            const g = Math.round(180 + gc * 60);
+            const b = Math.round(50 + gc * 100);
+            ctx.fillStyle = `rgb(${r},${g},${b})`;
+            const barH = gc * MINIMAP_GC_H;
+            ctx.fillRect(x, MINIMAP_GC_H - barH, w, barH);
+        }
+        ctx.fillStyle = isDark ? '#334155' : '#e2e8f0';
+        ctx.fillRect(LABEL_WIDTH, MINIMAP_GC_H - 0.5, mmSeqW, 0.5);
+
+        ctx.fillStyle = '#94a3b8';
+        ctx.font = '8px ui-monospace, SFMono-Regular, monospace';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'bottom';
+        const tickInt = getPrettyStep(150, mmSeqW / seqLen);
+        for (let col = 0; col < seqLen; col++) {
+            if ((col + 1) % tickInt === 0) {
+                const x = LABEL_WIDTH + ((col + 0.5) / seqLen) * mmSeqW;
+                ctx.fillStyle = isDark ? '#334155' : '#cbd5e1';
+                ctx.fillRect(x, MINIMAP_GC_H + MINIMAP_RULER_H - 4, 1, 4);
+                ctx.fillStyle = '#94a3b8';
+                ctx.fillText(String(col + 1), x, MINIMAP_GC_H + MINIMAP_RULER_H - 5);
+            }
+        }
+        ctx.fillStyle = isDark ? '#334155' : '#e2e8f0';
+        ctx.fillRect(LABEL_WIDTH, rowsTop - 0.5, mmSeqW, 0.5);
+
+        const sampleStep = Math.max(1, Math.floor(sequences.length / 200));
+        for (let row = 0; row < sequences.length; row += sampleStep) {
+            const s = sequences[row];
+            const y = rowsTop + row * rowH;
+            const isQuery = row === 0;
+
+            const sStart = seqStart(s.seq);
+            const sEnd = seqEnd(s.seq);
+            if (sStart <= sEnd) {
+                const x1 = LABEL_WIDTH + (sStart / seqLen) * mmSeqW;
+                const x2 = LABEL_WIDTH + ((sEnd + 1) / seqLen) * mmSeqW;
+                ctx.fillStyle = isQuery ? (isDark ? '#1e3a8a' : '#bfdbfe') : (isDark ? '#334155' : '#d1d5db');
+                ctx.fillRect(x1, y, x2 - x1, rowDrawH);
+            }
+
+            const pxStep = Math.max(1, seqLen / mmSeqW);
+            for (let x = 0; x < mmSeqW; x++) {
+                const colBase = Math.floor((x / mmSeqW) * seqLen);
+                const sampleCols = [colBase];
+                if (pxStep > 2) sampleCols.push(colBase + Math.floor(pxStep / 2));
+
+                for (const col of sampleCols) {
+                    if (col >= seqLen) continue;
+                    const ch = (s.seq[col] || '-').toUpperCase();
+                    const qch = (querySeq[col] || '-').toUpperCase();
+                    const isInternalDeletion = !isQuery && ch === '-' && col >= sStart && col <= sEnd;
+                    const isInsertion = !isQuery && qch === '-' && ch !== '-';
+
+                    if (isInternalDeletion || isInsertion) {
+                        ctx.fillStyle = '#9333ea';
+                        ctx.fillRect(LABEL_WIDTH + x, y, 1.2, rowDrawH);
+                        break;
+                    } else if (!isQuery && ch !== '-' && ch !== qch && qch !== '-') {
+                        ctx.fillStyle = '#dc2626';
+                        ctx.fillRect(LABEL_WIDTH + x, y, 1.2, rowDrawH);
+                        break;
+                    }
+                }
+            }
+        }
+        
+        if (primers) {
+            const mmRulerY = MINIMAP_GC_H;
+            const mmRulerH = MINIMAP_RULER_H;
+            const p1x = LABEL_WIDTH + (primers.p1.start / seqLen) * mmSeqW;
+            const p1w = Math.max(1, ((primers.p1.end - primers.p1.start) / seqLen) * mmSeqW);
+            ctx.fillStyle = '#22c55e';
+            ctx.fillRect(p1x, mmRulerY + mmRulerH - 4, p1w, 4);
+            const p2x = LABEL_WIDTH + (primers.p2.start / seqLen) * mmSeqW;
+            const p2w = Math.max(1, ((primers.p2.end - primers.p2.start) / seqLen) * mmSeqW);
+            ctx.fillStyle = '#facc15';
+            ctx.fillRect(p2x, mmRulerY + mmRulerH - 4, p2w, 4);
+        }
+
+        ctx.fillStyle = isDark ? '#334155' : '#cbd5e1';
+        ctx.fillRect(LABEL_WIDTH - 1, 0, 1, MINIMAP_HEIGHT);
+
+        staticMinimapDrawnRef.current = true;
+    }, [sequences, querySeq, seqLen, availableWidth, gcContent, primers, isDark]);
+
     const drawMinimap = useCallback(() => {
         const cvs = minimapRef.current;
         if (!cvs || sequences.length === 0) return;
@@ -231,196 +373,58 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
         cvs.style.height = `${MINIMAP_HEIGHT}px`;
         ctx.scale(dpr, dpr);
 
+        if (!staticMinimapDrawnRef.current) {
+            drawMinimapBackground();
+        }
+
+        if (offscreenMinimapRef.current) {
+            ctx.drawImage(offscreenMinimapRef.current, 0, 0, availableWidth * dpr, MINIMAP_HEIGHT * dpr, 0, 0, availableWidth, MINIMAP_HEIGHT);
+        }
+
         const mmSeqW = availableWidth - LABEL_WIDTH - RIGHT_PADDING;
-
-        // helper for pretty ruler steps
-        const getPrettyStep = (minPixels: number, pixelsPerUnit: number) => {
-            const minUnits = minPixels / pixelsPerUnit;
-            const steps = [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000, 10000];
-            return steps.find(s => s >= minUnits) || steps[steps.length - 1];
-        };
-
         const rowsTop = MINIMAP_GC_H + MINIMAP_RULER_H;
-        const rowAreaH = MINIMAP_HEIGHT - rowsTop - MINIMAP_HANDLE_H; // subtract handle height
-        const rowH = rowAreaH / sequences.length; // fractional for correct positioning
-        const rowDrawH = Math.max(1, rowH); // minimum 1px for visibility
+        const rowAreaH = MINIMAP_HEIGHT - rowsTop - MINIMAP_HANDLE_H;
 
-        // We use the isDark defined at the component level
-
-        // background
-        ctx.fillStyle = isDark ? '#0f172a' : '#f8fafc';
-        ctx.fillRect(0, 0, availableWidth, MINIMAP_HEIGHT);
-
-        // ── GC content bar ──
-        ctx.fillStyle = isDark ? '#94a3b8' : '#94a3b8';
-        ctx.font = '7px ui-monospace, SFMono-Regular, monospace';
-        ctx.textAlign = 'right';
-        ctx.textBaseline = 'middle';
-        ctx.fillText('GC%', LABEL_WIDTH - 4, MINIMAP_GC_H / 2);
-        // MSA label
-        ctx.fillText('MSA', LABEL_WIDTH - 4, rowsTop + rowAreaH / 2);
-        for (let col = 0; col < seqLen; col++) {
-            const x = LABEL_WIDTH + (col / seqLen) * mmSeqW;
-            const w = Math.max(1, mmSeqW / seqLen);
-            const gc = gcContent[col] || 0;
-            // color: low GC = warm yellow/amber, high GC = green/teal
-            const r = Math.round(255 - gc * 150);
-            const g = Math.round(180 + gc * 60);
-            const b = Math.round(50 + gc * 100);
-            ctx.fillStyle = `rgb(${r},${g},${b})`;
-            const barH = gc * MINIMAP_GC_H;
-            ctx.fillRect(x, MINIMAP_GC_H - barH, w, barH);
-        }
-        // separator below GC bar
-        ctx.fillStyle = isDark ? '#334155' : '#e2e8f0';
-        ctx.fillRect(LABEL_WIDTH, MINIMAP_GC_H - 0.5, mmSeqW, 0.5);
-
-        // ── ruler ticks ──
-        ctx.fillStyle = '#94a3b8';
-        ctx.font = '8px ui-monospace, SFMono-Regular, monospace';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'bottom';
-        const tickInt = getPrettyStep(40, mmSeqW / seqLen);
-        for (let col = 0; col < seqLen; col++) {
-            if ((col + 1) % tickInt === 0) {
-                const x = LABEL_WIDTH + ((col + 0.5) / seqLen) * mmSeqW;
-                ctx.fillStyle = isDark ? '#334155' : '#cbd5e1';
-                ctx.fillRect(x, MINIMAP_GC_H + MINIMAP_RULER_H - 4, 1, 4);
-                ctx.fillStyle = '#94a3b8';
-                ctx.fillText(String(col + 1), x, MINIMAP_GC_H + MINIMAP_RULER_H - 5);
-            }
-        }
-
-        // separator line below ruler
-        ctx.fillStyle = isDark ? '#334155' : '#e2e8f0';
-        ctx.fillRect(LABEL_WIDTH, rowsTop - 0.5, mmSeqW, 0.5);
-
-        // sequence overview rows (Sampled for massive MSAs to prevent lag)
-        const sampleStep = Math.max(1, Math.floor(sequences.length / 200));
-        for (let row = 0; row < sequences.length; row += sampleStep) {
-            const s = sequences[row];
-            const y = rowsTop + row * rowH;
-            const isQuery = row === 0;
-
-            const sStart = seqStart(s.seq);
-            const sEnd = seqEnd(s.seq);
-            if (sStart <= sEnd) {
-                const x1 = LABEL_WIDTH + (sStart / seqLen) * mmSeqW;
-                const x2 = LABEL_WIDTH + ((sEnd + 1) / seqLen) * mmSeqW;
-                ctx.fillStyle = isQuery
-                    ? (isDark ? '#1e3a8a' : '#bfdbfe')
-                    : (isDark ? '#334155' : '#d1d5db');
-                ctx.fillRect(x1, y, x2 - x1, rowDrawH);
-            }
-
-            for (let col = 0; col < seqLen; col++) {
-                const ch = (s.seq[col] || '-').toUpperCase();
-                const qch = (querySeq[col] || '-').toUpperCase();
-
-                const x = LABEL_WIDTH + (col / seqLen) * mmSeqW;
-                const w = Math.max(1, mmSeqW / seqLen);
-                const h = rowDrawH;
-
-                // Violet for:
-                // 1) Insertion vs Query (qch == '-')
-                // 2) Internal Deletion (ch == '-' inside start/end)
-                const isInternalDeletion = !isQuery && ch === '-' && col >= sStart && col <= sEnd;
-                const isInsertion = !isQuery && qch === '-' && ch !== '-';
-
-                if (isInternalDeletion || isInsertion) {
-                    ctx.fillStyle = '#9333ea';
-                    ctx.fillRect(x, y, w, h);
-                } else if (!isQuery && ch !== '-' && ch !== qch && qch !== '-') {
-                    // Mismatch vs Query (Red)
-                    ctx.fillStyle = '#dc2626';
-                    ctx.fillRect(x, y, w, h);
-                }
-            }
-        }
-
-        // ── viewport highlight (blue) or selection (green) ──
-
-        // 1) Draw Selection (Green) if active
         if (selectionRange) {
             const s = Math.min(selectionRange.start, selectionRange.end);
             const e = Math.max(selectionRange.start, selectionRange.end);
             const selX = Math.floor(LABEL_WIDTH + s * mmSeqW) + 0.5;
             const selW = Math.max(1, Math.floor((e - s) * mmSeqW));
-
-            ctx.fillStyle = 'rgba(74, 222, 128, 0.4)'; // Pastel Green
+            ctx.fillStyle = 'rgba(74, 222, 128, 0.4)';
             ctx.fillRect(selX, rowsTop, selW, rowAreaH);
-
-            ctx.strokeStyle = '#22c55e'; // Green border
+            ctx.strokeStyle = '#22c55e';
             ctx.lineWidth = 1;
             ctx.strokeRect(selX, rowsTop, selW, rowAreaH);
         }
 
-        // 2) Draw Viewport (Blue) ONLY if zoomed in (viewFraction < 0.99)
-        // If we are fully zoomed out, we hide the blue box as requested.
         if (viewFraction < 0.99) {
             const selX = Math.floor(LABEL_WIDTH + startFrac * mmSeqW) + 0.5;
-            const selW = Math.max(1, Math.floor((endFrac - startFrac) * mmSeqW));
-
-            // dim areas outside viewport (only if NO selection is ongoing, for clarity?)
-            // actually, standard minimap dims outside viewport usually.
-            // But user said "User would see just the empty bar".
-            // Let's keep the dimming only if blue box is visible, or maybe always?
-            // "User would see just the empty bar" suggests NO dimming initially either.
-            // So if > 0.99, we draw nothing extra.
-
-            // dim areas outside selection
+            const selW = Math.max(1, Math.ceil((endFrac - startFrac) * mmSeqW));
             ctx.fillStyle = isDark ? 'rgba(15, 23, 42, 0.6)' : 'rgba(255,255,255,0.6)';
             ctx.fillRect(LABEL_WIDTH, rowsTop, selX - LABEL_WIDTH - 0.5, rowAreaH);
             ctx.fillRect(selX + selW, rowsTop, availableWidth - (selX + selW), rowAreaH);
-
-            // selection border (Sharp 1px via +0.5 offset)
             ctx.strokeStyle = '#3b82f6';
             ctx.lineWidth = 1;
             ctx.strokeRect(selX, rowsTop, selW, rowAreaH);
-
-            // selection fill
             ctx.fillStyle = isDark ? 'rgba(59, 130, 246, 0.2)' : 'rgba(59, 130, 246, 0.08)';
             ctx.fillRect(selX, rowsTop, selW, rowAreaH);
 
-            // ── small bottom handle ──
-            const handleColor = '#3b82f6';
-            ctx.fillStyle = handleColor;
-
-            // Ensure handle has minimum visual width (16px) so it is visible even if selection is 1px
             const minHandleW = 16;
             const handleDrawW = Math.max(selW, minHandleW);
-
-            // Center the handle on the selection
             let handleX = selX + selW / 2 - handleDrawW / 2;
-
-            // Clamp to minimap bounds so it doesn't leave the area
             handleX = Math.max(LABEL_WIDTH, Math.min(LABEL_WIDTH + mmSeqW - handleDrawW, handleX));
-
-            // Draw handle rect crisp
+            ctx.fillStyle = '#3b82f6';
             ctx.fillRect(Math.floor(handleX), rowsTop + rowAreaH, handleDrawW, MINIMAP_HANDLE_H - 1);
-        }
-
-        // 2.5) Draw Oligo markers in the Minimap Ruler area
-        if (primers) {
-            const mmRulerY = MINIMAP_GC_H;
-            const mmRulerH = MINIMAP_RULER_H;
-
-            // Oligo 1 (Right/3' - Green)
-            const p1x = LABEL_WIDTH + (primers.p1.start / seqLen) * mmSeqW;
-            const p1w = Math.max(1, ((primers.p1.end - primers.p1.start) / seqLen) * mmSeqW);
-            ctx.fillStyle = '#22c55e'; // Green
-            ctx.fillRect(p1x, mmRulerY + mmRulerH - 4, p1w, 4);
-
-            // Oligo 2 (Left/5' - Yellow/Peachy)
-            const p2x = LABEL_WIDTH + (primers.p2.start / seqLen) * mmSeqW;
-            const p2w = Math.max(1, ((primers.p2.end - primers.p2.start) / seqLen) * mmSeqW);
-            ctx.fillStyle = '#facc15'; // Yellow
-            ctx.fillRect(p2x, mmRulerY + mmRulerH - 4, p2w, 4);
         }
 
         ctx.fillStyle = isDark ? '#334155' : '#cbd5e1';
         ctx.fillRect(LABEL_WIDTH - 1, 0, 1, MINIMAP_HEIGHT);
-    }, [sequences, querySeq, seqLen, availableWidth, startFrac, endFrac, gcContent, viewFraction, selectionRange, primers, isDarkMode]);
+    }, [sequences.length, availableWidth, startFrac, endFrac, viewFraction, selectionRange, isDark, drawMinimapBackground]);
+
+    useEffect(() => {
+        staticMinimapDrawnRef.current = false;
+        drawMinimapBackground();
+    }, [drawMinimapBackground]);
 
     useEffect(() => { drawMinimap(); }, [drawMinimap]);
 
@@ -436,7 +440,6 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
 
         // Capture current viewport
         const curSeqAreaW = availableWidth - LABEL_WIDTH - RIGHT_PADDING;
-        // const curTotalVW = curSeqAreaW / viewFraction; // unused in select mode
         const curStart = scrollLeft / (curSeqAreaW / viewFraction);
         const curEnd = curStart + viewFraction;
         const handleZone = 10 / mmSeqW; // 10px side handle zone
@@ -774,24 +777,41 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
                     ctx.fillRect(barX1, y, barX2 - barX1, msaDrawH);
                 }
             }
-            const mmW = Math.max(1, Math.ceil(cellW));
-            const mmH = msaDrawH;
-            for (let col = firstCol; col <= lastCol; col++) {
-                const ch = (s.seq[col] || '-').toUpperCase();
-                const qch = (querySeq[col] || '-').toUpperCase();
-                if (ch === '-' && !(col >= sStart && col <= sEnd && !isQuery)) continue;
-                const x = Math.floor(LABEL_WIDTH + col * cellW - scrollLeft);
-                const isInternalDeletion = !isQuery && ch === '-' && col >= sStart && col <= sEnd;
-                const isInsertion = !isQuery && qch === '-' && ch !== '-';
-                if (isInternalDeletion || isInsertion) {
-                    ctx.fillStyle = '#9333ea';
-                    ctx.fillRect(x, y, mmW, mmH);
-                } else if (!isQuery && ch !== '-' && ch !== qch && qch !== '-') {
-                    ctx.fillStyle = '#dc2626';
-                    ctx.fillRect(x, y, mmW, mmH);
+            const seqW = availableWidth - LABEL_WIDTH - RIGHT_PADDING;
+            const pxStep = Math.max(1, seqLen / seqW);
+            
+            // Optimized: Iterate over visible pixels, not every column.
+            // (availableWidth - LABEL_WIDTH) is the visible sequence area width.
+            for (let x = 0; x < availableWidth - LABEL_WIDTH; x++) {
+                const colBase = Math.floor(((x + scrollLeft) / seqW) * seqLen * viewFraction);
+                if (colBase < 0 || colBase >= seqLen) continue;
+
+                // Sample 2 points per pixel area
+                const sampleCols = [colBase];
+                if (pxStep > 2) sampleCols.push(colBase + Math.floor(pxStep / 2));
+
+                for (const col of sampleCols) {
+                    if (col >= seqLen) continue;
+                    const ch = (s.seq[col] || '-').toUpperCase();
+                    const qch = (querySeq[col] || '-').toUpperCase();
+                    if (ch === '-' && !(col >= sStart && col <= sEnd && !isQuery)) continue;
+
+                    const isInternalDeletion = !isQuery && ch === '-' && col >= sStart && col <= sEnd;
+                    const isInsertion = !isQuery && qch === '-' && ch !== '-';
+
+                    if (isInternalDeletion || isInsertion) {
+                        ctx.fillStyle = '#9333ea';
+                        ctx.fillRect(LABEL_WIDTH + x, y, 1.2, msaDrawH);
+                        break;
+                    } else if (!isQuery && ch !== '-' && ch !== qch && qch !== '-') {
+                        ctx.fillStyle = '#dc2626';
+                        ctx.fillRect(LABEL_WIDTH + x, y, 1.2, msaDrawH);
+                        break;
+                    }
                 }
             }
         }
+
         ctx.fillStyle = isDark ? '#334155' : '#e2e8f0';
         ctx.fillRect(LABEL_WIDTH, msaTop + MAIN_MSA_TRACK_H - 0.5, availableWidth - LABEL_WIDTH, 0.5);
 
@@ -806,12 +826,8 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
         ctx.lineTo(availableWidth, rulerY + RULER_HEIGHT - 0.5);
         ctx.stroke();
 
-        const getPrettyStep = (minPixels: number, pixelsPerUnit: number) => {
-            const minUnits = minPixels / pixelsPerUnit;
-            const steps = [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000, 10000];
-            return steps.find(s => s >= minUnits) || steps[steps.length - 1];
-        };
-        const tickInterval = getPrettyStep(60, cellW);
+        const tickInterval = getPrettyStep(100, cellW);
+
         ctx.fillStyle = '#94a3b8';
         ctx.font = '9px ui-monospace, SFMono-Regular, monospace';
         ctx.textAlign = 'center';
@@ -1064,10 +1080,6 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
 
     /* ── canvas click → copy sequence OR select ─────────────────── */
     const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
-        // If we are in letters mode, we might still want to select? 
-        // Actually, user wants "only the query sequence of choice will be displayed".
-        // Let's make click always select the row.
-
         const cvs = canvasRef.current;
         if (!cvs) return;
         const rect = cvs.getBoundingClientRect();
@@ -1133,7 +1145,12 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
                 <div className="flex items-center gap-3">
                     <div className="flex rounded-md overflow-hidden border border-slate-300 dark:border-slate-600">
                         <button
-                            onClick={() => { setViewMode('bars'); setViewFraction(1); setScrollLeft(0); targetScrollRef.current = 0; }}
+                            onClick={() => {
+                                setViewMode('bars');
+                                setViewFraction(1);
+                                setScrollLeft(0);
+                                targetScrollRef.current = 0;
+                            }}
                             className={`px-3 py-1 text-xs font-medium transition-colors ${viewMode === 'bars'
                                 ? 'bg-indigo-500 text-white'
                                 : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700'
@@ -1143,11 +1160,22 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
                         </button>
                         <button
                             onClick={() => {
+                                // Keep the current center
+                                const seqAreaW = availableWidth - LABEL_WIDTH - RIGHT_PADDING;
+                                const currentTotalW = seqAreaW / viewFraction;
+                                const centerFrac = (scrollLeft + seqAreaW / 2) / currentTotalW;
+                                
                                 setViewMode('letters');
-                                const vf = Math.min(1, (BP_THRESHOLD - HYSTERESIS - 1) / seqLen);
-                                setViewFraction(vf);
-                                setScrollLeft(0);
-                                targetScrollRef.current = 0;
+                                const newVF = Math.min(1, 100 / seqLen); // ~100 bp zoom
+                                const newTotalW = seqAreaW / newVF;
+                                
+                                // Recalculate scroll to keep same center
+                                const newSL = centerFrac * newTotalW - seqAreaW / 2;
+                                const clampedSL = Math.max(0, Math.min(newTotalW - seqAreaW, newSL));
+                                
+                                setViewFraction(newVF);
+                                setScrollLeft(clampedSL);
+                                targetScrollRef.current = clampedSL;
                             }}
                             className={`px-3 py-1 text-xs font-medium transition-colors border-l border-slate-300 dark:border-slate-600 ${viewMode === 'letters'
                                 ? 'bg-indigo-500 text-white'
@@ -1280,14 +1308,4 @@ const ClipboardIcon = () => (
 );
 
 /* ── helpers ── */
-function seqStart(seq: string): number {
-    for (let i = 0; i < seq.length; i++) if (seq[i] !== '-') return i;
-    return 0;
-}
-function seqEnd(seq: string): number {
-    for (let i = seq.length - 1; i >= 0; i--) if (seq[i] !== '-') return i;
-    return seq.length - 1;
-}
-
-export default MSAViewer;
 export default MSAViewer;
