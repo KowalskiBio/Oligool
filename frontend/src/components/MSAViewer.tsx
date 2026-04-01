@@ -31,6 +31,7 @@ const MAIN_MSA_TRACK_H = 30;
 
 const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, primers, isDarkMode }) => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
+    const hoverOverlayRef = useRef<HTMLCanvasElement>(null);
     const minimapRef = useRef<HTMLCanvasElement>(null);
     const scrollRef = useRef<HTMLDivElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
@@ -43,7 +44,9 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
     const [viewMode, setViewMode] = useState<'bars' | 'letters'>('bars');
     const [copyFeedback, setCopyFeedback] = useState('');
     const [selectionRange, setSelectionRange] = useState<{ start: number; end: number } | null>(null);
-    const [hoverCol, setHoverCol] = useState<number | null>(null);
+    const hoverColRef = useRef<number | null>(null);
+    const hoverRafRef = useRef<number>(0);
+    const redrawRef = useRef<() => void>(() => {});
     const [showOverview, setShowOverview] = useState(true);
 
     /* ── parse FASTA ────────────────────────────────────── */
@@ -180,6 +183,21 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
         return gc;
     }, [sequences, seqLen]);
 
+    /* ── precompute mismatch columns for O(1) hover lookup ── */
+    const mismatchCols = useMemo(() => {
+        const set = new Set<number>();
+        if (sequences.length < 2 || seqLen === 0) return set;
+        for (let col = 0; col < seqLen; col++) {
+            const qch = (sequences[0].seq[col] || '-').toUpperCase();
+            if (qch === '-') continue;
+            for (let row = 1; row < sequences.length; row++) {
+                const ch = (sequences[row].seq[col] || '-').toUpperCase();
+                if (ch !== '-' && ch !== qch) { set.add(col); break; }
+            }
+        }
+        return set;
+    }, [sequences, seqLen]);
+
     /* ── selection statistics (visible range) ─────── */
     const selectionStats = useMemo(() => {
         if (sequences.length === 0) return null;
@@ -216,7 +234,8 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
         const mmSeqW = availableWidth - LABEL_WIDTH - RIGHT_PADDING;
         const rowsTop = MINIMAP_GC_H + MINIMAP_RULER_H;
         const rowAreaH = MINIMAP_HEIGHT - rowsTop - MINIMAP_HANDLE_H; // subtract handle height
-        const rowH = Math.max(1, rowAreaH / sequences.length);
+        const rowH = rowAreaH / sequences.length; // fractional for correct positioning
+        const rowDrawH = Math.max(1, rowH); // minimum 1px for visibility
 
         // We use the isDark defined at the component level
 
@@ -283,7 +302,7 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
                 ctx.fillStyle = isQuery
                     ? (isDark ? '#1e3a8a' : '#bfdbfe')
                     : (isDark ? '#334155' : '#d1d5db');
-                ctx.fillRect(x1, y, x2 - x1, Math.max(1, rowH - 0.5));
+                ctx.fillRect(x1, y, x2 - x1, rowDrawH);
             }
 
             for (let col = 0; col < seqLen; col++) {
@@ -292,7 +311,7 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
 
                 const x = LABEL_WIDTH + (col / seqLen) * mmSeqW;
                 const w = Math.max(1, mmSeqW / seqLen);
-                const h = Math.max(1, rowH - 0.5);
+                const h = rowDrawH;
 
                 // Violet for:
                 // 1) Insertion vs Query (qch == '-')
@@ -391,27 +410,9 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
             ctx.fillRect(p2x, mmRulerY + mmRulerH - 4, p2w, 4);
         }
 
-        // ── Hover cursor line on minimap ──
-        if (hoverCol !== null && hoverCol >= 0 && hoverCol < seqLen) {
-            const hx = LABEL_WIDTH + ((hoverCol + 0.5) / seqLen) * mmSeqW;
-            // Determine if this column has a mismatch
-            let hasMismatch = false;
-            for (let row = 1; row < sequences.length; row++) {
-                const ch = (sequences[row].seq[hoverCol] || '-').toUpperCase();
-                const qch = (querySeq[hoverCol] || '-').toUpperCase();
-                if (ch !== '-' && qch !== '-' && ch !== qch) { hasMismatch = true; break; }
-            }
-            ctx.strokeStyle = hasMismatch ? '#ef4444' : '#3b82f6';
-            ctx.lineWidth = 1;
-            ctx.beginPath();
-            ctx.moveTo(Math.floor(hx) + 0.5, 0);
-            ctx.lineTo(Math.floor(hx) + 0.5, MINIMAP_HEIGHT);
-            ctx.stroke();
-        }
-
         ctx.fillStyle = isDark ? '#334155' : '#cbd5e1';
         ctx.fillRect(LABEL_WIDTH - 1, 0, 1, MINIMAP_HEIGHT);
-    }, [sequences, querySeq, seqLen, availableWidth, startFrac, endFrac, gcContent, viewFraction, selectionRange, primers, hoverCol, isDarkMode]);
+    }, [sequences, querySeq, seqLen, availableWidth, startFrac, endFrac, gcContent, viewFraction, selectionRange, primers, isDarkMode]);
 
     useEffect(() => { drawMinimap(); }, [drawMinimap]);
 
@@ -542,7 +543,12 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
 
         // Set hover column for cursor line
         const col = Math.floor(mouseXFrac * seqLen);
-        setHoverCol(col >= 0 && col < seqLen ? col : null);
+        const newCol = col >= 0 && col < seqLen ? col : null;
+        if (newCol !== hoverColRef.current) {
+            hoverColRef.current = newCol;
+            cancelAnimationFrame(hoverRafRef.current);
+            hoverRafRef.current = requestAnimationFrame(() => redrawRef.current());
+        }
 
         const curSeqAreaW = availableWidth - LABEL_WIDTH - RIGHT_PADDING;
         const curTotalVW = curSeqAreaW / viewFraction;
@@ -564,7 +570,11 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
     }, [seqAreaW, viewFraction, scrollLeft, availableWidth, seqLen]);
 
     const handleMinimapMouseLeave = useCallback(() => {
-        setHoverCol(null);
+        if (hoverColRef.current !== null) {
+            hoverColRef.current = null;
+            cancelAnimationFrame(hoverRafRef.current);
+            hoverRafRef.current = requestAnimationFrame(() => redrawRef.current());
+        }
     }, []);
 
     /* ══════════════════════════════════════════════════════
@@ -601,30 +611,144 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
         ctx.rect(LABEL_WIDTH, scrollTop, availableWidth - LABEL_WIDTH, canvasH);
         ctx.clip();
 
-        // ── GC content track (scaled) ──
+        /* ── row contents (within clip) ── */
+        // Calculate visible rows for Y-virtualization
+        const rowsStartY = MAIN_GC_TRACK_H + MAIN_MSA_TRACK_H + RULER_HEIGHT;
+        const firstRow = Math.max(0, Math.floor((scrollTop - rowsStartY) / ROW_HEIGHT));
+        const lastRow = Math.min(sequences.length - 1, Math.ceil((scrollTop + canvasH - rowsStartY) / ROW_HEIGHT) + 2);
+
+        for (let row = firstRow; row <= lastRow; row++) {
+            const s = sequences[row];
+            const y = MAIN_GC_TRACK_H + MAIN_MSA_TRACK_H + RULER_HEIGHT + row * ROW_HEIGHT;
+            const isQuery = row === 0;
+
+            const sStart = seqStart(s.seq);
+            const sEnd = seqEnd(s.seq);
+
+            if (viewMode === 'letters') {
+                for (let col = firstCol; col <= lastCol; col++) {
+                    const ch = (s.seq[col] || '-').toUpperCase();
+                    const qch = (querySeq[col] || '-').toUpperCase();
+
+                    const x = LABEL_WIDTH + col * cellW - scrollLeft;
+
+                    let bg = '#f3f4f6'; // default/match gray
+                    let fg = '#374151';
+
+                    if (ch === '-') {
+                        if (!isQuery && col >= sStart && col <= sEnd) {
+                            bg = isDark ? '#3b0764' : '#f3e8ff';
+                            fg = isDark ? '#d8b4fe' : '#7e22ce';
+                        } else {
+                            bg = isDark ? '#0f172a' : '#f3f4f6';
+                            fg = isDark ? '#475569' : '#9ca3af';
+                        }
+                    } else if (!isQuery && qch === '-' && ch !== '-') {
+                        bg = isDark ? '#3b0764' : '#f3e8ff';
+                        fg = isDark ? '#d8b4fe' : '#7e22ce';
+                    } else if (!isQuery && ch !== qch && qch !== '-') {
+                        bg = isDark ? '#7f1d1d' : '#fee2e2';
+                        fg = isDark ? '#fecaca' : '#b91c1c';
+                    } else {
+                        bg = isDark ? '#1e293b' : '#f3f4f6';
+                        fg = isDark ? '#cbd5e1' : '#374151';
+
+                        if (isQuery && primers) {
+                            if (col >= primers.p1.start && col < primers.p1.end) {
+                                bg = isDark ? '#064e3b' : '#bbf7d0';
+                                fg = isDark ? '#6ee7b7' : '#14532d';
+                            } else if (col >= primers.p2.start && col < primers.p2.end) {
+                                bg = isDark ? '#78350f' : '#fef3c7';
+                                fg = isDark ? '#fcd34d' : '#92400e';
+                            }
+                        }
+                    }
+
+                    ctx.fillStyle = bg;
+                    ctx.fillRect(x, y, cellW + 0.5, ROW_HEIGHT);
+                    ctx.fillStyle = fg;
+                    const fs = Math.min(13, Math.max(8, cellW * 0.8));
+                    ctx.font = `${fs}px ui-monospace, SFMono-Regular, monospace`;
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText(ch, x + cellW / 2, y + ROW_HEIGHT / 2);
+                }
+            }
+            else {
+                if (sStart <= sEnd) {
+                    const barX1 = Math.floor(Math.max(LABEL_WIDTH, LABEL_WIDTH + sStart * cellW - scrollLeft));
+                    const barX2 = Math.ceil(Math.min(LABEL_WIDTH + seqAreaW, LABEL_WIDTH + (sEnd + 1) * cellW - scrollLeft));
+                    if (barX2 > barX1) {
+                        ctx.fillStyle = isQuery
+                            ? (isDark ? '#1e3a8a' : '#bfdbfe')
+                            : (isDark ? '#334155' : '#e2e8f0');
+                        ctx.fillRect(barX1, y + 3, barX2 - barX1, ROW_HEIGHT - 6);
+                    }
+                }
+                const barW = Math.max(1, Math.ceil(cellW));
+                for (let col = firstCol; col <= lastCol; col++) {
+                    const ch = (s.seq[col] || '-').toUpperCase();
+                    const qch = (querySeq[col] || '-').toUpperCase();
+                    if (ch === '-') continue;
+
+                    const x = Math.floor(LABEL_WIDTH + col * cellW - scrollLeft);
+
+                    const isInternalDeletion = !isQuery && ch === '-' && col >= sStart && col <= sEnd;
+                    const isInsertion = !isQuery && qch === '-' && ch !== '-';
+
+                    if (isInternalDeletion || isInsertion) {
+                        ctx.fillStyle = '#9333ea';
+                        ctx.fillRect(x, y + 2, barW, ROW_HEIGHT - 4);
+                    } else if (!isQuery && ch !== '-' && ch !== qch && qch !== '-') {
+                        ctx.fillStyle = '#dc2626';
+                        ctx.fillRect(x, y + 2, barW, ROW_HEIGHT - 4);
+                    } else if (isQuery && primers && ch !== '-') {
+                        if (col >= primers.p1.start && col < primers.p1.end) {
+                            ctx.fillStyle = '#22c55e';
+                            ctx.fillRect(x, y + 2, barW, ROW_HEIGHT - 4);
+                        } else if (col >= primers.p2.start && col < primers.p2.end) {
+                            ctx.fillStyle = '#facc15';
+                            ctx.fillRect(x, y + 2, barW, ROW_HEIGHT - 4);
+                        }
+                    }
+                }
+            }
+
+            ctx.fillStyle = isDark ? '#1e293b' : '#f1f5f9';
+            ctx.fillRect(LABEL_WIDTH, y + ROW_HEIGHT - 0.5, seqAreaW, 0.5);
+        }
+
+        /* ══════════════════════════════════════════════════════
+           STICKY HEADER: GC bar + MSA overview + Ruler
+           Drawn ON TOP of sequence rows so they stay visible
+           when scrolling. All Y positions use scrollTop offset.
+           ══════════════════════════════════════════════════════ */
+        const stickyY = scrollTop; // base Y for sticky header (screen Y=0 in translated coords)
+
+        // ── GC content track (sticky) ──
         ctx.fillStyle = isDark ? '#1e293b' : '#f8fafc';
-        ctx.fillRect(LABEL_WIDTH, 0, availableWidth - LABEL_WIDTH, MAIN_GC_TRACK_H);
+        ctx.fillRect(LABEL_WIDTH, stickyY, availableWidth - LABEL_WIDTH, MAIN_GC_TRACK_H);
+        const gcBarW = Math.max(1, Math.ceil(cellW));
         for (let col = firstCol; col <= lastCol; col++) {
-            const x = LABEL_WIDTH + col * cellW - scrollLeft;
-            const w = Math.max(1, cellW);
+            const x = Math.floor(LABEL_WIDTH + col * cellW - scrollLeft);
             const gc = gcContent[col] || 0;
             const r = Math.round(255 - gc * 150);
             const g = Math.round(180 + gc * 60);
             const b = Math.round(50 + gc * 100);
             ctx.fillStyle = `rgb(${r},${g},${b})`;
             const barH = gc * MAIN_GC_TRACK_H;
-            ctx.fillRect(x, MAIN_GC_TRACK_H - barH, w, barH);
+            ctx.fillRect(x, stickyY + MAIN_GC_TRACK_H - barH, gcBarW, barH);
         }
         ctx.fillStyle = isDark ? '#334155' : '#e2e8f0';
-        ctx.fillRect(LABEL_WIDTH, MAIN_GC_TRACK_H - 0.5, availableWidth - LABEL_WIDTH, 0.5);
+        ctx.fillRect(LABEL_WIDTH, stickyY + MAIN_GC_TRACK_H - 0.5, availableWidth - LABEL_WIDTH, 0.5);
 
-        // ── MSA overview track (scaled) ──
-        const msaTop = MAIN_GC_TRACK_H;
-        const msaRowH = Math.max(1, MAIN_MSA_TRACK_H / sequences.length);
+        // ── MSA overview track (sticky) ──
+        const msaTop = stickyY + MAIN_GC_TRACK_H;
+        const msaRowH = MAIN_MSA_TRACK_H / sequences.length; // fractional for positioning
+        const msaDrawH = Math.max(1, msaRowH); // minimum 1px for visibility
         ctx.fillStyle = isDark ? '#0f172a' : '#f1f5f9';
         ctx.fillRect(LABEL_WIDTH, msaTop, availableWidth - LABEL_WIDTH, MAIN_MSA_TRACK_H);
-        
-        // Sample down rows for overview to prevent crippling lag
+
         const sampleStep = Math.max(1, Math.floor(sequences.length / 200));
         for (let row = 0; row < sequences.length; row += sampleStep) {
             const s = sequences[row];
@@ -632,7 +756,6 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
             const isQuery = row === 0;
             const sStart = seqStart(s.seq);
             const sEnd = seqEnd(s.seq);
-            // Background bar for the sequence extent
             if (sStart <= sEnd) {
                 const barX1 = Math.max(LABEL_WIDTH, LABEL_WIDTH + sStart * cellW - scrollLeft);
                 const barX2 = Math.min(LABEL_WIDTH + seqAreaW, LABEL_WIDTH + (sEnd + 1) * cellW - scrollLeft);
@@ -640,33 +763,32 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
                     ctx.fillStyle = isQuery
                         ? (isDark ? '#1e3a8a' : '#bfdbfe')
                         : (isDark ? '#334155' : '#e2e8f0');
-                    ctx.fillRect(barX1, y, barX2 - barX1, Math.max(1, msaRowH - 0.5));
+                    ctx.fillRect(barX1, y, barX2 - barX1, msaDrawH);
                 }
             }
-            // Mismatch / indel markers
+            const mmW = Math.max(1, Math.ceil(cellW));
+            const mmH = msaDrawH;
             for (let col = firstCol; col <= lastCol; col++) {
                 const ch = (s.seq[col] || '-').toUpperCase();
                 const qch = (querySeq[col] || '-').toUpperCase();
                 if (ch === '-' && !(col >= sStart && col <= sEnd && !isQuery)) continue;
-                const x = LABEL_WIDTH + col * cellW - scrollLeft;
-                const w = Math.max(1, cellW);
-                const h = Math.max(1, msaRowH - 0.5);
+                const x = Math.floor(LABEL_WIDTH + col * cellW - scrollLeft);
                 const isInternalDeletion = !isQuery && ch === '-' && col >= sStart && col <= sEnd;
                 const isInsertion = !isQuery && qch === '-' && ch !== '-';
                 if (isInternalDeletion || isInsertion) {
                     ctx.fillStyle = '#9333ea';
-                    ctx.fillRect(x, y, w, h);
+                    ctx.fillRect(x, y, mmW, mmH);
                 } else if (!isQuery && ch !== '-' && ch !== qch && qch !== '-') {
                     ctx.fillStyle = '#dc2626';
-                    ctx.fillRect(x, y, w, h);
+                    ctx.fillRect(x, y, mmW, mmH);
                 }
             }
         }
         ctx.fillStyle = isDark ? '#334155' : '#e2e8f0';
         ctx.fillRect(LABEL_WIDTH, msaTop + MAIN_MSA_TRACK_H - 0.5, availableWidth - LABEL_WIDTH, 0.5);
 
-        /* ── ruler ── */
-        const rulerY = MAIN_GC_TRACK_H + MAIN_MSA_TRACK_H;
+        /* ── ruler (sticky) ── */
+        const rulerY = stickyY + MAIN_GC_TRACK_H + MAIN_MSA_TRACK_H;
         ctx.fillStyle = isDark ? '#1e293b' : '#f8fafc';
         ctx.fillRect(LABEL_WIDTH, rulerY, availableWidth - LABEL_WIDTH, RULER_HEIGHT);
         ctx.strokeStyle = isDark ? '#334155' : '#e2e8f0';
@@ -700,139 +822,15 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
 
             const p2x = LABEL_WIDTH + primers.p2.start * cellW - scrollLeft;
             const p2w = (primers.p2.end - primers.p2.start) * cellW;
-            ctx.fillStyle = '#facc15'; // Yellow
+            ctx.fillStyle = '#facc15';
             ctx.fillRect(p2x, rulerY + RULER_HEIGHT - 4, p2w, 4);
-        }
-
-        /* ── row contents (within clip) ── */
-        // Calculate visible rows for Y-virtualization
-        const rowsStartY = MAIN_GC_TRACK_H + MAIN_MSA_TRACK_H + RULER_HEIGHT;
-        const firstRow = Math.max(0, Math.floor((scrollTop - rowsStartY) / ROW_HEIGHT));
-        const lastRow = Math.min(sequences.length - 1, Math.ceil((scrollTop + canvasH - rowsStartY) / ROW_HEIGHT) + 2);
-
-        for (let row = firstRow; row <= lastRow; row++) {
-            const s = sequences[row];
-            const y = MAIN_GC_TRACK_H + MAIN_MSA_TRACK_H + RULER_HEIGHT + row * ROW_HEIGHT;
-            const isQuery = row === 0;
-
-            const sStart = seqStart(s.seq);
-            const sEnd = seqEnd(s.seq);
-
-            if (viewMode === 'letters') {
-                for (let col = firstCol; col <= lastCol; col++) {
-                    const ch = (s.seq[col] || '-').toUpperCase();
-                    const qch = (querySeq[col] || '-').toUpperCase();
-
-                    const x = LABEL_WIDTH + col * cellW - scrollLeft;
-
-                    let bg = '#f3f4f6'; // default/match gray
-                    let fg = '#374151';
-
-                    // Determine sequence boundaries for internal/external gap logic
-                    // We can optimize by calculating sStart/sEnd outside the loop if needed, 
-                    // but doing it per row is fine (seqStart is fast).
-                    // Actually, let's hoist it out of the column loop for the row.
-
-                    // (Hoisted above loop)
-
-                    if (ch === '-') {
-                        if (!isQuery && col >= sStart && col <= sEnd) {
-                            // Internal Deletion (Violet)
-                            bg = isDark ? '#3b0764' : '#f3e8ff';
-                            fg = isDark ? '#d8b4fe' : '#7e22ce';
-                        } else {
-                            // External Deletion (Gray)
-                            bg = isDark ? '#0f172a' : '#f3f4f6';
-                            fg = isDark ? '#475569' : '#9ca3af';
-                        }
-                    } else if (!isQuery && qch === '-' && ch !== '-') {
-                        // Insertion vs Query (Violet)
-                        bg = isDark ? '#3b0764' : '#f3e8ff';
-                        fg = isDark ? '#d8b4fe' : '#7e22ce';
-                    } else if (!isQuery && ch !== qch && qch !== '-') {
-                        // Mismatch (Red)
-                        bg = isDark ? '#7f1d1d' : '#fee2e2';
-                        fg = isDark ? '#fecaca' : '#b91c1c';
-                    } else {
-                        // Match or Query
-                        bg = isDark ? '#1e293b' : '#f3f4f6';
-                        fg = isDark ? '#cbd5e1' : '#374151';
-
-                        // Check for Primers on Query
-                        if (isQuery && primers) {
-                            if (col >= primers.p1.start && col < primers.p1.end) {
-                                bg = isDark ? '#064e3b' : '#bbf7d0'; // Green
-                                fg = isDark ? '#6ee7b7' : '#14532d';
-                            } else if (col >= primers.p2.start && col < primers.p2.end) {
-                                bg = isDark ? '#78350f' : '#fef3c7'; // Yellow/Amber
-                                fg = isDark ? '#fcd34d' : '#92400e';
-                            }
-                        }
-                    }
-
-                    ctx.fillStyle = bg;
-                    ctx.fillRect(x, y, cellW + 0.5, ROW_HEIGHT);
-                    ctx.fillStyle = fg;
-                    const fs = Math.min(13, Math.max(8, cellW * 0.8));
-                    ctx.font = `${fs}px ui-monospace, SFMono-Regular, monospace`;
-                    ctx.textAlign = 'center';
-                    ctx.textBaseline = 'middle';
-                    ctx.fillText(ch, x + cellW / 2, y + ROW_HEIGHT / 2);
-                }
-            }
-            else {
-                const sStart = seqStart(s.seq);
-                const sEnd = seqEnd(s.seq);
-                if (sStart <= sEnd) {
-                    const barX1 = Math.max(LABEL_WIDTH, LABEL_WIDTH + sStart * cellW - scrollLeft);
-                    const barX2 = Math.min(LABEL_WIDTH + seqAreaW, LABEL_WIDTH + (sEnd + 1) * cellW - scrollLeft);
-                    if (barX2 > barX1) {
-                        ctx.fillStyle = isQuery
-                            ? (isDark ? '#1e3a8a' : '#bfdbfe')
-                            : (isDark ? '#334155' : '#e2e8f0');
-                        ctx.fillRect(barX1, y + 3, barX2 - barX1, ROW_HEIGHT - 6);
-                    }
-                }
-                for (let col = firstCol; col <= lastCol; col++) {
-                    const ch = (s.seq[col] || '-').toUpperCase();
-                    const qch = (querySeq[col] || '-').toUpperCase();
-                    if (ch === '-') continue;
-
-                    const x = LABEL_WIDTH + col * cellW - scrollLeft;
-
-                    const isInternalDeletion = !isQuery && ch === '-' && col >= sStart && col <= sEnd;
-                    const isInsertion = !isQuery && qch === '-' && ch !== '-';
-
-                    if (isInternalDeletion || isInsertion) {
-                        // Violet (Stronger for bars)
-                        ctx.fillStyle = '#9333ea';
-                        ctx.fillRect(x, y + 2, Math.max(1, cellW), ROW_HEIGHT - 4);
-                    } else if (!isQuery && ch !== '-' && ch !== qch && qch !== '-') {
-                        // Mismatch vs Query (Red)
-                        ctx.fillStyle = '#dc2626';
-                        ctx.fillRect(x, y + 2, Math.max(1, cellW), ROW_HEIGHT - 4);
-                    } else if (isQuery && primers && ch !== '-') {
-                        // Highlight Primers on Query
-                        if (col >= primers.p1.start && col < primers.p1.end) {
-                            ctx.fillStyle = '#22c55e'; // Green
-                            ctx.fillRect(x, y + 2, Math.max(1, cellW), ROW_HEIGHT - 4);
-                        } else if (col >= primers.p2.start && col < primers.p2.end) {
-                            ctx.fillStyle = '#facc15'; // Yellow
-                            ctx.fillRect(x, y + 2, Math.max(1, cellW), ROW_HEIGHT - 4);
-                        }
-                    }
-                }
-            }
-
-            ctx.fillStyle = isDark ? '#1e293b' : '#f1f5f9';
-            ctx.fillRect(LABEL_WIDTH, y + ROW_HEIGHT - 0.5, seqAreaW, 0.5);
         }
 
         ctx.restore(); /* end clip */
 
         /* ── labels (drawn OUTSIDE clip so they're never obscured) ── */
 
-        // To make labels sticky Y but ignore scrollX, we fill a background that covers the scroll offset
+        // Background covers entire label column at sticky position
         ctx.fillStyle = isDark ? '#0f172a' : '#ffffff';
         ctx.fillRect(0, scrollTop, LABEL_WIDTH, canvasH);
 
@@ -840,17 +838,18 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
         ctx.fillStyle = isDark ? '#334155' : '#e2e8f0';
         ctx.fillRect(LABEL_WIDTH - 1, scrollTop, 1, canvasH);
 
-        // GC track label (sticky Y to top)
+        // GC track label (sticky)
         ctx.fillStyle = isDark ? '#94a3b8' : '#64748b';
         ctx.font = '10px ui-monospace, SFMono-Regular, monospace';
         ctx.textAlign = 'right';
         ctx.textBaseline = 'middle';
         ctx.fillText('GC%', LABEL_WIDTH - 6, scrollTop + MAIN_GC_TRACK_H / 2);
 
-        // MSA overview label (sticky Y)
+        // MSA overview label (sticky)
         ctx.fillText('MSA', LABEL_WIDTH - 6, scrollTop + MAIN_GC_TRACK_H + MAIN_MSA_TRACK_H / 2);
 
-        // Sequence row labels (culled by Y-axis)
+        // Sequence row labels (culled by Y-axis, skip rows behind sticky header)
+        const headerH = MAIN_GC_TRACK_H + MAIN_MSA_TRACK_H + RULER_HEIGHT;
         for (let row = firstRow; row <= lastRow; row++) {
             const y = MAIN_GC_TRACK_H + MAIN_MSA_TRACK_H + RULER_HEIGHT + row * ROW_HEIGHT;
             const isQuery = row === 0;
@@ -858,8 +857,9 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
             const labelY = y + ROW_HEIGHT / 2;
             const text = sequences[row].id;
 
-            // Optional: skip labels that are offscreen Y
-            if (y > scrollTop + canvasH || y + ROW_HEIGHT < scrollTop) continue;
+            // Skip labels behind sticky header or off screen
+            if (y + ROW_HEIGHT < scrollTop + headerH) continue;
+            if (y > scrollTop + canvasH) continue;
 
             const pColor = isQuery
                 ? (isDark ? '#3b82f6' : '#2563eb')
@@ -880,29 +880,59 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
             ctx.fillText(displayTxt, LABEL_WIDTH - 12, labelY);
         }
 
-        // ── Hover cursor line on main canvas ──
-        if (hoverCol !== null && hoverCol >= 0 && hoverCol < seqLen) {
-            const hx = LABEL_WIDTH + hoverCol * cellW - scrollLeft + cellW / 2;
-            if (hx >= LABEL_WIDTH && hx <= LABEL_WIDTH + seqAreaW) {
-                let hasMismatch = false;
-                for (let row = 1; row < sequences.length; row++) {
-                    const ch = (sequences[row].seq[hoverCol] || '-').toUpperCase();
-                    const qch = (querySeq[hoverCol] || '-').toUpperCase();
-                    if (ch !== '-' && qch !== '-' && ch !== qch) { hasMismatch = true; break; }
-                }
-                ctx.strokeStyle = hasMismatch ? '#ef4444' : '#3b82f6';
-                ctx.lineWidth = 1;
-                ctx.beginPath();
-                ctx.moveTo(Math.floor(hx) + 0.5, scrollTop);
-                ctx.lineTo(Math.floor(hx) + 0.5, scrollTop + canvasH);
-                ctx.stroke();
-            }
+        ctx.restore(); // restore translate
+
+        /* size the hover overlay to match main canvas */
+        const hoverCvs = hoverOverlayRef.current;
+        if (hoverCvs) {
+            hoverCvs.width = availableWidth * dpr;
+            hoverCvs.height = canvasH * dpr;
+            hoverCvs.style.width = `${availableWidth}px`;
+            hoverCvs.style.height = `${canvasH}px`;
+        }
+    }, [sequences, querySeq, scrollLeft, scrollTop, cellW, seqAreaW, availableWidth, totalH, seqLen, viewMode, primers, gcContent, isDarkMode]);
+
+    /* ── lightweight hover overlay (draws only a thin line) ── */
+    const drawHoverOverlay = useCallback(() => {
+        const cvs = hoverOverlayRef.current;
+        const mainCvs = canvasRef.current;
+        if (!cvs || !mainCvs) return;
+        const ctx = cvs.getContext('2d');
+        if (!ctx) return;
+        
+        const dpr = window.devicePixelRatio || 1;
+        // Sync resolution if physical size changed
+        if (cvs.width !== mainCvs.width || cvs.height !== mainCvs.height) {
+            cvs.width = mainCvs.width;
+            cvs.height = mainCvs.height;
         }
 
-        ctx.restore(); // restore translate
-    }, [sequences, querySeq, scrollLeft, scrollTop, cellW, seqAreaW, availableWidth, totalH, seqLen, viewMode, primers, gcContent, hoverCol, isDarkMode]);
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        const w = cvs.width / dpr;
+        const h = cvs.height / dpr;
+        ctx.clearRect(0, 0, w, h);
+
+        const hoverCol = hoverColRef.current;
+        if (hoverCol === null || hoverCol < 0 || hoverCol >= seqLen) return;
+
+        const hx = LABEL_WIDTH + hoverCol * cellW - scrollLeft + cellW / 2;
+        if (hx < LABEL_WIDTH || hx > LABEL_WIDTH + seqAreaW) return;
+
+        ctx.strokeStyle = mismatchCols.has(hoverCol) ? '#ef4444' : '#3b82f6';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(Math.floor(hx) + 0.5, 0);
+        ctx.lineTo(Math.floor(hx) + 0.5, h);
+        ctx.stroke();
+    }, [cellW, scrollLeft, seqAreaW, seqLen, mismatchCols]);
 
     useEffect(() => { draw(); }, [draw]);
+    useEffect(() => { drawHoverOverlay(); }, [drawHoverOverlay]);
+
+    // redrawRef now only calls the lightweight hover overlay
+    useEffect(() => {
+        redrawRef.current = drawHoverOverlay;
+    }, [drawHoverOverlay]);
 
     /* ── scroll handler ─────────────────────────────────── */
     const handleScroll = () => {
@@ -957,22 +987,25 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
         const rect = cvs.getBoundingClientRect();
         const mouseX = e.clientX - rect.left - LABEL_WIDTH;
         const col = Math.floor((scrollLeft + mouseX) / cellW);
-        setHoverCol(col >= 0 && col < seqLen ? col : null);
+        const newCol = col >= 0 && col < seqLen ? col : null;
+        if (newCol === hoverColRef.current) return;
+        hoverColRef.current = newCol;
+        cancelAnimationFrame(hoverRafRef.current);
+        hoverRafRef.current = requestAnimationFrame(() => redrawRef.current());
     }, [scrollLeft, cellW, seqLen]);
 
     const handleCanvasMouseLeave = useCallback(() => {
-        setHoverCol(null);
+        if (hoverColRef.current === null) return;
+        hoverColRef.current = null;
+        cancelAnimationFrame(hoverRafRef.current);
+        hoverRafRef.current = requestAnimationFrame(() => redrawRef.current());
     }, []);
 
-    /* ── main canvas mouse down for GC/MSA region selection ── */
+    /* ── main canvas mouse down for drag-to-zoom selection ── */
     const handleCanvasMouseDown = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
         const cvs = canvasRef.current;
         if (!cvs) return;
         const rect = cvs.getBoundingClientRect();
-        const mouseY = e.clientY - rect.top;
-
-        // Only handle clicks in GC or MSA track area
-        if (mouseY > MAIN_GC_TRACK_H + MAIN_MSA_TRACK_H) return;
 
         // Convert mouse X to a sequence fraction
         const curSeqAreaW = availableWidth - LABEL_WIDTH - RIGHT_PADDING;
@@ -1066,8 +1099,8 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
                     <button
                         onClick={() => setShowOverview((v) => !v)}
                         className={`px-2 py-1 text-xs font-medium rounded-md border transition-colors flex items-center gap-1 ${showOverview
-                                ? 'border-indigo-300 dark:border-indigo-800 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/30'
-                                : 'border-slate-300 dark:border-slate-600 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'
+                            ? 'border-indigo-300 dark:border-indigo-800 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/30'
+                            : 'border-slate-300 dark:border-slate-600 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'
                             }`}
                         title={showOverview ? 'Hide overview bar' : 'Show overview bar'}
                     >
@@ -1178,14 +1211,29 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
                 onWheel={handleWheel}
             >
                 <div style={{ width: `${LABEL_WIDTH + totalVirtualW}px`, height: `${totalH}px`, position: 'absolute', pointerEvents: 'none' }} />
-                <canvas
-                    ref={canvasRef}
-                    style={{ display: 'block', position: 'sticky', top: 0, left: 0, zIndex: 10, cursor: viewMode === 'letters' ? 'pointer' : 'crosshair' }}
-                    onClick={handleCanvasClick}
-                    onMouseDown={handleCanvasMouseDown}
-                    onMouseMove={handleCanvasMouseMove}
-                    onMouseLeave={handleCanvasMouseLeave}
-                />
+                <div style={{ position: 'sticky', top: 0, left: 0, zIndex: 10, width: 'fit-content' }}>
+                    <canvas
+                        ref={canvasRef}
+                        style={{ display: 'block', cursor: viewMode === 'letters' ? 'pointer' : 'crosshair' }}
+                        onClick={handleCanvasClick}
+                        onMouseDown={handleCanvasMouseDown}
+                        onMouseMove={handleCanvasMouseMove}
+                        onMouseLeave={handleCanvasMouseLeave}
+                    />
+                    <canvas
+                        ref={hoverOverlayRef}
+                        style={{ 
+                            display: 'block', 
+                            position: 'absolute', 
+                            top: 0, 
+                            left: 0, 
+                            width: '100%',
+                            height: '100%',
+                            pointerEvents: 'none', 
+                            zIndex: 20 
+                        }}
+                    />
+                </div>
             </div>
 
             {/* ── selection stats footer ── */}
