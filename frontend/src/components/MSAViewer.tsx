@@ -417,9 +417,20 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
             ctx.fillRect(Math.floor(handleX), rowsTop + rowAreaH, handleDrawW, MINIMAP_HANDLE_H - 1);
         }
 
+        const hoverCol = hoverColRef.current;
+        if (hoverCol !== null && hoverCol >= 0 && hoverCol < seqLen) {
+            const hx = LABEL_WIDTH + (hoverCol / seqLen) * mmSeqW;
+            ctx.strokeStyle = mismatchCols.has(hoverCol) ? '#ef4444' : '#3b82f6';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(Math.floor(hx) + 0.5, rowsTop);
+            ctx.lineTo(Math.floor(hx) + 0.5, rowsTop + rowAreaH);
+            ctx.stroke();
+        }
+
         ctx.fillStyle = isDark ? '#334155' : '#cbd5e1';
         ctx.fillRect(LABEL_WIDTH - 1, 0, 1, MINIMAP_HEIGHT);
-    }, [sequences.length, availableWidth, startFrac, endFrac, viewFraction, selectionRange, isDark, drawMinimapBackground]);
+    }, [sequences.length, availableWidth, startFrac, endFrac, viewFraction, selectionRange, isDark, drawMinimapBackground, seqLen, mismatchCols]);
 
     useEffect(() => {
         staticMinimapDrawnRef.current = false;
@@ -958,10 +969,13 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
     useEffect(() => { draw(); }, [draw]);
     useEffect(() => { drawHoverOverlay(); }, [drawHoverOverlay]);
 
-    // redrawRef now only calls the lightweight hover overlay
+    // redrawRef now calls the lightweight hover overlay and redraws the minimap for the cursor
     useEffect(() => {
-        redrawRef.current = drawHoverOverlay;
-    }, [drawHoverOverlay]);
+        redrawRef.current = () => {
+            drawHoverOverlay();
+            drawMinimap();
+        };
+    }, [drawHoverOverlay, drawMinimap]);
 
     /* ── scroll handler ─────────────────────────────────── */
     const handleScroll = () => {
