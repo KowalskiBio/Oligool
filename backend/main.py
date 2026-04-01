@@ -22,7 +22,12 @@ app = FastAPI()
 # Configure CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:8000",
+        "http://127.0.0.1:8000"
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -194,8 +199,16 @@ class MoligizeRequest(BaseModel):
     moligo2_shift: int = 0
     moligo1_len: int = 20
     moligo2_len: int = 20
+    # Advanced Params
+    salt_mono: Optional[float] = 50.0
+    salt_div: Optional[float] = 10.0
+    dntp_conc: Optional[float] = 0.8
+    dna_conc: Optional[float] = 1000.0
+    # Search behavior
+    auto_search: bool = False # If true, finds best spot initially
+    local_optimize: bool = False # If true, finds best length for CURRENT shift
     # Search params
-    search_params: Optional[Dict] = None # {min_len: 18, max_len: 30, tm_min: 47, tm_max: 58, tm_diff: 1.5}
+    search_params: Optional[Dict] = None
 
 @app.post("/moligize")
 async def moligize_sequence(request: MoligizeRequest):
@@ -207,12 +220,12 @@ async def moligize_sequence(request: MoligizeRequest):
 
     # Primer3 Tm calculation parameters (SantaLucia NN model)
     TM_PARAMS = {
-        'mv_conc': 50.0,       # 50 mM Na+ (monovalent)
-        'dv_conc': 10.0,       # 10 mM Mg2+ (divalent)
-        'dntp_conc': 0.8,      # 0 mM dNTPs
-        'dna_conc': 1000.0,     # 0.25 µM oligo concentration (primer3 expects nM: 0.25 µM = 250 nM, matches IDT OligoConc)
-        'tm_method': 'santalucia',      # SantaLucia NN (1)
-        'salt_corrections_method': 'santalucia',  # SantaLucia salt corrections (1)
+        'mv_conc': float(request.salt_mono if request.salt_mono is not None else 50.0),
+        'dv_conc': float(request.salt_div if request.salt_div is not None else 10.0),
+        'dntp_conc': float(request.dntp_conc if request.dntp_conc is not None else 0.8),
+        'dna_conc': float(request.dna_conc if request.dna_conc is not None else 1000.0),
+        'tm_method': 'santalucia',
+        'salt_corrections_method': 'santalucia',
     }
 
     seq = request.sequence.upper().replace(" ", "").replace("\n", "").replace("-", "")
@@ -240,6 +253,59 @@ async def moligize_sequence(request: MoligizeRequest):
     # If the user hasn't manually adjusted lengths (they are at 50), and sequence is < 100
     l1 = request.moligo1_len
     l2 = request.moligo2_len
+
+    # --- Local Length Optimization Logic ---
+    if request.local_optimize and request.search_params:
+        p = request.search_params
+        min_l = int(p.get('min_len', 15))
+        max_l = int(p.get('max_len', 35))
+        tm_min = float(p.get('tm_min', 60.0))
+        tm_max = float(p.get('tm_max', 63.0))
+
+        # Helper to find best local length for a shift
+        def find_best_len(is_moligo1):
+            shift = request.moligo1_shift if is_moligo1 else request.moligo2_shift
+            split_pt = split_idx_in_window
+            
+            best_l = 20
+            best_score = float('inf')
+            
+            for test_l in range(min_l, max_l + 1):
+                # Calculate sequence for this specific length and shift
+                if is_moligo1:
+                    m1_start_target = split_pt + shift
+                    m1_end_target = m1_start_target + test_l
+                    m1_end = min(len(window_seq), m1_end_target)
+                    m1_start = max(0, m1_end - test_l)
+                    test_seq = window_seq[m1_start:m1_end]
+                else: # moligo2
+                    m2_end_target = split_pt + shift
+                    m2_start_target = m2_end_target - test_l
+                    m2_start = max(0, m2_start_target)
+                    m2_end = min(len(window_seq), m2_start + test_l)
+                    test_seq = window_seq[m2_start:m2_end]
+                
+                if not test_seq: continue
+                tm = primer3.calc_tm(test_seq, **TM_PARAMS)
+                
+                # Scoring: 
+                # 0 if in Tm range, otherwise abs distance from range
+                tm_score = 0
+                if tm < tm_min: tm_score = (tm_min - tm) * 10
+                elif tm > tm_max: tm_score = (tm - tm_max) * 10
+                
+                # Favor length closer to 20
+                len_score = abs(test_l - 20) * 0.1
+                
+                total_score = tm_score + len_score
+                if total_score < best_score:
+                    best_score = total_score
+                    best_l = test_l
+            return best_l
+
+        l1 = find_best_len(True)
+        l2 = find_best_len(False)
+
     if l1 == 20 and l2 == 20 and len(window_seq) < 40:
         l1 = l2 = len(window_seq) // 2
 
@@ -282,118 +348,102 @@ async def moligize_sequence(request: MoligizeRequest):
 
     params_not_met = False
     param_warnings = []
-
-    # ── Tm-priority search when search_params is provided ──
-    if request.search_params is not None:
+    
+    # ── Handle Search / Stability ──
+    # If auto_search is True, we initially find the best spot based on params.
+    # To stop "jumping" during manual tune (+/-, drags), auto_search must be False.
+    if request.auto_search and request.search_params is not None:
         p: Dict = request.search_params
         min_l = int(p.get('min_len', 15))
         max_l = int(p.get('max_len', 35))
         tm_min = float(p.get('tm_min', 58.0))
         tm_max = float(p.get('tm_max', 63.0))
         tm_diff = float(p.get('tm_diff', 1.5))
-        preferred_len = (l1 + l2) / 2  # user's preferred length (default 20)
+        preferred_len = (l1 + l2) / 2
 
         split_pt = split_idx_in_window
+        search_min, search_max = 10, min(60, len(window_seq))
 
-        # Search across ALL reasonable lengths (10–60), filter strictly by Tm
-        # Length preference is applied during scoring, NOT as a hard filter
-        search_min = 10
-        search_max = min(60, len(window_seq))
-
-        # Build a dict: for each possible split position, collect left and right candidates
-        # Left candidate (p2) ends at position `sp`, right candidate (p1) starts at `sp`
-        # This enforces contiguity by construction
-        left_by_end = {}   # end_pos -> list of (seq, start, end, tm, length)
-        right_by_start = {}  # start_pos -> list of (seq, start, end, tm, length)
-
+        left_by_end, right_by_start = {}, {}
         for length in range(search_min, search_max + 1):
             for start in range(0, len(window_seq) - length + 1):
                 end = start + length
                 s = window_seq[start:end]
                 tm = primer3.calc_tm(s, **TM_PARAMS)
                 if tm_min <= tm <= tm_max:
-                    # This candidate could be a left oligo (keyed by its end)
                     left_by_end.setdefault(end, []).append((s, start, end, tm, length))
-                    # This candidate could also be a right oligo (keyed by its start)
                     right_by_start.setdefault(start, []).append((s, start, end, tm, length))
 
-        # Find best contiguous pair: iterate over split positions where both
-        # a left candidate ends and a right candidate starts (contiguity by construction)
-        best_pair = None
-        best_score = float('inf')
-
+        best_pair, best_score = None, float('inf')
         for sp in left_by_end:
-            if sp not in right_by_start:
-                continue
-            for lc in left_by_end[sp]:
-                for rc in right_by_start[sp]:
-                    # Tm difference check
-                    if abs(rc[3] - lc[3]) > tm_diff:
-                        continue
-                    # Score: prefer lengths closest to user preference, position near split
-                    len_score = abs(rc[4] - preferred_len) + abs(lc[4] - preferred_len)
-                    pos_score = abs(sp - split_pt)
-                    score = len_score * 10 + pos_score * 0.1
-                    if score < best_score:
-                        best_score = score
-                        best_pair = (rc, lc)
+            if sp in right_by_start:
+                for lc in left_by_end[sp]:
+                    for rc in right_by_start[sp]:
+                        if abs(rc[3] - lc[3]) <= tm_diff:
+                            score = (abs(rc[4] - preferred_len) + abs(lc[4] - preferred_len)) * 10 + abs(sp - split_pt) * 0.1
+                            if score < best_score:
+                                best_score, best_pair = score, (rc, lc)
 
         if best_pair:
             rc, lc = best_pair
-            moligo1_final = rc[0]
-            m1_start, m1_end = rc[1], rc[2]
-            moligo2_final = lc[0]
-            m2_start, m2_end = lc[1], lc[2]
-            # Warn if lengths are outside user's preferred range (but Tm was matched)
-            len1_actual = len(moligo1_final)
-            len2_actual = len(moligo2_final)
-            if len1_actual < min_l or len1_actual > max_l:
-                param_warnings.append(f"Oligo 1 length ({len1_actual}nt) outside range [{min_l}–{max_l}] (Tm matched)")
-            if len2_actual < min_l or len2_actual > max_l:
-                param_warnings.append(f"Oligo 2 length ({len2_actual}nt) outside range [{min_l}–{max_l}] (Tm matched)")
-            if param_warnings:
-                params_not_met = True
+            moligo1_final, m1_start, m1_end = rc[0], rc[1], rc[2]
+            moligo2_final, m2_start, m2_end = lc[0], lc[1], lc[2]
         else:
-            # Fallback to deterministic
-            moligo1_final, moligo2_final, m1_start, m1_end, m2_start, m2_end = get_deterministic(
-                request.moligo1_shift, request.moligo2_shift, l1, l2
-            )
-            # Validate and generate warnings
-            if moligo1_final and moligo2_final:
-                tm1 = primer3.calc_tm(moligo1_final, **TM_PARAMS)
-                tm2 = primer3.calc_tm(moligo2_final, **TM_PARAMS)
-                len1_actual = len(moligo1_final)
-                len2_actual = len(moligo2_final)
-
-                if len1_actual < min_l or len1_actual > max_l:
-                    param_warnings.append(f"Oligo 1 length ({len1_actual}nt) outside range [{min_l}–{max_l}]")
-                if tm1 < tm_min or tm1 > tm_max:
-                    param_warnings.append(f"Oligo 1 Tm ({tm1:.1f}°C) outside range [{tm_min:.1f}–{tm_max:.1f}]")
-                if len2_actual < min_l or len2_actual > max_l:
-                    param_warnings.append(f"Oligo 2 length ({len2_actual}nt) outside range [{min_l}–{max_l}]")
-                if tm2 < tm_min or tm2 > tm_max:
-                    param_warnings.append(f"Oligo 2 Tm ({tm2:.1f}°C) outside range [{tm_min:.1f}–{tm_max:.1f}]")
-                if abs(tm1 - tm2) > tm_diff:
-                    param_warnings.append(f"Tm difference ({abs(tm1 - tm2):.1f}°C) exceeds max ({tm_diff:.1f}°C)")
-
-            if not param_warnings:
-                param_warnings.append("No oligo pair found matching all Tm/length criteria in this region")
+            moligo1_final, moligo2_final, m1_start, m1_end, m2_start, m2_end = get_deterministic(0, 0, l1, l2)
             params_not_met = True
+            param_warnings.append("No optimal pair found; using default positions")
     else:
-        # ── Manual mode: deterministic placement (unchanged) ──
+        # User is editing (non-zero shifts or search_params missing) -> Sticky mode
         moligo1_final, moligo2_final, m1_start, m1_end, m2_start, m2_end = get_deterministic(
             request.moligo1_shift, request.moligo2_shift, l1, l2
         )
 
-    # Absolute indices
-    abs_m2_start = start_w + m2_start
-    abs_m2_end = start_w + m2_end
-    abs_m1_start = start_w + m1_start
-    abs_m1_end = start_w + m1_end
+    # ── Validation ──
+    stats_p1 = get_stats(moligo1_final, start_w + m1_start, start_w + m1_end)
+    stats_p2 = get_stats(moligo2_final, start_w + m2_start, start_w + m2_end)
+    
+    if request.search_params is not None:
+        p = request.search_params
+        min_l = int(p.get('min_len') if p.get('min_len') is not None else 15)
+        max_l = int(p.get('max_len') if p.get('max_len') is not None else 35)
+        tm_min = float(p.get('tm_min') if p.get('tm_min') is not None else 58.0)
+        tm_max = float(p.get('tm_max') if p.get('tm_max') is not None else 63.0)
+        tm_diff = float(p.get('tm_diff') if p.get('tm_diff') is not None else 1.5)
+        gc_min = float(p.get('gc_min') if p.get('gc_min') is not None else 0)
+        gc_max = float(p.get('gc_max') if p.get('gc_max') is not None else 100)
+
+        # P1
+        stats_p1['len_ok'] = min_l <= stats_p1['len'] <= max_l
+        stats_p1['tm_ok'] = tm_min <= stats_p1['tm'] <= tm_max
+        stats_p1['gc_ok'] = gc_min <= stats_p1['gc'] <= gc_max
+        # P2
+        stats_p2['len_ok'] = min_l <= stats_p2['len'] <= max_l
+        stats_p2['tm_ok'] = tm_min <= stats_p2['tm'] <= tm_max
+        stats_p2['gc_ok'] = gc_min <= stats_p2['gc'] <= gc_max
+        # Diffs
+        tm_diff_actual = abs(stats_p1['tm'] - stats_p2['tm'])
+        tm_diff_ok = tm_diff_actual <= tm_diff
+        
+        if not (stats_p1['len_ok'] and stats_p1['tm_ok'] and stats_p1['gc_ok'] and 
+                stats_p2['len_ok'] and stats_p2['tm_ok'] and stats_p2['gc_ok'] and tm_diff_ok):
+            params_not_met = True
+            if not stats_p1['len_ok']: param_warnings.append(f"Oligo 1 length ({stats_p1['len']}) outside range")
+            if not stats_p1['tm_ok']: param_warnings.append(f"Oligo 1 Tm ({stats_p1['tm']}°C) outside range")
+            if not stats_p1['gc_ok']: param_warnings.append(f"Oligo 1 GC ({stats_p1['gc']}%) outside range")
+            if not stats_p2['len_ok']: param_warnings.append(f"Oligo 2 length ({stats_p2['len']}) outside range")
+            if not stats_p2['tm_ok']: param_warnings.append(f"Oligo 2 Tm ({stats_p2['tm']}°C) outside range")
+            if not stats_p2['gc_ok']: param_warnings.append(f"Oligo 2 GC ({stats_p2['gc']}%) outside range")
+            if not tm_diff_ok: param_warnings.append(f"Tm difference ({tm_diff_actual:.1f}°C) exceeds max")
+    else:
+        # Default All OK if no params
+        for s in [stats_p1, stats_p2]:
+            s['len_ok'] = s['tm_ok'] = s['gc_ok'] = True
+        tm_diff_ok = True
 
     return {
-        "p1": get_stats(moligo1_final, abs_m1_start, abs_m1_end),
-        "p2": get_stats(moligo2_final, abs_m2_start, abs_m2_end),
+        "p1": stats_p1,
+        "p2": stats_p2,
+        "tm_diff_ok": tm_diff_ok,
         "split_idx": absolute_split,
         "params_not_met": params_not_met,
         "param_warnings": param_warnings
@@ -414,6 +464,7 @@ class IdtAnalyzeRequest(BaseModel):
     mg_conc: float = 10.0
     mv_conc: float = 50.0
     dntp_conc: float = 0.8
+    oligo_conc: float = 0.25
 
 
 @app.post("/idt/token")
@@ -482,25 +533,34 @@ async def analyze_idt_oligos(request: IdtAnalyzeRequest):
             # Hairpin: sequence in JSON body with specific concentration params
             payload = {
                 "Sequence": seq1,
-                "NaConc": 50.0,
-                "FoldingTemp": 25.0,
+                "NaConc": request.mv_conc,
+                "FoldingTemp": 34.0, # Use target Tm as folding temp
                 "MgConc": request.mg_conc,
+                "dNTPsConc": request.dntp_conc,
+                "OligoConc": request.oligo_conc,
                 "NucleotideType": "DNA"
             }
-        elif endpoint == "SelfDimer":
-            # SelfDimer: sequence as query parameter only
+        elif endpoint == "SelfDimer" or endpoint == "HeteroDimer":
+            # Dimer endpoints in IDT API generally use query params for sequence
+            # but may also accept concentration params in some versions/deployments.
+            # However, standard /SelfDimer and /HeteroDimer are basic.
             params = {"primary": seq1}
-        elif endpoint == "HeteroDimer":
-            # HeteroDimer: both sequences as query parameters
-            params = {"primary": seq1, "secondary": seq2}
+            if seq2: params["secondary"] = seq2
+            # Add salt params to query if supported by this specific REST version
+            params.update({
+                "NaConc": request.mv_conc,
+                "MgConc": request.mg_conc,
+                "dNTPsConc": request.dntp_conc,
+                "OligoConc": request.oligo_conc,
+            })
         elif endpoint == "Analyze":
             # Analyze: requires full payload for valid response
             payload = {
                 "Sequence": seq1,
-                "NaConc": 50.0,
+                "NaConc": request.mv_conc,
                 "MgConc": request.mg_conc,
-                "dNTPsConc": 0.0,
-                "OligoConc": 0.25,
+                "dNTPsConc": request.dntp_conc,
+                "OligoConc": request.oligo_conc,
                 "NucleotideType": "DNA"
             }
             

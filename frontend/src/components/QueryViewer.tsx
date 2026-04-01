@@ -24,8 +24,11 @@ interface IdtData {
 interface Primer {
     seq: string;
     tm: number;
+    tm_ok?: boolean;
     len: number;
+    len_ok?: boolean;
     gc: number;
+    gc_ok?: boolean;
     start: number; // relative to the UNGAPPED raw sequence of the slice
     end: number;
 }
@@ -33,6 +36,7 @@ interface Primer {
 interface OligizeResponse {
     p1: Primer;
     p2: Primer;
+    tm_diff_ok?: boolean;
     split_idx: number;
     params_not_met?: boolean;
     param_warnings?: string[];
@@ -40,7 +44,6 @@ interface OligizeResponse {
 
 export default function QueryViewer({ data, jobName, onPrimersUpdate, idtCredentials }: QueryViewerProps) {
     const [copyFeedback, setCopyFeedback] = useState('');
-    const [showOligizer, setShowOligizer] = useState(() => localStorage.getItem('show_oligizer') === 'true');
 
     // IDT Analysis State
     const [isIdtLoading, setIsIdtLoading] = useState(false);
@@ -62,7 +65,6 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, idtCredent
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
 
-    const [showParams, setShowParams] = useState(() => localStorage.getItem('show_search_params') === 'true');
     const [searchParams, setSearchParams] = useState(() => {
         const saved = localStorage.getItem('oligo_search_params');
         if (saved) return JSON.parse(saved);
@@ -71,10 +73,35 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, idtCredent
             max_l: 35,
             tm_min: 60.0,
             tm_max: 63.0,
-            tm_diff: 1.5
+            tm_diff: 1.5,
+            gc_min: 30,
+            gc_max: 80
         };
     });
+    const [advancedParams, setAdvancedParams] = useState(() => {
+        const saved = localStorage.getItem('oligo_advanced_params');
+        if (saved) return JSON.parse(saved);
+        return {
+            salt_mono: 50.0,
+            salt_div: 10.0,
+            dntp_conc: 0.8,
+            dna_conc: 500.0
+        };
+    });
+    const [idtAdvancedParams, setIdtAdvancedParams] = useState(() => {
+        const saved = localStorage.getItem('idt_advanced_params');
+        if (saved) return JSON.parse(saved);
+        return {
+            mv_conc: 50.0,
+            mg_conc: 10.0,
+            dntp_conc: 0.8,
+            oligo_conc: 0.25
+        };
+    });
+    const [showAdvanced, setShowAdvanced] = useState(false);
     const [paramsNotMet, setParamsNotMet] = useState(false);
+    const [isAutoSearchNeeded, setIsAutoSearchNeeded] = useState(true);
+    const lastShiftsApplied = useRef({ s1: 0, s2: 0 });
 
     // MOLigo state
     const [showMOLigo, setShowMOLigo] = useState(() => localStorage.getItem('show_moligo_prov') === 'true');
@@ -92,10 +119,14 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, idtCredent
     // Initialize/Reset state when data changes
     useEffect(() => {
         if (data) {
-            // Keep lengths and shift persistent if the user wants them to stay
             setIdtResults(null);
             setIdtError(null);
             onPrimersUpdate(null);
+            // Reset shifts for a NEW sequence to trigger initial best-place search
+            setMoligo1Shift(0);
+            setMoligo2Shift(0);
+            lastShiftsApplied.current = { s1: 0, s2: 0 };
+            setIsAutoSearchNeeded(true);
         }
     }, [data?.id, data?.seq]);
 
@@ -112,7 +143,7 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, idtCredent
     };
 
     useEffect(() => {
-        if (!data || !showOligizer) {
+        if (!data) {
             onPrimersUpdate(null);
             return;
         }
@@ -125,6 +156,9 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, idtCredent
             setError('');
 
             try {
+                const isShiftChange = moligo1Shift !== lastShiftsApplied.current.s1 || moligo2Shift !== lastShiftsApplied.current.s2;
+                const localOptimize = isShiftChange || isAutoSearchNeeded;
+
                 const res = await fetch(((import.meta.env.VITE_API_BASE as string) || "") + '/moligize', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -134,14 +168,21 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, idtCredent
                         moligo2_shift: moligo2Shift,
                         moligo1_len: moligo1Len,
                         moligo2_len: moligo2Len,
-                        search_params: showParams ? {
+                        auto_search: isAutoSearchNeeded,
+                        local_optimize: localOptimize,
+                        salt_mono: Number(advancedParams.salt_mono),
+                        salt_div: Number(advancedParams.salt_div),
+                        dntp_conc: Number(advancedParams.dntp_conc),
+                        dna_conc: Number(advancedParams.dna_conc),
+                        search_params: {
                             min_len: Number(searchParams.min_len),
                             max_len: Number(searchParams.max_l),
                             tm_min: Number(searchParams.tm_min),
                             tm_max: Number(searchParams.tm_max),
                             tm_diff: Number(searchParams.tm_diff),
-                            moligoShift: moligo2Shift // Backend uses this for fallback if not split, but we pass exact shifts above
-                        } : null
+                            gc_min: Number(searchParams.gc_min),
+                            gc_max: Number(searchParams.gc_max)
+                        }
                     })
                 });
 
@@ -157,6 +198,27 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, idtCredent
                 const json: OligizeResponse = await res.json();
                 setPrimers(json);
                 setParamsNotMet(!!json.params_not_met);
+                
+                const localOptimizeUsed = localOptimize;
+
+                if (isAutoSearchNeeded) {
+                    // Sync shifts with the auto-found positions so manual tune (+/-) stays anchored there
+                    setMoligo1Shift(json.p1.start - json.split_idx);
+                    setMoligo2Shift(json.p2.end - json.split_idx);
+                    lastShiftsApplied.current = {
+                        s1: json.p1.start - json.split_idx,
+                        s2: json.p2.end - json.split_idx
+                    };
+                    setIsAutoSearchNeeded(false); 
+                } else {
+                    lastShiftsApplied.current = { s1: moligo1Shift, s2: moligo2Shift };
+                }
+
+                // Sync lengths back if they were optimized by backend
+                if (localOptimizeUsed) {
+                    if (json.p1.len !== moligo1Len) setMoligo1Len(json.p1.len);
+                    if (json.p2.len !== moligo2Len) setMoligo2Len(json.p2.len);
+                }
 
                 const p1StartGapped = mapUngappedToGapped(json.p1.start, data.seq);
                 const p1EndGapped = mapUngappedToGapped(json.p1.end, data.seq);
@@ -184,16 +246,13 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, idtCredent
 
         const debounce = setTimeout(fetchPrimers, 200);
         return () => clearTimeout(debounce);
-    }, [data, showOligizer, moligo1Shift, moligo2Shift, showParams, searchParams, moligo1Len, moligo2Len]);
+    }, [data, moligo1Shift, moligo2Shift, searchParams, moligo1Len, moligo2Len]);
 
     // Persistence
     useEffect(() => { localStorage.setItem('moligo1_shift', String(moligo1Shift)); }, [moligo1Shift]);
     useEffect(() => { localStorage.setItem('moligo2_shift', String(moligo2Shift)); }, [moligo2Shift]);
     useEffect(() => { localStorage.setItem('moligo_1_len', String(moligo1Len)); }, [moligo1Len]);
     useEffect(() => { localStorage.setItem('moligo_2_len', String(moligo2Len)); }, [moligo2Len]);
-    useEffect(() => { localStorage.setItem('show_oligizer', String(showOligizer)); }, [showOligizer]);
-
-    useEffect(() => { localStorage.setItem('show_search_params', String(showParams)); }, [showParams]);
     useEffect(() => { localStorage.setItem('oligo_search_params', JSON.stringify(searchParams)); }, [searchParams]);
     useEffect(() => { localStorage.setItem('show_moligo_prov', String(showMOLigo)); }, [showMOLigo]);
     useEffect(() => { localStorage.setItem('tag_seq', tagSeq); }, [tagSeq]);
@@ -233,7 +292,6 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, idtCredent
             if (dragState) {
                 const D = dragState.deltaChars;
                 if (D !== 0) {
-                    setShowParams(false);
                     let newShift = dragState.initShift;
                     let newLen = dragState.initLen;
                     const id = dragState.id;
@@ -393,9 +451,10 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, idtCredent
                     p1_seq: primers.p1.seq,
                     p2_seq: primers.p2.seq,
                     token: access_token,
-                    mg_conc: idtCredentials.mgConc ?? 10.0,
-                    mv_conc: 50.0,
-                    dntp_conc: 0.8
+                    mg_conc: Number(idtAdvancedParams.mg_conc),
+                    mv_conc: Number(idtAdvancedParams.mv_conc),
+                    dntp_conc: Number(idtAdvancedParams.dntp_conc),
+                    oligo_conc: Number(idtAdvancedParams.oligo_conc)
                 })
             });
             if (!aRes.ok) throw new Error("IDT Analysis Failed");
@@ -569,28 +628,6 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, idtCredent
                     <span className="text-sm text-slate-500 dark:text-slate-400">
                         (bp {data.start + 1}–{data.end + 1}, len {rawSeq.length})
                     </span>
-                    <button
-                        onClick={() => setShowOligizer(!showOligizer)}
-                        className={`ml-2 px-3 py-1 text-xs font-bold rounded-full border transition-all ${showOligizer
-                            ? 'bg-purple-600 text-white border-purple-600 shadow-md ring-2 ring-purple-100 dark:ring-purple-900/40'
-                            : 'bg-white dark:bg-slate-700 text-purple-600 dark:text-purple-400 border-purple-200 dark:border-purple-800 hover:border-purple-400 dark:hover:border-purple-600 hover:bg-purple-50 dark:hover:bg-purple-900/20'
-                            }`}
-                    >
-                        ⚡ Oligize!
-                    </button>
-
-                    {/* Previous bulk shift buttons removed in favor of InteractiveSequenceMap */}
-
-                    <button
-                        onClick={() => setShowParams(!showParams)}
-                        className={`ml-2 px-3 py-1 text-[10px] font-bold rounded border transition-all uppercase tracking-tight ${showParams
-                            ? 'bg-amber-100 text-amber-700 border-amber-300'
-                            : 'bg-white dark:bg-slate-700 text-slate-500 border-slate-200 dark:border-slate-600 hover:border-amber-300 hover:text-amber-600'
-                            }`}
-                    >
-                        ⚙️ Search by params
-                    </button>
-
                     {primers && (
                         <button
                             onClick={() => setShowMOLigo(!showMOLigo)}
@@ -617,234 +654,393 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, idtCredent
             </div>
 
             <div className="p-0">
-                {showOligizer && (
-                    <div className="bg-purple-50/50 dark:bg-purple-900/5 border-b border-purple-100 dark:border-purple-900/20 p-4 font-sans relative">
-                        {showParams && (
-                            <div className="mb-4 p-3 bg-white dark:bg-slate-800 rounded-lg border border-amber-200 dark:border-amber-900/30 shadow-sm grid grid-cols-2 md:grid-cols-5 gap-3">
-                                <div className="flex flex-col gap-1">
-                                    <label className="text-[10px] font-bold text-slate-400 uppercase">Min Len</label>
-                                    <input
-                                        type="number"
-                                        value={searchParams.min_len}
-                                        onChange={e => setSearchParams({ ...searchParams, min_len: parseInt(e.target.value) })}
-                                        className="px-2 py-1 text-xs border border-slate-200 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-900"
-                                    />
+                <div className="bg-purple-50/50 dark:bg-purple-900/5 border-b border-purple-100 dark:border-purple-900/20 p-4 font-sans relative">
+                    <div className="flex justify-between items-center mb-2">
+                        <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest">Oligo Selection Parameters</h3>
+                        <button 
+                            onClick={() => setShowAdvanced(!showAdvanced)}
+                            className="text-[10px] font-bold text-indigo-500 hover:text-indigo-600 uppercase tracking-wider flex items-center gap-1"
+                        >
+                            {showAdvanced ? 'Hide Advanced' : 'Show Advanced'}
+                            <span>{showAdvanced ? '▴' : '▾'}</span>
+                        </button>
+                    </div>
+                    <div className="mb-4 p-3 bg-white dark:bg-slate-800 rounded-lg border border-indigo-100 dark:border-indigo-900/30 shadow-sm grid grid-cols-2 lg:grid-cols-7 gap-3">
+                        <div className="flex flex-col gap-1">
+                            <label className="text-[10px] font-bold text-slate-400 uppercase">Min Len</label>
+                            <input
+                                type="number"
+                                value={searchParams.min_len || 15}
+                                onChange={e => setSearchParams({ ...searchParams, min_len: parseInt(e.target.value) })}
+                                className="px-2 py-1 text-xs border border-slate-200 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-900"
+                            />
+                        </div>
+                        <div className="flex flex-col gap-1">
+                            <label className="text-[10px] font-bold text-slate-400 uppercase">Max Len</label>
+                            <input
+                                type="number"
+                                value={searchParams.max_l || 35}
+                                onChange={e => setSearchParams({ ...searchParams, max_l: parseInt(e.target.value) })}
+                                className="px-2 py-1 text-xs border border-slate-200 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-900"
+                            />
+                        </div>
+                        <div className="flex flex-col gap-1">
+                            <label className="text-[10px] font-bold text-slate-400 uppercase">Tm Min</label>
+                            <input
+                                type="number"
+                                step="0.1"
+                                value={searchParams.tm_min || 60.0}
+                                onChange={e => setSearchParams({ ...searchParams, tm_min: parseFloat(e.target.value) })}
+                                className="px-2 py-1 text-xs border border-slate-200 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-900"
+                            />
+                        </div>
+                        <div className="flex flex-col gap-1">
+                            <label className="text-[10px] font-bold text-slate-400 uppercase">Tm Max</label>
+                            <input
+                                type="number"
+                                step="0.1"
+                                value={searchParams.tm_max || 63.0}
+                                onChange={e => setSearchParams({ ...searchParams, tm_max: parseFloat(e.target.value) })}
+                                className="px-2 py-1 text-xs border border-slate-200 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-900"
+                            />
+                        </div>
+                        <div className="flex flex-col gap-1">
+                            <label className="text-[10px] font-bold text-slate-400 uppercase">Tm Diff</label>
+                            <input
+                                type="number"
+                                step="0.1"
+                                value={searchParams.tm_diff || 1.5}
+                                onChange={e => setSearchParams({ ...searchParams, tm_diff: parseFloat(e.target.value) })}
+                                className="px-2 py-1 text-xs border border-slate-200 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-900"
+                            />
+                        </div>
+                        <div className="flex flex-col gap-1">
+                            <label className="text-[10px] font-bold text-slate-400 uppercase">GC Min</label>
+                            <input
+                                type="number"
+                                value={searchParams.gc_min || 30}
+                                onChange={e => setSearchParams({ ...searchParams, gc_min: parseInt(e.target.value) })}
+                                className="px-2 py-1 text-xs border border-slate-200 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-900"
+                            />
+                        </div>
+                        <div className="flex flex-col gap-1">
+                            <label className="text-[10px] font-bold text-slate-400 uppercase">GC Max</label>
+                            <input
+                                type="number"
+                                value={searchParams.gc_max || 80}
+                                onChange={e => setSearchParams({ ...searchParams, gc_max: parseInt(e.target.value) })}
+                                className="px-2 py-1 text-xs border border-slate-200 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-900"
+                            />
+                        </div>
+                    </div>
+
+                    {showAdvanced && (
+                        <div className="mb-4 p-4 bg-indigo-50/10 dark:bg-indigo-900/10 rounded-xl border border-indigo-100 dark:border-indigo-900/20 shadow-sm animate-in fade-in slide-in-from-top-2 duration-200">
+                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                                {/* Section 1: Local / Primer3 */}
+                                <div>
+                                    <div className="flex items-center gap-2 mb-3">
+                                        <div className="w-1.5 h-4 bg-indigo-500 rounded-full"></div>
+                                        <h3 className="text-xs font-bold text-indigo-500 uppercase tracking-wider">Local (Primer3 / Thermo)</h3>
+                                    </div>
+                                    <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-2 xl:grid-cols-4 gap-3">
+                                        <div className="flex flex-col gap-1">
+                                            <label className="text-[10px] font-bold text-indigo-400/80 uppercase">Na+ (mM)</label>
+                                            <input
+                                                type="number" step="0.1"
+                                                value={advancedParams.salt_mono}
+                                                onChange={e => {
+                                                    const next = { ...advancedParams, salt_mono: parseFloat(e.target.value) };
+                                                    setAdvancedParams(next);
+                                                    localStorage.setItem('oligo_advanced_params', JSON.stringify(next));
+                                                }}
+                                                className="px-2 py-1 text-xs border border-indigo-100/50 dark:border-indigo-900/50 rounded bg-white dark:bg-slate-900"
+                                            />
+                                        </div>
+                                        <div className="flex flex-col gap-1">
+                                            <label className="text-[10px] font-bold text-indigo-400/80 uppercase">Mg²⁺ (mM)</label>
+                                            <input
+                                                type="number" step="0.1"
+                                                value={advancedParams.salt_div}
+                                                onChange={e => {
+                                                    const next = { ...advancedParams, salt_div: parseFloat(e.target.value) };
+                                                    setAdvancedParams(next);
+                                                    localStorage.setItem('oligo_advanced_params', JSON.stringify(next));
+                                                }}
+                                                className="px-2 py-1 text-xs border border-indigo-100/50 dark:border-indigo-900/50 rounded bg-white dark:bg-slate-900"
+                                            />
+                                        </div>
+                                        <div className="flex flex-col gap-1">
+                                            <label className="text-[10px] font-bold text-indigo-400/80 uppercase">dNTP (mM)</label>
+                                            <input
+                                                type="number" step="0.1"
+                                                value={advancedParams.dntp_conc}
+                                                onChange={e => {
+                                                    const next = { ...advancedParams, dntp_conc: parseFloat(e.target.value) };
+                                                    setAdvancedParams(next);
+                                                    localStorage.setItem('oligo_advanced_params', JSON.stringify(next));
+                                                }}
+                                                className="px-2 py-1 text-xs border border-indigo-100/50 dark:border-indigo-900/50 rounded bg-white dark:bg-slate-900"
+                                            />
+                                        </div>
+                                        <div className="flex flex-col gap-1">
+                                            <label className="text-[10px] font-bold text-indigo-400/80 uppercase">DNA (nM)</label>
+                                            <input
+                                                type="number" step="10"
+                                                value={advancedParams.dna_conc}
+                                                onChange={e => {
+                                                    const next = { ...advancedParams, dna_conc: parseFloat(e.target.value) };
+                                                    setAdvancedParams(next);
+                                                    localStorage.setItem('oligo_advanced_params', JSON.stringify(next));
+                                                }}
+                                                className="px-2 py-1 text-xs border border-indigo-100/50 dark:border-indigo-900/50 rounded bg-white dark:bg-slate-900"
+                                            />
+                                        </div>
+                                    </div>
                                 </div>
-                                <div className="flex flex-col gap-1">
-                                    <label className="text-[10px] font-bold text-slate-400 uppercase">Max Len</label>
-                                    <input
-                                        type="number"
-                                        value={searchParams.max_l}
-                                        onChange={e => setSearchParams({ ...searchParams, max_l: parseInt(e.target.value) })}
-                                        className="px-2 py-1 text-xs border border-slate-200 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-900"
-                                    />
+
+                                {/* Section 2: IDT */}
+                                <div className="lg:border-l lg:border-indigo-100/50 dark:lg:border-indigo-900/30 lg:pl-6">
+                                    <div className="flex items-center gap-2 mb-3">
+                                        <div className="w-1.5 h-4 bg-purple-500 rounded-full"></div>
+                                        <h3 className="text-xs font-bold text-purple-500 uppercase tracking-wider">IDT OligoAnalyzer</h3>
+                                    </div>
+                                    <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-2 xl:grid-cols-4 gap-3">
+                                        <div className="flex flex-col gap-1">
+                                            <label className="text-[10px] font-bold text-purple-400/80 uppercase">Na+ (mM)</label>
+                                            <input
+                                                type="number" step="0.1"
+                                                value={idtAdvancedParams.mv_conc}
+                                                onChange={e => {
+                                                    const next = { ...idtAdvancedParams, mv_conc: parseFloat(e.target.value) };
+                                                    setIdtAdvancedParams(next);
+                                                    localStorage.setItem('idt_advanced_params', JSON.stringify(next));
+                                                }}
+                                                className="px-2 py-1 text-xs border border-purple-100/50 dark:border-purple-900/50 rounded bg-white dark:bg-slate-900"
+                                            />
+                                        </div>
+                                        <div className="flex flex-col gap-1">
+                                            <label className="text-[10px] font-bold text-purple-400/80 uppercase">Mg²⁺ (mM)</label>
+                                            <input
+                                                type="number" step="0.1"
+                                                value={idtAdvancedParams.mg_conc}
+                                                onChange={e => {
+                                                    const next = { ...idtAdvancedParams, mg_conc: parseFloat(e.target.value) };
+                                                    setIdtAdvancedParams(next);
+                                                    localStorage.setItem('idt_advanced_params', JSON.stringify(next));
+                                                }}
+                                                className="px-2 py-1 text-xs border border-purple-100/50 dark:border-purple-900/50 rounded bg-white dark:bg-slate-900"
+                                            />
+                                        </div>
+                                        <div className="flex flex-col gap-1">
+                                            <label className="text-[10px] font-bold text-purple-400/80 uppercase">dNTP (mM)</label>
+                                            <input
+                                                type="number" step="0.05"
+                                                value={idtAdvancedParams.dntp_conc}
+                                                onChange={e => {
+                                                    const next = { ...idtAdvancedParams, dntp_conc: parseFloat(e.target.value) };
+                                                    setIdtAdvancedParams(next);
+                                                    localStorage.setItem('idt_advanced_params', JSON.stringify(next));
+                                                }}
+                                                className="px-2 py-1 text-xs border border-purple-100/50 dark:border-purple-900/50 rounded bg-white dark:bg-slate-900"
+                                            />
+                                        </div>
+                                        <div className="flex flex-col gap-1">
+                                            <label className="text-[10px] font-bold text-purple-400/80 uppercase">Oligo (µM)</label>
+                                            <input
+                                                type="number" step="0.05"
+                                                value={idtAdvancedParams.oligo_conc}
+                                                onChange={e => {
+                                                    const next = { ...idtAdvancedParams, oligo_conc: parseFloat(e.target.value) };
+                                                    setIdtAdvancedParams(next);
+                                                    localStorage.setItem('idt_advanced_params', JSON.stringify(next));
+                                                }}
+                                                className="px-2 py-1 text-xs border border-purple-100/50 dark:border-purple-900/50 rounded bg-white dark:bg-slate-900"
+                                            />
+                                        </div>
+                                    </div>
                                 </div>
-                                <div className="flex flex-col gap-1">
-                                    <label className="text-[10px] font-bold text-slate-400 uppercase">Tm Min</label>
-                                    <input
-                                        type="number"
-                                        step="0.1"
-                                        value={searchParams.tm_min}
-                                        onChange={e => setSearchParams({ ...searchParams, tm_min: parseFloat(e.target.value) })}
-                                        className="px-2 py-1 text-xs border border-slate-200 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-900"
-                                    />
+                            </div>
+                        </div>
+                    )}
+
+                    {paramsNotMet && primers?.param_warnings && primers.param_warnings.length > 0 && (
+                        <div className="mb-4 px-3 py-2 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/50 rounded-md text-amber-700 dark:text-amber-400 text-xs flex flex-col gap-1">
+                            <div className="flex items-center gap-2 font-bold">
+                                <span className="text-sm">⚠️</span>
+                                Oligos outside search parameters:
+                            </div>
+                            <ul className="ml-5 list-disc text-[11px] space-y-0.5">
+                                {primers.param_warnings.map((w, i) => <li key={i}>{w}</li>)}
+                            </ul>
+                        </div>
+                    )}
+
+                    {error && <div className="text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 p-2 rounded mb-4 border border-red-100 dark:border-red-900/30">{error}</div>}
+
+                    {primers ? (
+                        <div className={`grid grid-cols-1 md:grid-cols-2 gap-4 transition-opacity duration-200 ${loading ? 'opacity-50' : 'opacity-100'}`}>
+                            <div className="bg-white dark:bg-slate-800 rounded-lg border border-indigo-100 dark:border-indigo-900/30 p-3 shadow-sm relative group flex flex-col justify-between">
+                                <div>
+                                    <div className="flex justify-between items-start mb-2">
+                                        <div className="text-xs font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wider">Oligo 2 (Left / 5')</div>
+                                        <button
+                                            onClick={() => handleCopy(primers.p2.seq)}
+                                            className="text-xs bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400 px-2 py-1 rounded hover:bg-amber-100 dark:hover:bg-amber-900/40 border border-amber-200 dark:border-amber-800/50"
+                                        >
+                                            Copy
+                                        </button>
+                                    </div>
+                                    <div className="font-mono text-sm text-slate-700 dark:text-slate-300 break-all bg-amber-50/50 dark:bg-amber-900/10 p-2 rounded line-clamp-2 min-h-[3rem] flex items-center">{primers.p2.seq}</div>
                                 </div>
-                                <div className="flex flex-col gap-1">
-                                    <label className="text-[10px] font-bold text-slate-400 uppercase">Tm Max</label>
-                                    <input
-                                        type="number"
-                                        step="0.1"
-                                        value={searchParams.tm_max}
-                                        onChange={e => setSearchParams({ ...searchParams, tm_max: parseFloat(e.target.value) })}
-                                        className="px-2 py-1 text-xs border border-slate-200 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-900"
-                                    />
+                                <div className="mt-3 flex items-center justify-between border-t border-slate-100 dark:border-slate-700 pt-2">
+                                    <div className="flex gap-3 text-xs text-slate-500 dark:text-slate-400 items-center">
+                                        <span>Len: <b className={primers.p2.len_ok === false ? "text-red-500 font-bold" : "text-emerald-500 font-bold"}>{primers.p2.len}</b></span>
+                                        <span>GC: <b className={primers.p2.gc_ok === false ? "text-red-500 font-bold" : "text-emerald-500 font-bold"}>{primers.p2.gc != null ? primers.p2.gc.toFixed(1) : ((primers.p2.seq.match(/[GCgc]/g) || []).length / primers.p2.seq.length * 100).toFixed(1)}%</b></span>
+                                        <span title="Primer3 Tm">P3 Tm: <b className={primers.p2.tm_ok === false ? "text-red-500 font-bold" : "text-emerald-500 font-bold"}>{primers.p2.tm}°C</b></span>
+                                        {idtResults?.m2?.analyze && (
+                                            <span title="IDT Tm" className="bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300 px-1.5 py-0.5 rounded border border-purple-200 dark:border-purple-800">
+                                                IDT Tm: <b className="font-bold">{extractTm(idtResults.m2.analyze)?.toFixed(1) || 'N/A'}°C</b>
+                                            </span>
+                                        )}
+                                        <span title="Tm Difference" className="text-[10px] opacity-80 flex items-center gap-1">
+                                            ΔTm: <b className={primers.tm_diff_ok === false ? "text-red-500 font-bold" : "text-emerald-500 font-bold"}>{Math.abs(primers.p1.tm - primers.p2.tm).toFixed(1)}°C</b>
+                                        </span>
+                                    </div>
+                                    <div className="flex bg-slate-100 dark:bg-slate-700 rounded border border-slate-200 dark:border-slate-600 overflow-hidden shadow-sm">
+                                        <button onClick={() => { setMoligo2Len(prev => Math.max(10, prev - 1)); }} className="w-8 h-7 flex items-center justify-center hover:bg-white dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition-colors font-bold border-r border-slate-200 dark:border-slate-600">-</button>
+                                        <button onClick={() => { setMoligo2Len(prev => Math.min(60, prev + 1)); }} className="w-8 h-7 flex items-center justify-center hover:bg-white dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition-colors font-bold">+</button>
+                                    </div>
                                 </div>
-                                <div className="flex flex-col gap-1">
-                                    <label className="text-[10px] font-bold text-slate-400 uppercase">Tm Diff</label>
-                                    <input
-                                        type="number"
-                                        step="0.1"
-                                        value={searchParams.tm_diff}
-                                        onChange={e => setSearchParams({ ...searchParams, tm_diff: parseFloat(e.target.value) })}
-                                        className="px-2 py-1 text-xs border border-slate-200 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-900"
-                                    />
+                            </div>
+
+                            <div className="bg-white dark:bg-slate-800 rounded-lg border border-green-200 dark:border-green-900/30 p-3 shadow-sm relative group flex flex-col justify-between">
+                                <div>
+                                    <div className="flex justify-between items-start mb-2">
+                                        <div className="text-xs font-bold text-green-600 dark:text-green-400 uppercase tracking-wider">Oligo 1 (Right / 3')</div>
+                                        <button
+                                            onClick={() => handleCopy(primers.p1.seq)}
+                                            className="text-xs bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400 px-2 py-1 rounded hover:bg-green-100 dark:hover:bg-green-900/40 border border-green-200 dark:border-green-800/50"
+                                        >
+                                            Copy
+                                        </button>
+                                    </div>
+                                    <div className="font-mono text-sm text-slate-700 dark:text-slate-300 break-all bg-green-50/50 dark:bg-green-900/10 p-2 rounded line-clamp-2 min-h-[3rem] flex items-center">{primers.p1.seq}</div>
                                 </div>
+                                <div className="mt-3 flex items-center justify-between border-t border-slate-100 dark:border-slate-700 pt-2">
+                                    <div className="flex gap-3 text-xs text-slate-500 dark:text-slate-400 items-center">
+                                        <span>Len: <b className={primers.p1.len_ok === false ? "text-red-500 font-bold" : "text-emerald-500 font-bold"}>{primers.p1.len}</b></span>
+                                        <span>GC: <b className={primers.p1.gc_ok === false ? "text-red-500 font-bold" : "text-emerald-500 font-bold"}>{primers.p1.gc != null ? primers.p1.gc.toFixed(1) : ((primers.p1.seq.match(/[GCgc]/g) || []).length / primers.p1.seq.length * 100).toFixed(1)}%</b></span>
+                                        <span title="Primer3 Tm">P3 Tm: <b className={primers.p1.tm_ok === false ? "text-red-500 font-bold" : "text-emerald-500 font-bold"}>{primers.p1.tm}°C</b></span>
+                                        {idtResults?.m1?.analyze && (
+                                            <span title="IDT Tm" className="bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300 px-1.5 py-0.5 rounded border border-purple-200 dark:border-purple-800">
+                                                IDT Tm: <b className="font-bold">{extractTm(idtResults.m1.analyze)?.toFixed(1) || 'N/A'}°C</b>
+                                            </span>
+                                        )}
+                                        <span title="Tm Difference" className="text-[10px] opacity-80 flex items-center gap-1">
+                                            ΔTm: <b className={primers.tm_diff_ok === false ? "text-red-500 font-bold" : "text-emerald-500 font-bold"}>{Math.abs(primers.p1.tm - primers.p2.tm).toFixed(1)}°C</b>
+                                        </span>
+                                    </div>
+                                    <div className="flex bg-slate-100 dark:bg-slate-700 rounded border border-slate-200 dark:border-slate-600 overflow-hidden shadow-sm">
+                                        <button onClick={() => { setMoligo1Len(prev => Math.max(10, prev - 1)); }} className="w-8 h-7 flex items-center justify-center hover:bg-white dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition-colors font-bold border-r border-slate-200 dark:border-slate-600">-</button>
+                                        <button onClick={() => { setMoligo1Len(prev => Math.min(60, prev + 1)); }} className="w-8 h-7 flex items-center justify-center hover:bg-white dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition-colors font-bold">+</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="flex items-center justify-center p-8 min-h-[140px] border border-dashed border-slate-200 dark:border-slate-800 rounded-lg">
+                            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600"></div>
+                        </div>
+                    )}
+
+                    <div className="mt-4 p-5 bg-slate-50/50 dark:bg-slate-900/50 rounded-lg border border-slate-200 dark:border-slate-700">
+                        <div
+                            ref={containerRef}
+                            className="font-mono text-xs text-slate-600 dark:text-slate-400 leading-relaxed max-h-60 overflow-y-auto p-4 bg-white dark:bg-slate-800 rounded-lg shadow-inner"
+                        >
+                            {renderSequence()}
+                        </div>
+                        {primers && (
+                            <div className="text-[10px] text-slate-400 text-center mt-2 font-medium flex justify-center gap-4">
+                                <span><span className="inline-block w-2 h-2 bg-amber-400 rounded-sm mr-1"></span><span className="inline-block w-2 h-2 bg-green-400 rounded-sm mr-1"></span> Drag center string to shift</span>
+                                <span> Drag edges to resize</span>
                             </div>
                         )}
+                    </div>
 
-                        {paramsNotMet && primers?.param_warnings && primers.param_warnings.length > 0 && (
-                            <div className="mb-4 px-3 py-2 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/50 rounded-md text-amber-700 dark:text-amber-400 text-xs flex flex-col gap-1">
-                                <div className="flex items-center gap-2 font-bold">
-                                    <span className="text-sm">⚠️</span>
-                                    Oligos outside search parameters:
-                                </div>
-                                <ul className="ml-5 list-disc text-[11px] space-y-0.5">
-                                    {primers.param_warnings.map((w, i) => <li key={i}>{w}</li>)}
-                                </ul>
-                            </div>
-                        )}
-
-                        {error && <div className="text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 p-2 rounded mb-4 border border-red-100 dark:border-red-900/30">{error}</div>}
-
-                        {primers ? (
-                            <div className={`grid grid-cols-1 md:grid-cols-2 gap-4 transition-opacity duration-200 ${loading ? 'opacity-60' : 'opacity-100'}`}>
-                                <div className="bg-white dark:bg-slate-800 rounded-lg border border-amber-200 dark:border-amber-900/30 p-3 shadow-sm relative group flex flex-col justify-between">
-                                    <div>
-                                        <div className="flex justify-between items-start mb-2">
-                                            <div className="text-xs font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wider">Oligo 2 (Left / 5')</div>
-                                            <button
-                                                onClick={() => handleCopy(primers.p2.seq)}
-                                                className="text-xs bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400 px-2 py-1 rounded hover:bg-amber-100 dark:hover:bg-amber-900/40 border border-amber-200 dark:border-amber-800/50"
-                                            >
-                                                Copy
-                                            </button>
-                                        </div>
-                                        <div className="font-mono text-sm text-slate-700 dark:text-slate-300 break-all bg-amber-50/50 dark:bg-amber-900/10 p-2 rounded line-clamp-2 min-h-[3rem] flex items-center">{primers.p2.seq}</div>
+                    {primers && idtCredentials && (
+                        <div className="mt-4 border-t border-slate-100 dark:border-slate-700 pt-4">
+                            <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+                                <h4 className="text-sm font-bold text-slate-400 uppercase tracking-widest">IDT OligoAnalyzer Results</h4>
+                                <div className="flex items-center gap-3">
+                                    <div className="flex items-center gap-1.5">
+                                        <label className="text-[10px] font-bold text-slate-400 uppercase">Mg²⁺ (mM)</label>
+                                        <input
+                                            type="number"
+                                            step="0.1"
+                                            min="0"
+                                            value={idtCredentials.mgConc ?? 0}
+                                            onChange={(e) => {
+                                                const val = e.target.value;
+                                                localStorage.setItem('idt_mg_conc', val);
+                                                window.dispatchEvent(new CustomEvent('idt-mg-change', { detail: val }));
+                                            }}
+                                            className="w-16 rounded border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 text-xs p-1 border font-mono text-center"
+                                        />
                                     </div>
-                                    <div className="mt-3 flex items-center justify-between border-t border-slate-100 dark:border-slate-700 pt-2">
-                                        <div className="flex gap-3 text-xs text-slate-500 dark:text-slate-400 items-center">
-                                            <span>Len: <b className="text-slate-700 dark:text-slate-200">{primers.p2.len}</b></span>
-                                            <span>GC: <b className="text-slate-700 dark:text-slate-200">{primers.p2.gc != null ? primers.p2.gc.toFixed(1) : ((primers.p2.seq.match(/[GCgc]/g) || []).length / primers.p2.seq.length * 100).toFixed(1)}%</b></span>
-                                            {idtResults?.m2?.analyze ? (
-                                                <span title="IDT Tm" className="bg-indigo-50 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 px-1.5 py-0.5 rounded border border-indigo-200 dark:border-indigo-800">
-                                                    IDT Tm: <b className="font-bold">{extractTm(idtResults.m2.analyze)?.toFixed(1) || 'N/A'}°C</b>
-                                                </span>
-                                            ) : (
-                                                <span title="Primer3 Tm">Tm: <b className="text-slate-700 dark:text-slate-200">{primers.p2.tm}°C</b></span>
-                                            )}
-                                        </div>
-                                        <div className="flex bg-slate-100 dark:bg-slate-700 rounded border border-slate-200 dark:border-slate-600 overflow-hidden shadow-sm">
-                                            <button onClick={() => { setShowParams(false); setMoligo2Len(prev => Math.max(10, prev - 1)); }} className="w-8 h-7 flex items-center justify-center hover:bg-white dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition-colors font-bold border-r border-slate-200 dark:border-slate-600">-</button>
-                                            <button onClick={() => { setShowParams(false); setMoligo2Len(prev => Math.min(60, prev + 1)); }} className="w-8 h-7 flex items-center justify-center hover:bg-white dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition-colors font-bold">+</button>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div className="bg-white dark:bg-slate-800 rounded-lg border border-green-200 dark:border-green-900/30 p-3 shadow-sm relative group flex flex-col justify-between">
-                                    <div>
-                                        <div className="flex justify-between items-start mb-2">
-                                            <div className="text-xs font-bold text-green-600 dark:text-green-400 uppercase tracking-wider">Oligo 1 (Right / 3')</div>
-                                            <button
-                                                onClick={() => handleCopy(primers.p1.seq)}
-                                                className="text-xs bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400 px-2 py-1 rounded hover:bg-green-100 dark:hover:bg-green-900/40 border border-green-200 dark:border-green-800/50"
-                                            >
-                                                Copy
-                                            </button>
-                                        </div>
-                                        <div className="font-mono text-sm text-slate-700 dark:text-slate-300 break-all bg-green-50/50 dark:bg-green-900/10 p-2 rounded line-clamp-2 min-h-[3rem] flex items-center">{primers.p1.seq}</div>
-                                    </div>
-                                    <div className="mt-3 flex items-center justify-between border-t border-slate-100 dark:border-slate-700 pt-2">
-                                        <div className="flex gap-3 text-xs text-slate-500 dark:text-slate-400 items-center">
-                                            <span>Len: <b className="text-slate-700 dark:text-slate-200">{primers.p1.len}</b></span>
-                                            <span>GC: <b className="text-slate-700 dark:text-slate-200">{primers.p1.gc != null ? primers.p1.gc.toFixed(1) : ((primers.p1.seq.match(/[GCgc]/g) || []).length / primers.p1.seq.length * 100).toFixed(1)}%</b></span>
-                                            {idtResults?.m1?.analyze ? (
-                                                <span title="IDT Tm" className="bg-indigo-50 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 px-1.5 py-0.5 rounded border border-indigo-200 dark:border-indigo-800">
-                                                    IDT Tm: <b className="font-bold">{extractTm(idtResults.m1.analyze)?.toFixed(1) || 'N/A'}°C</b>
-                                                </span>
-                                            ) : (
-                                                <span title="Primer3 Tm">Tm: <b className="text-slate-700 dark:text-slate-200">{primers.p1.tm}°C</b></span>
-                                            )}
-                                        </div>
-                                        <div className="flex bg-slate-100 dark:bg-slate-700 rounded border border-slate-200 dark:border-slate-600 overflow-hidden shadow-sm">
-                                            <button onClick={() => { setShowParams(false); setMoligo1Len(prev => Math.max(10, prev - 1)); }} className="w-8 h-7 flex items-center justify-center hover:bg-white dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition-colors font-bold border-r border-slate-200 dark:border-slate-600">-</button>
-                                            <button onClick={() => { setShowParams(false); setMoligo1Len(prev => Math.min(60, prev + 1)); }} className="w-8 h-7 flex items-center justify-center hover:bg-white dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition-colors font-bold">+</button>
-                                        </div>
-                                    </div>
+                                    {!isIdtLoading && (
+                                        <button onClick={() => { setIdtResults(null); setIdtError(null); setTimeout(runIdtAnalysis, 0); }} className={`text-xs font-bold px-3 py-1.5 rounded transition-colors border ${idtResults ? 'bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 border-amber-200 dark:border-amber-800 hover:bg-amber-100' : 'bg-indigo-50 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-400 border-indigo-200 dark:border-indigo-800 hover:bg-indigo-100'}`}>
+                                            {idtResults ? '↻ Re-run IDT Analysis' : 'Run Full IDT Analysis'}
+                                        </button>
+                                    )}
+                                    {isIdtLoading && <div className="animate-pulse text-xs text-indigo-500 font-medium">Analyzing with IDT API...</div>}
                                 </div>
                             </div>
-                        ) : (
-                            loading && <div className="flex items-center justify-center p-8"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600"></div></div>
-                        )}
-
-                        <div className="mt-4 p-5 bg-slate-50/50 dark:bg-slate-900/50 rounded-lg border border-slate-200 dark:border-slate-700">
-                            <div
-                                ref={containerRef}
-                                className="font-mono text-xs text-slate-600 dark:text-slate-400 leading-relaxed max-h-60 overflow-y-auto p-4 bg-white dark:bg-slate-800 rounded-lg shadow-inner"
-                            >
-                                {showOligizer ? renderSequence() : rawSeq}
-                            </div>
-                            {primers && showOligizer && (
-                                <div className="text-[10px] text-slate-400 text-center mt-2 font-medium flex justify-center gap-4">
-                                    <span><span className="inline-block w-2 h-2 bg-amber-400 rounded-sm mr-1"></span><span className="inline-block w-2 h-2 bg-green-400 rounded-sm mr-1"></span> Drag center string to shift</span>
-                                    <span> Drag edges to resize</span>
+                            {idtError && <div className="text-xs text-red-500 bg-red-50 dark:bg-red-900/20 p-2 rounded mb-3 border border-red-100 dark:border-red-900/30">Error: {idtError}</div>}
+                            {idtResults && (
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                    <div className="bg-slate-50 dark:bg-slate-900/40 p-3 rounded border border-slate-100 dark:border-slate-800">
+                                        <div className="text-xs font-bold text-slate-500 uppercase mb-1">Oligo 2 Stability</div>
+                                        {renderIdtCard("Hairpin ΔG", idtResults.m2.hairpin, primers.p2.seq)}
+                                        {renderIdtCard("Self-Dimer ΔG", idtResults.m2.self_dimer, primers.p2.seq)}
+                                        <div className="text-[10px] text-slate-400 mt-1 italic">kcal/mol</div>
+                                    </div>
+                                    <div className="bg-slate-50 dark:bg-slate-900/40 p-3 rounded border border-slate-100 dark:border-slate-800">
+                                        <div className="text-xs font-bold text-slate-500 uppercase mb-1">Oligo 1 Stability</div>
+                                        {renderIdtCard("Hairpin ΔG", idtResults.m1.hairpin, primers.p1.seq)}
+                                        {renderIdtCard("Self-Dimer ΔG", idtResults.m1.self_dimer, primers.p1.seq)}
+                                        <div className="text-[10px] text-slate-400 mt-1 italic">kcal/mol</div>
+                                    </div>
+                                    <div className="bg-indigo-50/30 dark:bg-indigo-900/20 p-3 rounded border border-indigo-100/50 dark:border-indigo-900/30">
+                                        <div className="text-xs font-bold text-indigo-500 uppercase mb-1">Cross-Dimer Pairwise</div>
+                                        {renderIdtCard("Hetero-Dimer ΔG", idtResults.pairwise, primers.p1.seq, primers.p2.seq)}
+                                        <div className="text-[10px] text-slate-400 mt-1 italic">kcal/mol</div>
+                                    </div>
                                 </div>
                             )}
                         </div>
+                    )}
+                </div>
 
-                        {/* MOLigo Provenance Panel was moved to the very bottom */}
-
-                        {primers && idtCredentials && (
-                            <div className="mt-4 border-t border-slate-100 dark:border-slate-700 pt-4">
-                                <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
-                                    <h4 className="text-sm font-bold text-slate-400 uppercase tracking-widest">IDT OligoAnalyzer Results</h4>
-                                    <div className="flex items-center gap-3">
-                                        <div className="flex items-center gap-1.5">
-                                            <label className="text-[10px] font-bold text-slate-400 uppercase">Mg²⁺ (mM)</label>
-                                            <input
-                                                type="number"
-                                                step="0.1"
-                                                min="0"
-                                                value={idtCredentials.mgConc ?? 0}
-                                                onChange={(e) => {
-                                                    const val = e.target.value;
-                                                    localStorage.setItem('idt_mg_conc', val);
-                                                    // Trigger re-render via the parent state
-                                                    window.dispatchEvent(new CustomEvent('idt-mg-change', { detail: val }));
-                                                }}
-                                                className="w-16 rounded border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 text-xs p-1 border font-mono text-center"
-                                            />
-                                        </div>
-                                        {!isIdtLoading && (
-                                            <button onClick={() => { setIdtResults(null); setIdtError(null); setTimeout(runIdtAnalysis, 0); }} className={`text-xs font-bold px-3 py-1.5 rounded transition-colors border ${idtResults ? 'bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 border-amber-200 dark:border-amber-800 hover:bg-amber-100' : 'bg-indigo-50 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-400 border-indigo-200 dark:border-indigo-800 hover:bg-indigo-100'}`}>
-                                                {idtResults ? '↻ Re-run IDT Analysis' : 'Run Full IDT Analysis'}
-                                            </button>
-                                        )}
-                                        {isIdtLoading && <div className="animate-pulse text-xs text-indigo-500 font-medium">Analyzing with IDT API...</div>}
-                                    </div>
-                                </div>
-                                {idtError && <div className="text-xs text-red-500 bg-red-50 dark:bg-red-900/20 p-2 rounded mb-3 border border-red-100 dark:border-red-900/30">Error: {idtError}</div>}
-                                {idtResults && (
-                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                                        <div className="bg-slate-50 dark:bg-slate-900/40 p-3 rounded border border-slate-100 dark:border-slate-800">
-                                            <div className="text-xs font-bold text-slate-500 uppercase mb-1">Oligo 2 Stability</div>
-                                            {renderIdtCard("Hairpin ΔG", idtResults.m2.hairpin, primers.p2.seq)}
-                                            {renderIdtCard("Self-Dimer ΔG", idtResults.m2.self_dimer, primers.p2.seq)}
-                                            <div className="text-[10px] text-slate-400 mt-1 italic">kcal/mol</div>
-                                        </div>
-                                        <div className="bg-slate-50 dark:bg-slate-900/40 p-3 rounded border border-slate-100 dark:border-slate-800">
-                                            <div className="text-xs font-bold text-slate-500 uppercase mb-1">Oligo 1 Stability</div>
-                                            {renderIdtCard("Hairpin ΔG", idtResults.m1.hairpin, primers.p1.seq)}
-                                            {renderIdtCard("Self-Dimer ΔG", idtResults.m1.self_dimer, primers.p1.seq)}
-                                            <div className="text-[10px] text-slate-400 mt-1 italic">kcal/mol</div>
-                                        </div>
-                                        <div className="bg-indigo-50/30 dark:bg-indigo-900/20 p-3 rounded border border-indigo-100/50 dark:border-indigo-900/30">
-                                            <div className="text-xs font-bold text-indigo-500 uppercase mb-1">Cross-Dimer Pairwise</div>
-                                            {renderIdtCard("Hetero-Dimer ΔG", idtResults.pairwise, primers.p1.seq, primers.p2.seq)}
-                                            <div className="text-[10px] text-slate-400 mt-1 italic">kcal/mol</div>
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
-                        )}
-                    </div>
-                )}
-
-                {/* ── MOLigo Provenance Panel ────────────────────── */}
-                {primers && showMOLigo && (
-                    <div className="border-t border-slate-200 dark:border-slate-700">
-                        <MOLigoPanel
-                            templateSeq={rawSeq}
-                            moligo1Seq={primers.p1.seq}
-                            moligo2Seq={primers.p2.seq}
-                            tagSeq={tagSeq}
-                            fwdPrimer={fwdPrimer}
-                            revPrimer={revPrimer}
-                            onTagChange={setTagSeq}
-                            onFwdChange={setFwdPrimer}
-                            onRevChange={setRevPrimer}
-                        />
-                    </div>
-                )}
+            {/* ── MOLigo Provenance Panel ────────────────────── */}
+            {primers && showMOLigo && (
+                <div className="border-t border-slate-200 dark:border-slate-700">
+                    <MOLigoPanel
+                        templateSeq={rawSeq}
+                        moligo1Seq={primers.p1.seq}
+                        moligo2Seq={primers.p2.seq}
+                        tagSeq={tagSeq}
+                        fwdPrimer={fwdPrimer}
+                        revPrimer={revPrimer}
+                        queryId={data.id}
+                        jobName={jobName}
+                        onTagChange={setTagSeq}
+                        onFwdChange={setFwdPrimer}
+                        onRevChange={setRevPrimer}
+                    />
+                </div>
+            )}
             </div>
         </div >
     );

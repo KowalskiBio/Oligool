@@ -1,4 +1,6 @@
 import { useState, useEffect } from 'react';
+import { TAG_DATABASE } from '../constants/tags';
+import MOLigoReport from './MOLigoReport';
 
 export interface MOLigoProps {
     templateSeq: string;
@@ -7,6 +9,8 @@ export interface MOLigoProps {
     tagSeq?: string;
     fwdPrimer?: string;
     revPrimer?: string;
+    queryId?: string;
+    jobName?: string;
     onTagChange?: (val: string) => void;
     onFwdChange?: (val: string) => void;
     onRevChange?: (val: string) => void;
@@ -30,18 +34,24 @@ const reverseComplement = (s: string) => {
     return s.split('').reverse().map(c => dict[c] || c).join('');
 };
 
-export default function MOLigoPanel({
-    templateSeq,
-    moligo1Seq, moligo2Seq,
-    tagSeq, fwdPrimer, revPrimer,
-    onTagChange, onFwdChange, onRevChange
-}: MOLigoProps) {
+export default function MOLigoPanel(props: MOLigoProps) {
+    const {
+        templateSeq,
+        moligo1Seq, moligo2Seq,
+        tagSeq, fwdPrimer, revPrimer,
+        onTagChange, onFwdChange, onRevChange
+    } = props;
 
     const [isSeqMode, setIsSeqMode] = useState(() => localStorage.getItem('moligo_prov_seq_mode') === 'true');
+    const [isSchematicOpen, setIsSchematicOpen] = useState(() => localStorage.getItem('moligo_prov_schematic_open') !== 'false');
 
     useEffect(() => {
         localStorage.setItem('moligo_prov_seq_mode', String(isSeqMode));
     }, [isSeqMode]);
+
+    useEffect(() => {
+        localStorage.setItem('moligo_prov_schematic_open', String(isSchematicOpen));
+    }, [isSchematicOpen]);
 
     // ── Lengths ──────────────────────────────────────────────────────────
     const m2Len = moligo2Seq.length || 0;
@@ -179,181 +189,312 @@ export default function MOLigoPanel({
     };
 
     return (
-        <div className="mt-4 border-t border-slate-100 dark:border-slate-800 pt-4">
+        <div className="mt-6 border-t border-slate-100 dark:border-slate-800 pt-4 max-w-[85rem] mx-auto px-2 md:px-6">
             {/* Header */}
-            <div className="flex items-center justify-between mb-3">
+            <div 
+                className="flex items-center justify-between mb-3 cursor-pointer group"
+                onClick={() => setIsSchematicOpen(!isSchematicOpen)}
+            >
                 <div className="flex items-center gap-2">
-                    <span className="text-sm font-bold text-slate-500 uppercase tracking-widest">🔬 MOLigo Provenance Schematic</span>
+                    <svg className={`w-4 h-4 text-slate-400 group-hover:text-slate-600 transition-transform duration-200 ${isSchematicOpen ? 'rotate-90' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
+                    <span className="text-sm font-bold text-slate-500 uppercase tracking-widest group-hover:text-slate-700 transition-colors">MOLigo Provenance Schematic</span>
                 </div>
-                <button
-                    onClick={() => setIsSeqMode(!isSeqMode)}
-                    className={`px-4 py-1.5 text-xs font-bold rounded-full border transition-all uppercase tracking-tight ${isSeqMode
-                        ? 'bg-indigo-600 border-indigo-600 text-white shadow-md shadow-indigo-200 dark:shadow-indigo-900/20'
-                        : 'bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-400 hover:border-indigo-400 hover:text-indigo-600'
-                        }`}
-                >
-                    {isSeqMode ? '🔡 Shape Mode' : '🔡 Seq Mode'}
-                </button>
+                {isSchematicOpen && (
+                    <button
+                        onClick={(e) => { e.stopPropagation(); setIsSeqMode(!isSeqMode); }}
+                        className={`px-4 py-1.5 text-xs font-bold rounded-full border transition-all uppercase tracking-tight ${isSeqMode
+                            ? 'bg-indigo-600 border-indigo-600 text-white shadow-md shadow-indigo-200 dark:shadow-indigo-900/20'
+                            : 'bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-400 hover:border-indigo-400 hover:text-indigo-600'
+                            }`}
+                    >
+                        {isSeqMode ? '🔡 Shape Mode' : '🔡 Seq Mode'}
+                    </button>
+                )}
             </div>
 
-            {/* ── SVG Schematic ── */}
-            <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-inner overflow-hidden">
-                <svg viewBox={`0 0 ${VW} ${VH}`} width="100%"
-                    style={{ display: 'block', fontFamily: 'inherit' }}
-                    aria-label="MOLigo provenance schematic">
+            {/* ── SVG Schematic & Legend ── */}
+            {isSchematicOpen && (
+                <div className="animate-in fade-in slide-in-from-top-4 duration-300">
+                    <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-inner overflow-hidden">
+                        <svg viewBox={`0 0 ${VW} ${VH}`} width="100%"
+                            style={{ display: 'block', fontFamily: 'inherit' }}
+                            aria-label="MOLigo provenance schematic">
 
-                    {/* ═══ TEMPLATE STRAND (5' → 3') ═══ */}
-                    <rect x={tmplX0} y={tmplY} width={tmplW} height={stH}
-                        rx="3" fill={C.tmplFill} stroke={C.tmpl} strokeWidth="1.5"
-                        opacity={isSeqMode ? 0.3 : 1} />
+                            {/* ═══ TEMPLATE STRAND (5' → 3') ═══ */}
+                            <rect x={tmplX0} y={tmplY} width={tmplW} height={stH}
+                                rx="3" fill={C.tmplFill} stroke={C.tmpl} strokeWidth="1.5"
+                                opacity={isSeqMode ? 0.3 : 1} />
 
-                    {/* 5' / 3' labels */}
-                    <text x={tmplX0 - 6} y={tmplY + stH / 2 + 3} textAnchor="end"
-                        fontSize="9" fontWeight="bold" fill={C.tmpl}>5'</text>
-                    <text x={tmplX1 + 6} y={tmplY + stH / 2 + 3} textAnchor="start"
-                        fontSize="9" fontWeight="bold" fill={C.tmpl}>3'</text>
+                            {/* 5' / 3' labels */}
+                            <text x={tmplX0 - 6} y={tmplY + stH / 2 + 3} textAnchor="end"
+                                fontSize="9" fontWeight="bold" fill={C.tmpl}>5'</text>
+                            <text x={tmplX1 + 6} y={tmplY + stH / 2 + 3} textAnchor="start"
+                                fontSize="9" fontWeight="bold" fill={C.tmpl}>3'</text>
 
-                    {/* ═══ Left Side: Universal Reverse Primer only ═══ */}
-                    <g opacity={isSeqMode ? 0.15 : 0.85}>
-                        {revLen > 0 && <polygon points={polyRevP} fill={C.revP} />}
-                        <polygon points={polyM2} fill={C.m2} />
-                    </g>
+                            {/* ═══ Left Side: Universal Reverse Primer only ═══ */}
+                            <g opacity={isSeqMode ? 0.15 : 0.85}>
+                                {revLen > 0 && <polygon points={polyRevP} fill={C.revP} />}
+                                <polygon points={polyM2} fill={C.m2} />
+                            </g>
 
-                    {/* ═══ Right Side: Oligo 1 + TAG + RC(Fwd) ═══ */}
-                    <g opacity={isSeqMode ? 0.15 : 0.85}>
-                        <polygon points={polyM1} fill={C.m1} />
-                        {tagLen > 0 && <polygon points={polyTAG} fill={C.tag} />}
-                        {fwdLen > 0 && <polygon points={polyFwdRC} fill={C.fwdRC} />}
-                    </g>
+                            {/* ═══ Right Side: Oligo 1 + TAG + RC(Fwd) ═══ */}
+                            <g opacity={isSeqMode ? 0.15 : 0.85}>
+                                <polygon points={polyM1} fill={C.m1} />
+                                {tagLen > 0 && <polygon points={polyTAG} fill={C.tag} />}
+                                {fwdLen > 0 && <polygon points={polyFwdRC} fill={C.fwdRC} />}
+                            </g>
 
-                    {/* ═══ Seq Mode Letters ═══ */}
-                    {isSeqMode && (
-                        <g>
-                            {/* Template Sequence (5'→3') */}
-                            {renderSeqChars(tmplFwd, { x: tmplX0, y: tmplY + stH / 2 }, { x: tmplX1, y: tmplY + stH / 2 }, C.tmpl)}
+                            {/* ═══ Seq Mode Letters ═══ */}
+                            {isSeqMode && (
+                                <g>
+                                    {/* Template Sequence (5'→3') */}
+                                    {renderSeqChars(tmplFwd, { x: tmplX0, y: tmplY + stH / 2 }, { x: tmplX1, y: tmplY + stH / 2 }, C.tmpl)}
 
-                            {/* Left arm: RevPrimer */}
-                            {renderSeqChars(revPrimer || "", L, C_left, C.revP)}
-                            {/* Flat: Oligo2 → Oligo1 */}
-                            {renderSeqChars(moligo2Seq, C_left, R, C.m2)}
-                            {renderSeqChars(moligo1Seq, R, C_right, C.m1)}
-                            {/* Right arm: TAG → RC(Fwd) */}
-                            {renderSeqChars(tagSeq || "", C_right, S_right, C.tag)}
-                            {renderSeqChars(fwdRCSeq, S_right, F, C.fwdRC)}
-                        </g>
-                    )}
+                                    {/* Left arm: RevPrimer */}
+                                    {renderSeqChars(revPrimer || "", L, C_left, C.revP)}
+                                    {/* Flat: Oligo2 → Oligo1 */}
+                                    {renderSeqChars(moligo2Seq, C_left, R, C.m2)}
+                                    {renderSeqChars(moligo1Seq, R, C_right, C.m1)}
+                                    {/* Right arm: TAG → RC(Fwd) */}
+                                    {renderSeqChars(tagSeq || "", C_right, S_right, C.tag)}
+                                    {renderSeqChars(fwdRCSeq, S_right, F, C.fwdRC)}
+                                </g>
+                            )}
 
-                    {/* Annealing ticks */}
-                    {Array.from({ length: 20 }).map((_, i) => {
-                        const tickX = tmplX0 + (i + 0.5) * (tmplW / 20);
-                        return <line key={i} x1={tickX} y1={tmplY - 2} x2={tickX} y2={tmplY - 0.5}
-                            stroke={tickX < splitX ? C.m2 : C.m1} strokeWidth="1.5" opacity="0.5" />;
-                    })}
+                            {/* Annealing ticks */}
+                            {Array.from({ length: 20 }).map((_, i) => {
+                                const tickX = tmplX0 + (i + 0.5) * (tmplW / 20);
+                                return <line key={i} x1={tickX} y1={tmplY - 2} x2={tickX} y2={tmplY - 0.5}
+                                    stroke={C.tmpl} strokeWidth="1" strokeLinecap="round" />;
+                            })}
+                            {Array.from({ length: 20 }).map((_, i) => {
+                                const tickX = tmplX0 + (i + 0.5) * (tmplW / 20);
+                                return <line key={i} x1={tickX} y1={tmplY + stH + 0.5} x2={tickX} y2={tmplY + stH + 2}
+                                    stroke={C.tmpl} strokeWidth="1" strokeLinecap="round" />;
+                            })}
 
-                </svg>
-            </div>
-
-            {/* ── Legend ── */}
-            <div className="mt-5 px-3 mb-2 flex flex-col gap-y-4 text-sm text-slate-600 dark:text-slate-300">
-                <div className="flex flex-wrap gap-x-6 gap-y-3 justify-center">
-                    {revLen > 0 && (
-                        <div className="flex items-center gap-2">
-                            <div className="w-4 h-4 rounded-sm" style={{ backgroundColor: C.revP }} />
-                            <span className="font-semibold text-slate-700 dark:text-slate-200">Reverse Primer</span>
-                            <span className="text-slate-400 font-mono text-xs">({revLen}nt)</span>
-                        </div>
-                    )}
-                    <div className="flex items-center gap-2">
-                        <div className="w-4 h-4 rounded-sm" style={{ backgroundColor: C.m2 }} />
-                        <span className="font-semibold text-slate-700 dark:text-slate-200">Oligo 2</span>
-                        <span className="text-slate-400 font-mono text-xs">({m2Len}nt)</span>
+                        </svg>
                     </div>
-                    <div className="flex items-center gap-2">
-                        <div className="w-4 h-4 rounded-sm" style={{ backgroundColor: C.m1 }} />
-                        <span className="font-semibold text-slate-700 dark:text-slate-200">Oligo 1</span>
-                        <span className="text-slate-400 font-mono text-xs">({m1Len}nt)</span>
+
+                    {/* ── Legend ── */}
+                    <div className="mt-5 px-3 mb-2 flex flex-col gap-y-4 text-sm text-slate-600 dark:text-slate-300">
+                        <div className="flex flex-wrap gap-x-6 gap-y-3 justify-center">
+                            {revLen > 0 && (
+                                <div className="flex items-center gap-2">
+                                    <div className="w-4 h-4 rounded-sm" style={{ backgroundColor: C.revP }} />
+                                    <span className="font-semibold text-slate-700 dark:text-slate-200">Reverse Primer</span>
+                                    <span className="text-slate-400 font-mono text-xs">({revLen}nt)</span>
+                                </div>
+                            )}
+                            <div className="flex items-center gap-2">
+                                <div className="w-4 h-4 rounded-sm" style={{ backgroundColor: C.m2 }} />
+                                <span className="font-semibold text-slate-700 dark:text-slate-200">Oligo 2</span>
+                                <span className="text-slate-400 font-mono text-xs">({m2Len}nt)</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <div className="w-4 h-4 rounded-sm" style={{ backgroundColor: C.m1 }} />
+                                <span className="font-semibold text-slate-700 dark:text-slate-200">Oligo 1</span>
+                                <span className="text-slate-400 font-mono text-xs">({m1Len}nt)</span>
+                            </div>
+                            {tagLen > 0 && (
+                                <div className="flex items-center gap-2">
+                                    <div className="w-4 h-4 rounded-sm" style={{ backgroundColor: C.tag }} />
+                                    <span className="font-semibold text-slate-700 dark:text-slate-200">TAG</span>
+                                    <span className="text-slate-400 font-mono text-xs">({tagLen}nt)</span>
+                                </div>
+                            )}
+                            {fwdLen > 0 && (
+                                <div className="flex items-center gap-2">
+                                    <div className="w-4 h-4 rounded-sm" style={{ backgroundColor: C.fwdRC }} />
+                                    <span className="font-semibold text-slate-700 dark:text-slate-200">RC(Fwd Primer)</span>
+                                    <span className="text-slate-400 font-mono text-xs">({fwdLen}nt)</span>
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="w-full h-px bg-slate-200 dark:bg-slate-700/50 hidden md:block"></div>
+
+                        <div className="flex items-center justify-center gap-2">
+                            <div className="flex flex-col gap-[2px]">
+                                <div className="w-4 h-[3px] rounded-full" style={{ backgroundColor: C.tmpl }} />
+                                <div className="w-4 h-[3px] rounded-full" style={{ backgroundColor: C.tmpl }} />
+                            </div>
+                            <span className="font-semibold text-slate-700 dark:text-slate-200">Target Template</span>
+                            <span className="text-slate-400 font-mono text-xs">({templateSeq?.length || 0}nt)</span>
+                        </div>
                     </div>
-                    {tagLen > 0 && (
-                        <div className="flex items-center gap-2">
-                            <div className="w-4 h-4 rounded-sm" style={{ backgroundColor: C.tag }} />
-                            <span className="font-semibold text-slate-700 dark:text-slate-200">TAG</span>
-                            <span className="text-slate-400 font-mono text-xs">({tagLen}nt)</span>
-                        </div>
-                    )}
-                    {fwdLen > 0 && (
-                        <div className="flex items-center gap-2">
-                            <div className="w-4 h-4 rounded-sm" style={{ backgroundColor: C.fwdRC }} />
-                            <span className="font-semibold text-slate-700 dark:text-slate-200">RC(Fwd Primer)</span>
-                            <span className="text-slate-400 font-mono text-xs">({fwdLen}nt)</span>
-                        </div>
-                    )}
                 </div>
+            )}
 
-                <div className="w-full h-px bg-slate-200 dark:bg-slate-700/50 hidden md:block"></div>
+            {/* ── Sequence Inputs & TAG Picker ── */}
+            <div className="mt-8 pt-8 border-t border-slate-100 dark:border-slate-800">
+                <div className="max-w-[85rem] mx-auto px-2 md:px-6 grid grid-cols-1 lg:grid-cols-3 gap-6 md:gap-8">
 
-                <div className="flex items-center justify-center gap-2">
-                    <div className="flex flex-col gap-[2px]">
-                        <div className="w-4 h-[3px] rounded-full" style={{ backgroundColor: C.tmpl }} />
-                        <div className="w-4 h-[3px] rounded-full" style={{ backgroundColor: C.tmpl }} />
+                    {/* Reverse Primer Input Box */}
+                    <div className="bg-white dark:bg-slate-800 rounded-lg border border-purple-200 dark:border-purple-900/30 p-3 shadow-sm flex flex-col h-full">
+                        <div className="flex justify-between items-start mb-2">
+                            <div className="text-xs font-bold text-purple-600 dark:text-purple-400 uppercase tracking-wider">
+                                Universal Reverse Primer
+                            </div>
+                            <span className="text-[10px] font-mono text-slate-400 font-bold">{revLen}nt</span>
+                        </div>
+                        <div className="flex-1 bg-purple-50/50 dark:bg-purple-900/10 p-2 rounded border border-purple-100 dark:border-purple-900/20">
+                            <textarea
+                                className="w-full h-full min-h-[4rem] text-sm font-mono bg-transparent border-none outline-none resize-none text-slate-700 dark:text-slate-300 p-0 focus:ring-0"
+                                value={revPrimer || ""}
+                                onChange={(e) => onRevChange?.(e.target.value.toUpperCase().replace(/[^ATCGUatcgu]/g, ''))}
+                                placeholder="Enter reverse primer..."
+                                spellCheck={false}
+                            />
+                        </div>
                     </div>
-                    <span className="font-semibold text-slate-700 dark:text-slate-200">Target Template</span>
-                    <span className="text-slate-400 font-mono text-xs">({templateSeq?.length || 0}nt)</span>
-                </div>
-            </div>
 
-            {/* ── Sequence Inputs ── */}
-            <div className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-6 pt-6 border-t border-slate-100 dark:border-slate-800">
-
-                {/* Reverse Primer Input */}
-                <div className="flex flex-col gap-2">
-                    <label className="text-xs font-semibold uppercase flex justify-between" style={{ color: C.revP }}>
-                        <span>Reverse Primer</span>
-                        <span className="text-slate-400 font-mono">{revLen}nt</span>
-                    </label>
-                    <textarea
-                        className="w-full h-20 p-2.5 text-sm font-mono bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-purple-500/50 focus:border-purple-500 outline-none resize-none text-slate-700 dark:text-slate-300 shadow-[0_1px_3px_rgba(0,0,0,0.05)] transition-all"
-                        value={revPrimer || ""}
-                        onChange={(e) => onRevChange?.(e.target.value.toUpperCase().replace(/[^ATCGUatcgu]/g, ''))}
-                        placeholder="Enter reverse primer sequence..."
-                        spellCheck={false}
-                    />
-                </div>
-
-                {/* TAG Input */}
-                <div className="flex flex-col gap-2">
-                    <label className="text-xs font-semibold uppercase flex justify-between" style={{ color: C.tag }}>
-                        <span>TAG Sequence</span>
-                        <span className="text-slate-400 font-mono">{tagLen}nt</span>
-                    </label>
-                    <textarea
-                        className="w-full h-20 p-2.5 text-sm font-mono bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-red-500/50 focus:border-red-500 outline-none resize-none text-slate-700 dark:text-slate-300 shadow-[0_1px_3px_rgba(0,0,0,0.05)] transition-all"
-                        value={tagSeq || ""}
-                        onChange={(e) => onTagChange?.(e.target.value.toUpperCase().replace(/[^ATCGUatcgu]/g, ''))}
-                        placeholder="Enter TAG sequence..."
-                        spellCheck={false}
-                    />
-                </div>
-
-                {/* Forward Primer Input */}
-                <div className="flex flex-col gap-2">
-                    <label className="text-xs font-semibold uppercase flex justify-between" style={{ color: C.fwdRC }}>
-                        <span>Forward Primer → RC({fwdLen}nt)</span>
-                        <span className="text-slate-400 font-mono">{fwdLen}nt</span>
-                    </label>
-                    <textarea
-                        className="w-full h-20 p-2.5 text-sm font-mono bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-pink-500/50 focus:border-pink-500 outline-none resize-none text-slate-700 dark:text-slate-300 shadow-[0_1px_3px_rgba(0,0,0,0.05)] transition-all"
-                        value={fwdPrimer || ""}
-                        onChange={(e) => onFwdChange?.(e.target.value.toUpperCase().replace(/[^ATCGUatcgu]/g, ''))}
-                        placeholder="Enter forward primer (will be reverse-complemented)..."
-                        spellCheck={false}
-                    />
-                    {fwdLen > 0 && (
-                        <div className="text-[10px] font-mono text-slate-400 bg-slate-50 dark:bg-slate-800 p-1.5 rounded border border-slate-100 dark:border-slate-700 break-all">
-                            RC: {fwdRCSeq}
+                    {/* TAG Picker & Manual Input Box */}
+                    <div className="bg-white dark:bg-slate-800 rounded-lg border border-red-200 dark:border-red-900/30 p-3 shadow-sm flex flex-col h-full">
+                        <div className="flex justify-between items-start mb-2">
+                            <div className="text-xs font-bold text-red-600 dark:text-red-400 uppercase tracking-wider">
+                                TAG Sequence
+                            </div>
+                            <span className="text-[10px] font-mono text-slate-400 font-bold">{tagLen}nt</span>
                         </div>
-                    )}
+
+                        <div className="flex flex-col gap-2 flex-1">
+                            <select
+                                className="w-full p-1.5 text-[10px] border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 rounded focus:ring-red-500 focus:border-red-500 outline-none transition-colors"
+                                onChange={(e) => {
+                                    const tag = TAG_DATABASE.find(t => t.partNumber === e.target.value);
+                                    if (tag) onTagChange?.(tag.complementary);
+                                }}
+                                value={TAG_DATABASE.find(t => t.complementary === tagSeq)?.partNumber || ""}
+                            >
+                                <option value="">-- Pick Database TAG --</option>
+                                {TAG_DATABASE.map(tag => (
+                                    <option key={tag.reg} value={tag.partNumber}>
+                                        {tag.partNumber} ({tag.reg}) — {tag.antiTag}
+                                    </option>
+                                ))}
+                            </select>
+
+                            <div className="flex-1 bg-red-50/50 dark:bg-red-900/10 p-2 rounded border border-red-100 dark:border-red-900/20 flex flex-col">
+                                <textarea
+                                    className="w-full flex-1 min-h-[4rem] text-sm font-mono bg-transparent border-none outline-none resize-none text-slate-700 dark:text-slate-300 p-0 focus:ring-0"
+                                    value={tagSeq || ""}
+                                    onChange={(e) => onTagChange?.(e.target.value.toUpperCase().replace(/[^ATCGUatcgu]/g, ''))}
+                                    placeholder="Manual entry..."
+                                    spellCheck={false}
+                                />
+                            </div>
+                        </div>
+                        {tagLen > 0 && (
+                            <div className="mt-3 border-t border-slate-100 dark:border-slate-700 pt-2 flex items-center justify-between">
+                                <span className="text-[10px] text-slate-500 font-mono truncate">
+                                    RC: {reverseComplement(tagSeq || "")}
+                                </span>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Forward Primer Input Box */}
+                    <div className="bg-white dark:bg-slate-800 rounded-lg border border-pink-200 dark:border-pink-900/30 p-3 shadow-sm flex flex-col h-full">
+                        <div className="flex justify-between items-start mb-2">
+                            <div className="text-xs font-bold text-pink-600 dark:text-pink-400 uppercase tracking-wider">
+                                Universal Forward Primer
+                            </div>
+                            <span className="text-[10px] font-mono text-slate-400 font-bold">{fwdLen}nt</span>
+                        </div>
+                        <div className="flex-1 bg-pink-50/50 dark:bg-pink-900/10 p-2 rounded border border-pink-100 dark:border-pink-900/20 flex flex-col">
+                            <textarea
+                                className="w-full flex-1 min-h-[4rem] text-sm font-mono bg-transparent border-none outline-none resize-none text-slate-700 dark:text-slate-300 p-0 focus:ring-0"
+                                value={fwdPrimer || ""}
+                                onChange={(e) => onFwdChange?.(e.target.value.toUpperCase().replace(/[^ATCGUatcgu]/g, ''))}
+                                placeholder="Enter forward primer..."
+                                spellCheck={false}
+                            />
+                        </div>
+                        {fwdLen > 0 && (
+                            <div className="mt-3 border-t border-slate-100 dark:border-slate-700 pt-2 flex items-center justify-between">
+                                <span className="text-[10px] text-slate-500 font-mono truncate">
+                                    RC: {fwdRCSeq}
+                                </span>
+                            </div>
+                        )}
+                    </div>
                 </div>
 
+                {/* ── Ready to Order Section ── */}
+                <div className="mt-8 p-5 bg-gradient-to-br from-indigo-50/50 to-purple-50/50 dark:from-indigo-900/10 dark:to-purple-900/10 rounded-2xl border border-indigo-100 dark:border-indigo-900/30 shadow-sm animate-in fade-in zoom-in-95 duration-500">
+                    <div className="flex items-center gap-2 mb-4">
+                        <div className="w-8 h-8 rounded-full bg-indigo-500/20 flex items-center justify-center">
+                            <span className="text-lg">📦</span>
+                        </div>
+                        <h4 className="text-sm font-bold text-slate-600 dark:text-slate-300 uppercase tracking-widest">Ready to Order Sequences (Full Assembly)</h4>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
+                        {/* Final Oligo 2 Assembly */}
+                        <div className="flex flex-col gap-2">
+                            <div className="flex justify-between items-center px-1">
+                                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">Oligo 2 (Reporter: RevP + M2)</label>
+                                <button
+                                    onClick={() => {
+                                        const seq = (revPrimer || "") + moligo2Seq;
+                                        navigator.clipboard.writeText(seq);
+                                    }}
+                                    className="text-[10px] font-bold px-2 py-0.5 rounded border border-slate-200 dark:border-slate-700 hover:bg-white dark:hover:bg-slate-800 transition-colors"
+                                >
+                                    Copy
+                                </button>
+                            </div>
+                            <div className="p-3 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 font-mono text-xs break-all shadow-sm">
+                                <span style={{ color: C.revP }}>{revPrimer}</span>
+                                <span style={{ color: C.m2 }}>{moligo2Seq}</span>
+                            </div>
+                            <div className="text-[10px] text-slate-400 px-1">
+                                Full length: <b className="text-indigo-500">{(revPrimer?.length || 0) + moligo2Seq.length}nt</b>
+                            </div>
+                        </div>
+
+                        {/* Final Oligo 1 Assembly */}
+                        <div className="flex flex-col gap-2">
+                            <div className="flex justify-between items-center px-1">
+                                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">Oligo 1 (Capture: M1 + TAG + RC-FwdP)</label>
+                                <button
+                                    onClick={() => {
+                                        const seq = moligo1Seq + (tagSeq || "") + fwdRCSeq;
+                                        navigator.clipboard.writeText(seq);
+                                    }}
+                                    className="text-[10px] font-bold px-2 py-0.5 rounded border border-slate-200 dark:border-slate-700 hover:bg-white dark:hover:bg-slate-800 transition-colors"
+                                >
+                                    Copy
+                                </button>
+                            </div>
+                            <div className="p-3 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 font-mono text-xs break-all shadow-sm">
+                                <span style={{ color: C.m1 }}>{moligo1Seq}</span>
+                                <span style={{ color: C.tag }}>{tagSeq}</span>
+                                <span style={{ color: C.fwdRC }}>{fwdRCSeq}</span>
+                            </div>
+                            <div className="text-[10px] text-slate-400 px-1">
+                                Full length: <b className="text-indigo-500">{moligo1Seq.length + (tagSeq?.length || 0) + fwdRCSeq.length}nt</b>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {/* ── Report Generation Action ── */}
+                <div className="mt-8 flex justify-end">
+                    <button
+                        onClick={() => window.print()}
+                        className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-lg font-bold transition-all shadow-md active:scale-95 border border-indigo-500"
+                    >
+                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                        </svg>
+                        Create PDF Report
+                    </button>
+                    <MOLigoReport {...props} />
+                </div>
             </div>
         </div>
     );

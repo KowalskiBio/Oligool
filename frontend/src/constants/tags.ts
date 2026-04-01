@@ -1,0 +1,57 @@
+export interface TagEntry {
+    reg: number;
+    partNumber: string;
+    antiTag: string;
+    complementary: string; // Complementary TAG Sequence (5' to 3') - Use this for oligool
+}
+
+export const TAG_DATABASE: TagEntry[] = [
+    { reg: 12, partNumber: "MTAG-A012", antiTag: "AGTAGAAAGTTGAAATTGATTATG", complementary: "CATAATCAATTTCAACTTTCTACT" },
+    { reg: 13, partNumber: "MTAG-A013", antiTag: "AGTGAATGTAAGATTATGTATTTG", complementary: "CAAATACATAATCTTACATTCACT" },
+    { reg: 14, partNumber: "MTAG-A014", antiTag: "ATTGTGAAAGAAAGAGAAGAAGAAATT", complementary: "AATTTCTTCTCTTTCTTTCACAAT" },
+    { reg: 15, partNumber: "MTAG-A015", antiTag: "GTTGTAAATTGTAGTAAAGAAGTA", complementary: "TACTTCTTTACTACAATTTACAAC" },
+    { reg: 18, partNumber: "MTAG-A018", antiTag: "GTAATTGAATTGAAAGATAAGTGT", complementary: "ACACTTATCTTTCAATTCAATTAC" },
+    { reg: 19, partNumber: "MTAG-A019", antiTag: "GTGTGTTATTTGTTTGTAAAGTAT", complementary: "ATACTTTACAAACAAATAACACAC" },
+    { reg: 20, partNumber: "MTAG-A020", antiTag: "AAATTAGTTGAAAGTATGAGAAAG", complementary: "CTTTCTCATACTTTCAACTAATTT" },
+    { reg: 21, partNumber: "MTAG-A021", antiTag: "ATTAAGTAAGAATTGAGAGTTTGA", complementary: "TCAAATCTCAATTCTTACTTAAT" },
+    { reg: 22, partNumber: "MTAG-A022", antiTag: "GATTGATATTTGAATGTTTTGTTTG", complementary: "CAAACAAAACATTCAAATATCAATC" },
+    { reg: 25, partNumber: "MTAG-A025", antiTag: "GTATGTTGTAATGTATTAAGAAAG", complementary: "CTTTCTTAATACATTACAACATAC" },
+    { reg: 26, partNumber: "MTAG-A026", antiTag: "TTTGATTTAAGAGTGTTGAATGTA", complementary: "TACATTCAACACTCTTAAATCAAA" },
+    { reg: 27, partNumber: "MTAG-A027", antiTag: "AAGATGATAGTTAAGTGTAAGTTA", complementary: "TAACTTACACTTAACTATCATCTT" },
+    { reg: 28, partNumber: "MTAG-A028", antiTag: "GATAGATTTAGAATGAATTAAGTG", complementary: "CACTTAATTCATTCTAAATCTATC" },
+    { reg: 29, partNumber: "MTAG-A029", antiTag: "TTTAAGTGAGTTATAGAAGTAGTA", complementary: "TACTACTTCTATAACTCACTTAAA" },
+    { reg: 30, partNumber: "MTAG-A030", antiTag: "GTGTTATAGAAGTTAAATGTTAAG", complementary: "CTTAACATTTAACTTCTATAACAC" },
+    { reg: 33, partNumber: "MTAG-A033", antiTag: "TATTAGAGTTTGAGAATAAGTAGT", complementary: "ACTACTTATTCTCAAACTCTAATA" },
+    { reg: 34, partNumber: "MTAG-A034", antiTag: "TGATATAGTAATGAAGAAATAAAGT", complementary: "ACTTTATTTCTTCATTACTATATCA" },
+    { reg: 35, partNumber: "MTAG-A035", antiTag: "AATAAGAGAATTGATATGAAGATG", complementary: "CATCTTCATATCAATTCTCTTATT" },
+    { reg: 36, partNumber: "MTAG-A036", antiTag: "TTGTGTAGTTAAGAGTTGTTTAAT", complementary: "ATTAAACAACACTCTTAACTACACAA" },
+    { reg: 37, partNumber: "MTAG-A037", antiTag: "TGTATATGTTAATGAGATGTTGTA", complementary: "TACAACATCTCATTAACATATACA" },
+    { reg: 38, partNumber: "MTAG-A038", antiTag: "AGTAAGTGTAGATAGTATTGAATT", complementary: "ATTCAATACTATCTAACACTTACT" },
+    { reg: 39, partNumber: "MTAG-A039", antiTag: "TTGTGATAGTAGTTAGATATTTGT", complementary: "ACAAATATCTAACTACTATCACAA" },
+    { reg: 42, partNumber: "MTAG-A042", antiTag: "ATTTGTTATGATAAATGTGTAGTG", complementary: "CACTACACATTTATCATAACAAAT" },
+    { reg: 43, partNumber: "MTAG-A043", antiTag: "AAATAAGAATAGAGAGAGAAAAGTT", complementary: "AACTTTCTCTCTATTCTTATTT" },
+    { reg: 44, partNumber: "MTAG-A044", antiTag: "AATGTAAAGTAAAGAAAGTGATGA", complementary: "TCATCACTTTCTTTACTTTACATT" },
+    { reg: 45, partNumber: "MTAG-A045", antiTag: "GTTAGTTATGATGAATATTGTGTA", complementary: "TACACAATATTCATCATAACAAACT" },
+    { reg: 46, partNumber: "MTAG-A046", antiTag: "GTGATTGAATAGTAGATTGTTTAA", complementary: "TTAAACAATCTACTATTCAATCAC" },
+    { reg: 47, partNumber: "MTAG-A047", antiTag: "TATTGTTGAATGTGTTTAAAGAGA", complementary: "TCTCTTTTAAACACATTCAACAATA" },
+    { reg: 48, partNumber: "MTAG-A048", antiTag: "TATGAATGTTATTGTGTGTTGATT", complementary: "AATCAACACACAATAACATTCATA" },
+    { reg: 51, partNumber: "MTAG-A051", antiTag: "GATAAGAAAGTGAAATGTAAATTG", complementary: "CAATTTACATTTACTTTCTTATC" },
+    { reg: 52, partNumber: "MTAG-A052", antiTag: "GTAAGATTAGAAGTTAATGAAGAA", complementary: "TTCTTCATTAACTTCTAATCTTAC" },
+    { reg: 53, partNumber: "MTAG-A053", antiTag: "GTTTGTGTTTGTATAAGTTGTTAA", complementary: "TTAACAACTTATACAAACACAAAC" },
+    { reg: 54, partNumber: "MTAG-A054", antiTag: "TAGAGAAAGAGAGAATTGTATTAA", complementary: "TTAATACAATTCTCTCTTTCTCTA" },
+    { reg: 55, partNumber: "MTAG-A055", antiTag: "GAAGATATTGAAAGAATTTGATGT", complementary: "ACATCAAATTCTTTCAATATCTTC" },
+    { reg: 56, partNumber: "MTAG-A056", antiTag: "AATTAGAAGTAAGTAGAGTTTAAG", complementary: "CTTAAACTCTACTTACTTCTAATT" },
+    { reg: 57, partNumber: "MTAG-A057", antiTag: "AGAGTATTAGTAGTTATTGTAAGT", complementary: "ACTTACAATAACTACTAAATACTCT" },
+    { reg: 61, partNumber: "MTAG-A061", antiTag: "TATTAGAGAGAAATTGTAGAGATT", complementary: "AATCTCTACAATTTCTCTCTAATA" },
+    { reg: 62, partNumber: "MTAG-A062", antiTag: "TGAAATGTGTATTTGTATGTTTAG", complementary: "CTAAACATACAAATACACATTTCA" },
+    { reg: 63, partNumber: "MTAG-A063", antiTag: "TTTGTTGTTAAGTATGTGATTTAG", complementary: "CTAAATCACATACTTAACAACAAAA" },
+    { reg: 64, partNumber: "MTAG-A064", antiTag: "ATGATGTGTTTGATTTAAATTGAA", complementary: "TTCAATTCAAATCAAAACACATCAT" },
+    { reg: 65, partNumber: "MTAG-A065", antiTag: "TGAGTAAGTTTGTATGTTTAAGTA", complementary: "TACTTAAACATACAAACTTACTCA" },
+    { reg: 66, partNumber: "MTAG-A066", antiTag: "GTAAGAGTATTGAAATTAGTAAGA", complementary: "TCTTACTAATTTCATATACTTCAC" },
+    { reg: 67, partNumber: "MTAG-A067", antiTag: "TTTGTGTTTATTGTTAATTGAGAT", complementary: "ATCTCAATTACAAATAACACACAAAA" },
+    { reg: 72, partNumber: "MTAG-A072", antiTag: "AATTGAGAAAGAGATAAATGATAG", complementary: "CTATCATTTATCTCTTTCTCAATT" },
+    { reg: 73, partNumber: "MTAG-A073", antiTag: "GTTGAGAAATTAGAATTTGATAAAG", complementary: "CTTTATCAAATTCTAATTCTCAAC" },
+    { reg: 74, partNumber: "MTAG-A074", antiTag: "AATGAAATAGTGTTAAATGAGTGT", complementary: "ACACTCATTAAACACTATTCATT" },
+    { reg: 75, partNumber: "MTAG-A075", antiTag: "TTTGTTAGAATGAGAAGATTTATG", complementary: "CATAAATCTTCTCATCTTAACAAA" },
+    { reg: 76, partNumber: "MTAG-A076", antiTag: "AAAGAATTAGTATGATAGATGAGA", complementary: "TCTCATCTATCATACTAATTCTTT" }
+];

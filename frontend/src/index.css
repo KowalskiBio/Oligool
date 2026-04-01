@@ -18,3 +18,21 @@
 body {
   @apply bg-slate-50 text-slate-900 dark:bg-slate-900 dark:text-slate-100 transition-colors duration-300;
 }
+
+@media print {
+  /* Hide the React root element to prevent drawing the main app */
+  body > #root {
+    display: none !important;
+  }
+  
+  /* Force the report to display, taking advantage of createPortal rendering to body */
+  .printable-report {
+    display: block !important;
+  }
+
+  /* Reset standard print styles for layout purity */
+  @page {
+    margin: 2cm;
+    size: auto;
+  }
+}

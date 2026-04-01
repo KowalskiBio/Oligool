@@ -154,9 +154,29 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
         }
     });
 
-    /* ── zoom helpers ─────────────────────────────────── */
-    const zoomIn = () => setViewFraction((p) => Math.max(0.005, p * 0.75));
-    const zoomOut = () => setViewFraction((p) => Math.min(1, p * 1.33));
+    /* ── zoom helpers (anchored to viewport center) ───── */
+    const applyZoom = (factor: number) => {
+        const newVF = Math.max(0.005, Math.min(1, viewFraction * factor));
+        
+        // Calculate the current horizontal center (global fraction 0..1)
+        const currentTotalVirtualW = seqAreaW / viewFraction;
+        const centerFracGlobal = (scrollLeft + seqAreaW / 2) / currentTotalVirtualW;
+
+        // Calculate new scrollLeft to keep centerFracGlobal at the new viewport center
+        const newTotalVirtualW = seqAreaW / newVF;
+        let newSL = centerFracGlobal * newTotalVirtualW - seqAreaW / 2;
+
+        // Clamp scroll
+        newSL = Math.max(0, Math.min(newTotalVirtualW - seqAreaW, newSL));
+
+        setViewFraction(newVF);
+        setScrollLeft(newSL);
+        // Sync with ref so it's immediate
+        if (scrollRef.current) scrollRef.current.scrollLeft = newSL;
+    };
+
+    const zoomIn = () => applyZoom(0.75);
+    const zoomOut = () => applyZoom(1.33);
 
     /* ── copy helpers ─────────────────────────────────── */
     const showCopyFeedback = (msg: string) => {
@@ -1211,7 +1231,12 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
                             max={1}
                             step={0.005}
                             value={viewFraction}
-                            onChange={(e) => setViewFraction(parseFloat(e.target.value))}
+                            onChange={(e) => {
+                                const newVF = parseFloat(e.target.value);
+                                const factor = newVF / viewFraction;
+                                // We use factor to adjust zoom but anchored to center
+                                applyZoom(factor);
+                            }}
                             className="w-24 h-1.5 accent-indigo-500"
                             style={{ direction: 'rtl' }}
                         />
