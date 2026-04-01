@@ -46,7 +46,7 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
     const [selectionRange, setSelectionRange] = useState<{ start: number; end: number } | null>(null);
     const hoverColRef = useRef<number | null>(null);
     const hoverRafRef = useRef<number>(0);
-    const redrawRef = useRef<() => void>(() => {});
+    const redrawRef = useRef<() => void>(() => { });
     const [showOverview, setShowOverview] = useState(true);
 
     /* ── parse FASTA ────────────────────────────────────── */
@@ -232,6 +232,14 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
         ctx.scale(dpr, dpr);
 
         const mmSeqW = availableWidth - LABEL_WIDTH - RIGHT_PADDING;
+
+        // helper for pretty ruler steps
+        const getPrettyStep = (minPixels: number, pixelsPerUnit: number) => {
+            const minUnits = minPixels / pixelsPerUnit;
+            const steps = [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000, 10000];
+            return steps.find(s => s >= minUnits) || steps[steps.length - 1];
+        };
+
         const rowsTop = MINIMAP_GC_H + MINIMAP_RULER_H;
         const rowAreaH = MINIMAP_HEIGHT - rowsTop - MINIMAP_HANDLE_H; // subtract handle height
         const rowH = rowAreaH / sequences.length; // fractional for correct positioning
@@ -272,7 +280,7 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
         ctx.font = '8px ui-monospace, SFMono-Regular, monospace';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'bottom';
-        const tickInt = seqLen > 500 ? 100 : seqLen > 200 ? 50 : 10;
+        const tickInt = getPrettyStep(40, mmSeqW / seqLen);
         for (let col = 0; col < seqLen; col++) {
             if ((col + 1) % tickInt === 0) {
                 const x = LABEL_WIDTH + ((col + 0.5) / seqLen) * mmSeqW;
@@ -798,7 +806,12 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
         ctx.lineTo(availableWidth, rulerY + RULER_HEIGHT - 0.5);
         ctx.stroke();
 
-        const tickInterval = cellW >= 4 ? 10 : cellW >= 1 ? 50 : 100;
+        const getPrettyStep = (minPixels: number, pixelsPerUnit: number) => {
+            const minUnits = minPixels / pixelsPerUnit;
+            const steps = [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000, 10000];
+            return steps.find(s => s >= minUnits) || steps[steps.length - 1];
+        };
+        const tickInterval = getPrettyStep(60, cellW);
         ctx.fillStyle = '#94a3b8';
         ctx.font = '9px ui-monospace, SFMono-Regular, monospace';
         ctx.textAlign = 'center';
@@ -899,7 +912,7 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
         if (!cvs || !mainCvs) return;
         const ctx = cvs.getContext('2d');
         if (!ctx) return;
-        
+
         const dpr = window.devicePixelRatio || 1;
         // Sync resolution if physical size changed
         if (cvs.width !== mainCvs.width || cvs.height !== mainCvs.height) {
@@ -1222,15 +1235,15 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
                     />
                     <canvas
                         ref={hoverOverlayRef}
-                        style={{ 
-                            display: 'block', 
-                            position: 'absolute', 
-                            top: 0, 
-                            left: 0, 
+                        style={{
+                            display: 'block',
+                            position: 'absolute',
+                            top: 0,
+                            left: 0,
                             width: '100%',
                             height: '100%',
-                            pointerEvents: 'none', 
-                            zIndex: 20 
+                            pointerEvents: 'none',
+                            zIndex: 20
                         }}
                     />
                 </div>
@@ -1276,4 +1289,5 @@ function seqEnd(seq: string): number {
     return seq.length - 1;
 }
 
+export default MSAViewer;
 export default MSAViewer;
