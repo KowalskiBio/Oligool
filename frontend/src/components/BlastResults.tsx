@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 
 interface BlastHit {
     accession: string;
@@ -13,21 +13,36 @@ interface BlastResultsProps {
 }
 
 const BlastResults: React.FC<BlastResultsProps> = ({ hits }) => {
+    const [isCollapsed, setIsCollapsed] = useState(true);
+
     if (!hits || hits.length === 0) return null;
 
     return (
         <div className="mt-6 border border-slate-200 dark:border-slate-700 rounded-xl shadow-sm overflow-hidden bg-white dark:bg-slate-800 transition-colors">
-            <div className="px-5 py-4 bg-gradient-to-r from-indigo-50 to-purple-50 dark:from-indigo-900/20 dark:to-purple-900/20 border-b border-slate-200 dark:border-slate-700">
-                <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-200">
+            <div 
+                className="px-5 py-4 bg-gradient-to-r from-indigo-50 to-purple-50 dark:from-indigo-900/20 dark:to-purple-900/20 border-b border-slate-200 dark:border-slate-700 flex justify-between items-center cursor-pointer transition-colors"
+                onClick={() => setIsCollapsed(!isCollapsed)}
+            >
+                <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-2">
                     BLAST Results
-                    <span className="ml-2 text-sm font-normal text-slate-500 dark:text-slate-400">
+                    <span className="text-sm font-normal text-slate-500 dark:text-slate-400">
                         ({hits.length} hits)
                     </span>
                 </h2>
+                <button 
+                    className="text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 transition-transform duration-200"
+                    style={{ transform: isCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)' }}
+                    aria-label={isCollapsed ? "Expand BLAST Results" : "Collapse BLAST Results"}
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                        <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
+                    </svg>
+                </button>
             </div>
-            <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                    <thead>
+            {!isCollapsed && (
+                <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                        <thead>
                         <tr className="bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-b border-slate-200 dark:border-slate-700">
                             <th className="px-4 py-3 text-left font-semibold">#</th>
                             <th className="px-4 py-3 text-left font-semibold">Accession</th>
@@ -79,6 +94,7 @@ const BlastResults: React.FC<BlastResultsProps> = ({ hits }) => {
                     </tbody>
                 </table>
             </div>
+            )}
         </div>
     );
 };
