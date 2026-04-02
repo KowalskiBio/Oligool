@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { TAG_DATABASE } from '../constants/tags';
 import MOLigoReport from './MOLigoReport';
+import HairpinSVG from './HairpinSVG';
+import DimerSVG from './DimerSVG';
 
 export interface MOLigoProps {
     templateSeq: string;
@@ -14,6 +16,18 @@ export interface MOLigoProps {
     onTagChange?: (val: string) => void;
     onFwdChange?: (val: string) => void;
     onRevChange?: (val: string) => void;
+    idtCredentials?: {
+        clientId: string;
+        clientSecret: string;
+        username?: string;
+        password?: string;
+    };
+    idtAdvancedParams?: {
+        mv_conc: number;
+        mg_conc: number;
+        dntp_conc: number;
+        oligo_conc: number;
+    };
 }
 
 const C = {
@@ -39,11 +53,106 @@ export default function MOLigoPanel(props: MOLigoProps) {
         templateSeq,
         moligo1Seq, moligo2Seq,
         tagSeq, fwdPrimer, revPrimer,
-        onTagChange, onFwdChange, onRevChange
+        onTagChange, onFwdChange, onRevChange,
+        idtCredentials, idtAdvancedParams
     } = props;
 
     const [isSeqMode, setIsSeqMode] = useState(() => localStorage.getItem('moligo_prov_seq_mode') === 'true');
     const [isSchematicOpen, setIsSchematicOpen] = useState(() => localStorage.getItem('moligo_prov_schematic_open') !== 'false');
+
+    // Product Analysis State
+    const [isAnalyzing, setIsAnalyzing] = useState(false);
+    const [idtResults, setIdtResults] = useState<any>(null);
+    const [analysisError, setAnalysisError] = useState<string | null>(null);
+
+    const fwdRCSeq = reverseComplement(fwdPrimer || "");
+    const fullOligo2 = (revPrimer || "") + moligo2Seq;
+    const fullOligo1 = moligo1Seq + (tagSeq || "") + fwdRCSeq;
+
+    const runProductAnalysis = async () => {
+        if (!idtCredentials) {
+            setAnalysisError("IDT Credentials not found. Please set them in settings.");
+            return;
+        }
+        setIsAnalyzing(true);
+        setAnalysisError(null);
+        try {
+            const tRes = await fetch(((import.meta.env.VITE_API_BASE as string) || "") + '/idt/token', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    client_id: idtCredentials.clientId,
+                    client_secret: idtCredentials.clientSecret,
+                    username: idtCredentials.username,
+                    password: idtCredentials.password
+                })
+            });
+            if (!tRes.ok) throw new Error("IDT Auth Failed");
+            const { access_token } = await tRes.json();
+
+            const aRes = await fetch(((import.meta.env.VITE_API_BASE as string) || "") + '/idt/analyze', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    p1_seq: fullOligo1,
+                    p2_seq: fullOligo2,
+                    token: access_token,
+                    mg_conc: idtAdvancedParams?.mg_conc ?? 10.0,
+                    mv_conc: idtAdvancedParams?.mv_conc ?? 50.0,
+                    dntp_conc: idtAdvancedParams?.dntp_conc ?? 0.8,
+                    oligo_conc: idtAdvancedParams?.oligo_conc ?? 0.25
+                })
+            });
+            if (!aRes.ok) throw new Error("Product Analysis Failed");
+            const results = await aRes.json();
+            setIdtResults(results);
+        } catch (err: any) {
+            setAnalysisError(err.message);
+        } finally {
+            setIsAnalyzing(false);
+        }
+    };
+
+    const getIdtStatusColor = (dg: number | undefined) => {
+        if (dg === undefined || dg === null) return 'text-slate-400';
+        if (dg < -9) return 'text-red-500 font-bold';
+        if (dg < -6) return 'text-amber-500 font-bold';
+        return 'text-emerald-500 font-bold';
+    };
+
+    const renderResultCard = (title: string, data: any) => {
+        if (!data || data.error) return null;
+        const items = Array.isArray(data.raw) ? data.raw : [data.raw];
+        const topDg = data.DeltaG;
+
+        return (
+            <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-3 shadow-sm flex flex-col gap-2">
+                <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-800 pb-2">
+                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider text-ellipsis overflow-hidden whitespace-nowrap">{title}</span>
+                    <span className={`text-xs flex-shrink-0 ${getIdtStatusColor(topDg)}`}>{topDg != null ? `${topDg.toFixed(2)} kcal/mol` : 'N/A'}</span>
+                </div>
+                <div className="flex flex-col gap-3 mt-1">
+                    {items.slice(0, 1).map((item: any, i: number) => (
+                        <div key={i} className="flex flex-col gap-2">
+                            {item.DotBracket && (
+                                <div className="bg-slate-50 dark:bg-slate-800/50 rounded p-2">
+                                    {item.Sequence.includes('&') ? (
+                                        <DimerSVG seq={item.Sequence} dotBracket={item.DotBracket} />
+                                    ) : (
+                                        <HairpinSVG seq={item.Sequence} dotBracket={item.DotBracket} />
+                                    )}
+                                </div>
+                            )}
+                            <div className="flex justify-between items-center text-[9px] text-slate-400 font-medium px-1">
+                                <span>Vienna ΔG: <b className="text-slate-500">{item.ViennaRNA_DeltaG?.toFixed(2) || 'N/A'}</b></span>
+                                <span>Vienna Tm: <b className="text-slate-500">{item.Local_Tm?.toFixed(1) || 'N/A'}°C</b></span>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        );
+    };
 
     useEffect(() => {
         localStorage.setItem('moligo_prov_seq_mode', String(isSeqMode));
@@ -59,7 +168,6 @@ export default function MOLigoPanel(props: MOLigoProps) {
     const tagLen = tagSeq?.length || 0;
     const revLen = revPrimer?.length || 0;
     const fwdLen = fwdPrimer?.length || 0;
-    const fwdRCSeq = reverseComplement(fwdPrimer || "");
 
     // ── MOLigo layout: RevPrimer (left arm) | Oligo2 Oligo1 (flat) | TAG + RC(Fwd) (right arm) ──
     const VW = 800;
@@ -482,8 +590,35 @@ export default function MOLigoPanel(props: MOLigoProps) {
                     </div>
                 </div>
 
-                {/* ── Report Generation Action ── */}
-                <div className="mt-8 flex justify-end">
+                {idtResults && (
+                    <div className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                        {renderResultCard("Oligo 2 Stability (RevP+M2)", idtResults.m2.hairpin)}
+                        {renderResultCard("Oligo 1 Stability (M1+TAG+RC-FwdP)", idtResults.m1.hairpin)}
+                        {renderResultCard("HeteroDimer Pairwise", idtResults.pairwise)}
+                    </div>
+                )}
+
+                {/* ── Report & Analysis Actions ── */}
+                <div className="mt-8 flex justify-end items-center gap-4">
+                    {analysisError && <span className="text-xs text-red-500 font-medium uppercase tracking-tight">{analysisError}</span>}
+                    <button
+                        onClick={runProductAnalysis}
+                        disabled={isAnalyzing}
+                        className={`flex items-center gap-2 px-5 py-2.5 rounded-lg font-bold transition-all shadow-md active:scale-95 border ${
+                            isAnalyzing 
+                            ? 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed' 
+                            : 'bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300'
+                        }`}
+                    >
+                        {isAnalyzing ? (
+                            <div className="w-4 h-4 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+                        ) : (
+                            <svg className="w-5 h-5 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                            </svg>
+                        )}
+                        {isAnalyzing ? 'Analyzing Products...' : 'Analyze Products'}
+                    </button>
                     <button
                         onClick={() => window.print()}
                         className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-lg font-bold transition-all shadow-md active:scale-95 border border-indigo-500"

@@ -593,9 +593,15 @@ async def analyze_idt_oligos(request: IdtAnalyzeRequest):
         # Load DNA parameters (Mathews 2004)
         RNA.params_load_DNA_Mathews2004()
         
-        def add_vienna_analysis(seq, hp_data):
-            if isinstance(hp_data, list):
-                # Configure for DNA at user specified temperature with mfold-compatible dangles
+        def add_vienna_analysis(seq1, hp_data, seq2=None):
+            """Generic ViennaRNA analysis for either single hairpin (seq2=None) 
+            or dimers (seq2 provided). Returns enriched hp_data."""
+            if isinstance(hp_data, list) or (isinstance(hp_data, dict) and not hp_data.get("error")):
+                # Normalize hp_data to list for uniform processing if it's a singleton dict
+                is_list = isinstance(hp_data, list)
+                data_list = hp_data if is_list else [hp_data]
+                
+                # Configure for DNA at user specified temperature
                 md = RNA.md()
                 base_temp = request.temp if hasattr(request, "temp") and request.temp is not None else 34.0
                 md.temperature = base_temp
@@ -606,13 +612,18 @@ async def analyze_idt_oligos(request: IdtAnalyzeRequest):
                 mv_m, dv_m, dntp_m = request.mv_conc/1000.0, request.mg_conc/1000.0, request.dntp_conc/1000.0
                 na_eq = mv_m + 120.0 * math.sqrt(max(0, dv_m - dntp_m))
                 
+                # Compose sequences for ViennaRNA
+                if seq2:
+                    comp_seq = seq1 + "&" + seq2
+                else:
+                    comp_seq = seq1
+                
                 # 1. Get ALL suboptimal structures from ViennaRNA
-                fc = RNA.fold_compound(seq, md)
+                fc = RNA.fold_compound(comp_seq, md)
                 subs = fc.subopt(500) # within 5.0 kcal/mol of MFE
                 mfe_struct, mfe_energy = fc.mfe()
                 
                 # 2. Helper: derive Tm for a SPECIFIC structure via binary search
-                # Uses eval_structure() to evaluate the same structure at varying T
                 def vienna_tm_for_structure(structure):
                     if '(' not in structure:
                         return None
@@ -623,19 +634,16 @@ async def analyze_idt_oligos(request: IdtAnalyzeRequest):
                     for _ in range(40):
                         mid = (lo + hi) / 2.0
                         md_t.temperature = mid
-                        fc_t = RNA.fold_compound(seq, md_t)
+                        fc_t = RNA.fold_compound(comp_seq, md_t)
                         dg_t = fc_t.eval_structure(structure)
-                        if dg_t < 0:
-                            lo = mid
-                        else:
-                            hi = mid
+                        if dg_t < 0: lo = mid
+                        else: hi = mid
                     return round(lo, 1) if lo > 1.0 else None
                 
                 # 3. Helper: compute salt-corrected ViennaRNA ΔG for a structure
                 def vienna_dg_for_structure(structure, energy=None):
                     if energy is None:
-                        if '(' not in structure:
-                            return 0.0
+                        if '(' not in structure: return 0.0
                         energy = fc.eval_structure(structure)
                     num_pairs = structure.count("(")
                     if na_eq > 0 and num_pairs > 0:
@@ -644,64 +652,61 @@ async def analyze_idt_oligos(request: IdtAnalyzeRequest):
                     return round(float(energy), 2)
 
                 # 4. Build the final list
-                final_hairpins = []
+                final_results = []
                 seen_structures = set()
                 
-                # MFE ΔG and Tm (shared across IDT items)
                 mfe_dg = vienna_dg_for_structure(mfe_struct, mfe_energy)
                 mfe_tm = vienna_tm_for_structure(mfe_struct)
                 
-                # Process IDT hairpins: keep their IDT data, add ViennaRNA MFE for SVG
-                for idt_item in hp_data:
-                    idt_tm = idt_item.get("thermo") or idt_item.get("MeltingTemperature")
-                    if idt_tm is None:
-                        idt_tm = idt_item.get("Tm") or idt_item.get("tm") or idt_item.get("MeltTemp")
-                    idt_item["IDT_Tm"] = idt_tm
-                    idt_item["Sequence"] = seq
+                # Process IDT data: enrich with Vienna MFE
+                for item in data_list:
+                    # Robust Tm extraction from IDT
+                    idt_tm = item.get("thermo") or item.get("MeltingTemperature") or item.get("Tm") or item.get("tm") or item.get("MeltTemp")
+                    item["IDT_Tm"] = idt_tm
+                    item["Sequence"] = comp_seq
                     
-                    # Use ViennaRNA MFE structure for SVG rendering
-                    idt_item["DotBracket"] = mfe_struct
-                    idt_item["ViennaRNA_DeltaG"] = mfe_dg
-                    idt_item["Local_Tm"] = mfe_tm
+                    # Use ViennaRNA MFE structure for SVG/visualization
+                    item["DotBracket"] = mfe_struct
+                    item["ViennaRNA_DeltaG"] = mfe_dg
+                    item["Local_Tm"] = mfe_tm
                     
-                    # Remove ASCII fields to prevent fallback rendering
-                    idt_item.pop("AsciiStructure", None)
-                    idt_item.pop("VisualPrint", None)
-                    idt_item.pop("asciiStructure", None)
-                    idt_item.pop("visualPrint", None)
+                    # Remove ASCII/Visual junk
+                    for k in ["AsciiStructure", "VisualPrint", "asciiStructure", "visualPrint"]:
+                        item.pop(k, None)
                     
-                    final_hairpins.append(idt_item)
+                    final_results.append(item)
                 
                 seen_structures.add(mfe_struct)
                 
-                # Append ViennaRNA suboptimal structures (unique, with base pairs)
+                # Append ViennaRNA suboptimal structures (unique)
                 added = 0
+                max_subs = 5 if seq2 else max(0, 5 - len(data_list))
                 for sub in subs:
-                    if added >= max(0, 5 - len(hp_data)):
-                        break
-                    if sub.structure in seen_structures:
-                        continue
-                    if '(' not in sub.structure:
-                        continue
+                    if added >= max_subs: break
+                    if sub.structure in seen_structures: continue
+                    if '(' not in sub.structure: continue
                     
                     seen_structures.add(sub.structure)
                     sub_dg = vienna_dg_for_structure(sub.structure, sub.energy)
                     new_item = {
                         "DotBracket": sub.structure,
-                        "Sequence": seq,
+                        "Sequence": comp_seq,
                         "ViennaRNA_DeltaG": sub_dg,
                         "Local_Tm": vienna_tm_for_structure(sub.structure),
                         "DeltaG": None,
                         "IDT_Tm": None
                     }
-                    final_hairpins.append(new_item)
+                    final_results.append(new_item)
                     added += 1
 
-                return final_hairpins
+                return final_results if is_list else final_results[0]
             return hp_data
             
         m1_hairpin = add_vienna_analysis(request.p1_seq, m1_hairpin)
+        m1_selfdimer = add_vienna_analysis(request.p1_seq, m1_selfdimer, seq2=request.p1_seq)
         m2_hairpin = add_vienna_analysis(request.p2_seq, m2_hairpin)
+        m2_selfdimer = add_vienna_analysis(request.p2_seq, m2_selfdimer, seq2=request.p2_seq)
+        hetero = add_vienna_analysis(request.p1_seq, hetero, seq2=request.p2_seq)
     except Exception as e:
         print(f"ViennaRNA optimization error: {e}")
 

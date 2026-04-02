@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import MOLigoPanel from './MOLigoPanel';
 import HairpinSVG from './HairpinSVG';
+import DimerSVG from './DimerSVG';
 
 interface QueryViewerProps {
     data: { id: string; seq: string; start: number; end: number };
@@ -514,17 +515,21 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, idtCredent
             let asciiStructure: string | undefined = undefined;
             let hairpinDotBracket: string | undefined = undefined;
             let hairpinSeq: string | undefined = undefined;
+            let isDimer = false;
 
             if (item) {
-                // Always prefer DotBracket SVG rendering over ASCII for hairpins
+                // If the sequence or dotbracket contains '&', it's a dimer
+                const fullSeq = item.Sequence || seq || '';
+                const db = item.DotBracket || '';
+                isDimer = fullSeq.includes('&') || db.includes('&');
+
                 if (item.DotBracket) {
                     hairpinDotBracket = item.DotBracket;
-                    hairpinSeq = seq || item.Sequence || '';
-                } else if (item.Bonds && seq) {
-                    // Dimers use ASCII rendering via Bonds
+                    hairpinSeq = fullSeq;
+                } else if (!isDimer && item.Bonds && seq) {
+                    // Dimers use ASCII rendering via Bonds only if not a Vienna-dot-bracket dimer
                     asciiStructure = buildDimerAscii(item, seq, seq2);
                 }
-                // No ASCII fallback for hairpins — AsciiStructure is stripped by the backend
             }
 
             return (
@@ -550,9 +555,13 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, idtCredent
                             )}
                         </div>
                     </div>
-                    {hairpinDotBracket && hairpinSeq != null && hairpinSeq.length > 0 && (
+                    {hairpinDotBracket && hairpinSeq && (
                         <div className="mt-1 w-full overflow-x-auto bg-slate-100 dark:bg-slate-800 rounded p-2">
-                            <HairpinSVG seq={hairpinSeq} dotBracket={hairpinDotBracket} />
+                            {isDimer ? (
+                                <DimerSVG seq={hairpinSeq} dotBracket={hairpinDotBracket} />
+                            ) : (
+                                <HairpinSVG seq={hairpinSeq} dotBracket={hairpinDotBracket} />
+                            )}
                         </div>
                     )}
                     {hairpinDotBracket && (!hairpinSeq || hairpinSeq.length === 0) && (
@@ -1038,6 +1047,8 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, idtCredent
                         onTagChange={setTagSeq}
                         onFwdChange={setFwdPrimer}
                         onRevChange={setRevPrimer}
+                        idtCredentials={idtCredentials}
+                        idtAdvancedParams={idtAdvancedParams}
                     />
                 </div>
             )}
