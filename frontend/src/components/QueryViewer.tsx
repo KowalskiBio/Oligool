@@ -989,11 +989,14 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, idtCredent
                                             type="number"
                                             step="0.1"
                                             min="0"
-                                            value={idtCredentials.mgConc ?? 0}
+                                            value={idtAdvancedParams.mg_conc}
                                             onChange={(e) => {
-                                                const val = e.target.value;
-                                                localStorage.setItem('idt_mg_conc', val);
-                                                window.dispatchEvent(new CustomEvent('idt-mg-change', { detail: val }));
+                                                const val = parseFloat(e.target.value) || 0;
+                                                setIdtAdvancedParams((prev: typeof idtAdvancedParams) => {
+                                                    const next = { ...prev, mg_conc: val };
+                                                    localStorage.setItem('idt_advanced_params', JSON.stringify(next));
+                                                    return next;
+                                                });
                                             }}
                                             className="w-16 rounded border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 text-xs p-1 border font-mono text-center"
                                         />
