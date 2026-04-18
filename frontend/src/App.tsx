@@ -45,6 +45,7 @@ function App() {
   const [selectedPrimers, setSelectedPrimers] = useState<{ p1: { start: number, end: number }, p2: { start: number, end: number } } | null>(null);
   const [showSecrets, setShowSecrets] = useState(false);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const [navigateTarget, setNavigateTarget] = useState<{ colStart: number; colEnd: number; ts: number } | null>(null);
 
   useEffect(() => {
     if (isDarkMode) {
@@ -556,9 +557,8 @@ function App() {
                     type="button"
                     onClick={() => setFilterMatches(true)}
                     disabled={step !== 'input'}
-                    className={`px-2.5 py-1 text-xs font-medium transition-colors disabled:opacity-50 ${
-                      filterMatches ? 'bg-indigo-500 text-white' : 'bg-white dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-600'
-                    }`}
+                    className={`px-2.5 py-1 text-xs font-medium transition-colors disabled:opacity-50 ${filterMatches ? 'bg-indigo-500 text-white' : 'bg-white dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-600'
+                      }`}
                   >
                     Yes
                   </button>
@@ -566,9 +566,8 @@ function App() {
                     type="button"
                     onClick={() => setFilterMatches(false)}
                     disabled={step !== 'input'}
-                    className={`px-2.5 py-1 text-xs font-medium transition-colors disabled:opacity-50 border-l border-slate-300 dark:border-slate-600 ${
-                      !filterMatches ? 'bg-indigo-500 text-white' : 'bg-white dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-600'
-                    }`}
+                    className={`px-2.5 py-1 text-xs font-medium transition-colors disabled:opacity-50 border-l border-slate-300 dark:border-slate-600 ${!filterMatches ? 'bg-indigo-500 text-white' : 'bg-white dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-600'
+                      }`}
                   >
                     No
                   </button>
@@ -611,18 +610,18 @@ function App() {
             <div className="bg-white dark:bg-slate-800 shadow-sm rounded-xl border border-slate-200 dark:border-slate-700 p-8 mb-6 text-center">
               <div className="inline-block animate-spin rounded-full h-8 w-8 border-2 border-indigo-600 border-t-transparent mb-3"></div>
               <p className="text-slate-600 dark:text-slate-400 font-medium text-lg">Processing Pipeline...</p>
-              
+
               {/* Progress UI */}
               <div className="w-full max-w-md mx-auto mt-6 bg-slate-200 dark:bg-slate-700 rounded-full h-2.5 overflow-hidden">
-                <div 
-                  className="bg-indigo-600 h-2.5 transition-all duration-1000 ease-linear rounded-full" 
+                <div
+                  className="bg-indigo-600 h-2.5 transition-all duration-1000 ease-linear rounded-full"
                   style={{ width: `${Math.min((elapsedSeconds / 60) * 100, 100)}%` }}
                 ></div>
               </div>
               <div className="mt-2 text-sm font-mono text-indigo-600 dark:text-indigo-400 font-semibold">
                 {Math.floor(elapsedSeconds / 60)}:{(elapsedSeconds % 60).toString().padStart(2, '0')} elapsed
               </div>
-              
+
               <p className="text-sm text-slate-400 dark:text-slate-500 mt-4">Running BLAST search against NCBI and performing MAFFT alignment.</p>
               <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">This may take 1-2 minutes depending on sequence count.</p>
             </div>
@@ -692,12 +691,14 @@ function App() {
                 jobName={jobName}
                 primers={selectedPrimers}
                 isDarkMode={isDarkMode}
+                navigateTarget={navigateTarget}
               />
               {step === 'done' && selectedSequence && (
                 <QueryViewer
                   data={selectedSequence}
                   jobName={jobName}
                   onPrimersUpdate={setSelectedPrimers}
+                  onNavigateTo={(colStart, colEnd) => setNavigateTarget({ colStart, colEnd, ts: Date.now() })}
                   idtCredentials={{
                     clientId: idtClientId,
                     clientSecret: idtClientSecret,

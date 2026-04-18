@@ -31,6 +31,8 @@ interface MSAViewerProps {
     jobName?: string;
     primers?: { p1: { start: number, end: number }, p2: { start: number, end: number } } | null;
     isDarkMode?: boolean;
+    /** When set, MSA will zoom/pan to show these global gapped column indices */
+    navigateTarget?: { colStart: number; colEnd: number; ts: number } | null;
 }
 
 /* ── constants ────────────────────────────────────────── */
@@ -49,7 +51,7 @@ const MINIMAP_HEIGHT = MINIMAP_GC_H + MINIMAP_RULER_H + 50 + MINIMAP_HANDLE_H;
 const MAIN_GC_TRACK_H = 40;
 const MAIN_MSA_TRACK_H = 30;
 
-const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, primers, isDarkMode }) => {
+const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, primers, isDarkMode, navigateTarget }) => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const hoverOverlayRef = useRef<HTMLCanvasElement>(null);
     const minimapRef = useRef<HTMLCanvasElement>(null);
@@ -157,7 +159,7 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
     /* ── zoom helpers (anchored to viewport center) ───── */
     const applyZoom = (factor: number) => {
         const newVF = Math.max(0.005, Math.min(1, viewFraction * factor));
-        
+
         // Calculate the current horizontal center (global fraction 0..1)
         const currentTotalVirtualW = seqAreaW / viewFraction;
         const centerFracGlobal = (scrollLeft + seqAreaW / 2) / currentTotalVirtualW;
@@ -177,6 +179,25 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
 
     const zoomIn = () => applyZoom(0.75);
     const zoomOut = () => applyZoom(1.33);
+
+    /* ── navigate to a specific column range ────────────── */
+    useEffect(() => {
+        if (!navigateTarget || seqLen === 0) return;
+        const { colStart, colEnd } = navigateTarget;
+        const PADDING = 150; // extra columns of context on each side
+        const visStart = Math.max(0, colStart - PADDING);
+        const visEnd = Math.min(seqLen - 1, colEnd + PADDING);
+        const spanCols = visEnd - visStart + 1;
+        const newVF = Math.max(0.005, Math.min(1, spanCols / seqLen));
+        const centerFrac = (colStart + colEnd) / (2 * seqLen);
+        const newTotalVW = seqAreaW / newVF;
+        let newSL = centerFrac * newTotalVW - seqAreaW / 2;
+        newSL = Math.max(0, Math.min(newTotalVW - seqAreaW, newSL));
+        setViewFraction(newVF);
+        setScrollLeft(newSL);
+        if (scrollRef.current) scrollRef.current.scrollLeft = newSL;
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [navigateTarget]); // intentionally only react to the navigate command
 
     /* ── copy helpers ─────────────────────────────────── */
     const showCopyFeedback = (msg: string) => {
@@ -360,7 +381,7 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
                 }
             }
         }
-        
+
         if (primers) {
             const mmRulerY = MINIMAP_GC_H;
             const mmRulerH = MINIMAP_RULER_H;
@@ -810,7 +831,7 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
             }
             const seqW = availableWidth - LABEL_WIDTH - RIGHT_PADDING;
             const pxStep = Math.max(1, seqLen / seqW);
-            
+
             // Optimized: Iterate over visible pixels, not every column.
             // (availableWidth - LABEL_WIDTH) is the visible sequence area width.
             for (let x = 0; x < availableWidth - LABEL_WIDTH; x++) {
@@ -1198,15 +1219,15 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
                                 const seqAreaW = availableWidth - LABEL_WIDTH - RIGHT_PADDING;
                                 const currentTotalW = seqAreaW / viewFraction;
                                 const centerFrac = (scrollLeft + seqAreaW / 2) / currentTotalW;
-                                
+
                                 setViewMode('letters');
                                 const newVF = Math.min(1, 100 / seqLen); // ~100 bp zoom
                                 const newTotalW = seqAreaW / newVF;
-                                
+
                                 // Recalculate scroll to keep same center
                                 const newSL = centerFrac * newTotalW - seqAreaW / 2;
                                 const clampedSL = Math.max(0, Math.min(newTotalW - seqAreaW, newSL));
-                                
+
                                 setViewFraction(newVF);
                                 setScrollLeft(clampedSL);
                                 targetScrollRef.current = clampedSL;

@@ -7,6 +7,7 @@ interface QueryViewerProps {
     data: { id: string; seq: string; start: number; end: number };
     jobName: string;
     onPrimersUpdate: (primers: { p1: { start: number, end: number }, p2: { start: number, end: number } } | null) => void;
+    onNavigateTo?: (colStart: number, colEnd: number) => void;
     idtCredentials?: {
         clientId: string;
         clientSecret: string;
@@ -43,7 +44,21 @@ interface OligizeResponse {
     param_warnings?: string[];
 }
 
-export default function QueryViewer({ data, jobName, onPrimersUpdate, idtCredentials }: QueryViewerProps) {
+interface SavedPosition {
+    id: string;
+    label: string;
+    createdAt: number;
+    p1: { start: number; end: number; seq: string; gc: number; tm: number };
+    p2: { start: number; end: number; seq: string; gc: number; tm: number };
+    // 1-indexed absolute genomic coords (bare numeric range, no chr prefix)
+    p1AbsStart: number; p1AbsEnd: number;
+    p2AbsStart: number; p2AbsEnd: number;
+    // Shift / length state so restoring snaps sliders back exactly
+    moligo1Shift: number; moligo2Shift: number;
+    moligo1Len: number; moligo2Len: number;
+}
+
+export default function QueryViewer({ data, jobName, onPrimersUpdate, onNavigateTo, idtCredentials }: QueryViewerProps) {
     const [copyFeedback, setCopyFeedback] = useState('');
 
     // IDT Analysis State
@@ -110,6 +125,41 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, idtCredent
     const [fwdPrimer, setFwdPrimer] = useState(() => localStorage.getItem('fwd_primer') || 'CGCGGTAGTAAGAAGTGAGA');
     const [revPrimer, setRevPrimer] = useState(() => localStorage.getItem('rev_primer') || 'ACTCGTAGGGAATAAACCGT');
 
+    // Saved Positions state (cleared on new BLAST / data change)
+    const [savedPositions, setSavedPositions] = useState<SavedPosition[]>([]);
+    const [editingLabelId, setEditingLabelId] = useState<string | null>(null);
+    const [editingLabelText, setEditingLabelText] = useState('');
+    const [pinPulse, setPinPulse] = useState(false);
+    const [isSavedPosOpen, setIsSavedPosOpen] = useState(true);
+
+    // Fix Position toggle — when set, fetchPrimers is bypassed and oligos stick to global absolute coordinates
+    const [fixedAbsCoords, setFixedAbsCoords] = useState<{
+        p1AbsStart: number; p1AbsEnd: number; p2AbsStart: number; p2AbsEnd: number;
+        p1Seq: string; p2Seq: string; p1Tm: number; p2Tm: number; p1Gc: number; p2Gc: number;
+    } | null>(null);
+
+    const toggleFixPosition = () => {
+        setFixedAbsCoords(prev => {
+            if (prev) {
+                // Unfixing → trigger a fresh auto-search
+                setIsAutoSearchNeeded(true);
+                return null;
+            }
+            // Fixing current primers
+            if (!primers) return null;
+            const p1AbsStart = data.start + mapUngappedToGapped(primers.p1.start, data.seq) + 1;
+            const p1AbsEnd   = data.start + mapUngappedToGapped(primers.p1.end,   data.seq) + 1;
+            const p2AbsStart = data.start + mapUngappedToGapped(primers.p2.start, data.seq) + 1;
+            const p2AbsEnd   = data.start + mapUngappedToGapped(primers.p2.end,   data.seq) + 1;
+            return {
+                p1AbsStart, p1AbsEnd, p2AbsStart, p2AbsEnd,
+                p1Seq: primers.p1.seq, p2Seq: primers.p2.seq,
+                p1Tm: primers.p1.tm, p2Tm: primers.p2.tm,
+                p1Gc: primers.p1.gc, p2Gc: primers.p2.gc
+            };
+        });
+    };
+
     const handleCopy = (text: string) => {
         navigator.clipboard.writeText(text).then(() => {
             setCopyFeedback('Copied!');
@@ -117,19 +167,96 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, idtCredent
         });
     };
 
-    // Initialize/Reset state when data changes
+    // ── Saved Positions helpers ───────────────────────────────────────────
+    const calcGc = (seq: string) => {
+        if (!seq) return 0;
+        return ((seq.match(/[GCgc]/g) || []).length / seq.length) * 100;
+    };
+
+    const relativeTime = (ts: number) => {
+        const diff = Math.floor((Date.now() - ts) / 1000);
+        if (diff < 5) return 'just now';
+        if (diff < 60) return `${diff}s ago`;
+        if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+        return `${Math.floor(diff / 3600)}h ago`;
+    };
+
+    const pinPosition = () => {
+        if (!primers) return;
+        const p1AbsStart = data.start + mapUngappedToGapped(primers.p1.start, data.seq) + 1;
+        const p1AbsEnd = data.start + mapUngappedToGapped(primers.p1.end, data.seq) + 1;
+        const p2AbsStart = data.start + mapUngappedToGapped(primers.p2.start, data.seq) + 1;
+        const p2AbsEnd = data.start + mapUngappedToGapped(primers.p2.end, data.seq) + 1;
+
+        const pos: SavedPosition = {
+            id: `pos_${Date.now()}_${Math.random().toString(36).slice(2)}`,
+            label: `Position ${savedPositions.length + 1}`,
+            createdAt: Date.now(),
+            p1: { start: primers.p1.start, end: primers.p1.end, seq: primers.p1.seq, gc: calcGc(primers.p1.seq), tm: primers.p1.tm },
+            p2: { start: primers.p2.start, end: primers.p2.end, seq: primers.p2.seq, gc: calcGc(primers.p2.seq), tm: primers.p2.tm },
+            p1AbsStart, p1AbsEnd, p2AbsStart, p2AbsEnd,
+            moligo1Shift, moligo2Shift, moligo1Len, moligo2Len,
+        };
+        setSavedPositions(prev => [...prev, pos]);
+        setPinPulse(true);
+        setTimeout(() => setPinPulse(false), 1000);
+    };
+
+    const restorePosition = (pos: SavedPosition) => {
+        // Lock instantly to the exact absolute genomic sequence, bypassing backend searches completely.
+        setFixedAbsCoords({
+            p1AbsStart: pos.p1AbsStart, p1AbsEnd: pos.p1AbsEnd,
+            p2AbsStart: pos.p2AbsStart, p2AbsEnd: pos.p2AbsEnd,
+            p1Seq: pos.p1.seq, p2Seq: pos.p2.seq,
+            p1Tm: pos.p1.tm, p2Tm: pos.p2.tm,
+            p1Gc: pos.p1.gc, p2Gc: pos.p2.gc
+        });
+        // Restore slider state so the UI inputs reflect reality
+        setMoligo1Shift(pos.moligo1Shift);
+        setMoligo2Shift(pos.moligo2Shift);
+        setMoligo1Len(pos.moligo1Len);
+        setMoligo2Len(pos.moligo2Len);
+        // Teleport MSA to the position (using exact=false so we get comfortable context padding)
+        if (onNavigateTo) {
+            onNavigateTo(pos.p2AbsStart - 1, pos.p1AbsEnd - 1);
+        }
+    };
+
+    const deletePosition = (id: string) => {
+        setSavedPositions(prev => prev.filter(p => p.id !== id));
+        if (editingLabelId === id) setEditingLabelId(null);
+    };
+
+    const commitLabelEdit = (id: string) => {
+        if (editingLabelText.trim()) {
+            setSavedPositions(prev => prev.map(p => p.id === id ? { ...p, label: editingLabelText.trim() } : p));
+        }
+        setEditingLabelId(null);
+    };
+
+    // 1. Clear saved positions only when a totally new BLAST search comes in
     useEffect(() => {
-        if (data) {
+        if (data?.id) {
+            setSavedPositions([]);
+            setEditingLabelId(null);
+            setFixedAbsCoords(null);
+        }
+    }, [data?.id]);
+
+    // 2. Restart search when the active window changes (pan/zoom), UNLESS we are locked.
+    // This allows the engine to find the 'best' oligo anywhere in the new frame instead of sitting in the center.
+    useEffect(() => {
+        if (data && !fixedAbsCoords) {
             setIdtResults(null);
             setIdtError(null);
             onPrimersUpdate(null);
-            // Reset shifts for a NEW sequence to trigger initial best-place search
+            // Reset shifts for the new viewport to trigger initial best-place search
             setMoligo1Shift(0);
             setMoligo2Shift(0);
             lastShiftsApplied.current = { s1: 0, s2: 0 };
             setIsAutoSearchNeeded(true);
         }
-    }, [data?.id, data?.seq]);
+    }, [data?.id, data?.seq]); // intentionally NOT fixedAbsCoords to prevent recursion when locking
 
     // Coordinate Mapping Helper: Ungapped Index -> Gapped Index (Relative to slice)
     const mapUngappedToGapped = (ungappedIdx: number, gappedSeq: string): number => {
@@ -153,6 +280,52 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, idtCredent
         if (raw.length < 2) return;
 
         const fetchPrimers = async () => {
+            if (fixedAbsCoords) {
+                // 🔒 Position is fixed to absolute coordinates! (e.g. from Restore or Fix click)
+                // We do NOT hit the backend. We recalculate relative ungapped coordinates 
+                // so the visual sequences are perfectly aligned on the *current* window slice.
+                const mapGappedToUngapped = (gappedIdx: number, gappedSeq: string): number => {
+                    if (gappedIdx <= 0) return 0;
+                    let u = 0;
+                    const limit = Math.min(gappedIdx, gappedSeq.length);
+                    for (let i = 0; i < limit; i++) {
+                        if (gappedSeq[i] !== '-') u++;
+                    }
+                    return u;
+                };
+
+                // Determine coordinates relative to the START of the current viewport slice
+                const p1RelGappedStart = fixedAbsCoords.p1AbsStart - 1 - data.start;
+                const p1RelGappedEnd = fixedAbsCoords.p1AbsEnd - 1 - data.start;
+                const p2RelGappedStart = fixedAbsCoords.p2AbsStart - 1 - data.start;
+                const p2RelGappedEnd = fixedAbsCoords.p2AbsEnd - 1 - data.start;
+                
+                // Map gapped slice coords back to ungapped string length for `renderSequence` DimerSVG injection
+                const p1UngappedStart = mapGappedToUngapped(p1RelGappedStart, data.seq);
+                const p1UngappedEnd = mapGappedToUngapped(p1RelGappedEnd, data.seq);
+                const p2UngappedStart = mapGappedToUngapped(p2RelGappedStart, data.seq);
+                const p2UngappedEnd = mapGappedToUngapped(p2RelGappedEnd, data.seq);
+
+                const fauxResponse: OligizeResponse = {
+                    p1: { start: p1UngappedStart, end: p1UngappedEnd, seq: fixedAbsCoords.p1Seq, len: fixedAbsCoords.p1Seq.length, tm: fixedAbsCoords.p1Tm, gc: fixedAbsCoords.p1Gc },
+                    p2: { start: p2UngappedStart, end: p2UngappedEnd, seq: fixedAbsCoords.p2Seq, len: fixedAbsCoords.p2Seq.length, tm: fixedAbsCoords.p2Tm, gc: fixedAbsCoords.p2Gc },
+                    split_idx: 0,
+                    tm_diff_ok: Math.abs(fixedAbsCoords.p1Tm - fixedAbsCoords.p2Tm) <= Number(searchParams.tm_diff),
+                    params_not_met: false,
+                };
+
+                setPrimers(fauxResponse);
+                setParamsNotMet(false);
+                setLoading(false);
+
+                // Broadcast back up to MSAViewer so the global minimap track remains totally accurate
+                onPrimersUpdate({
+                    p1: { start: data.start + p1RelGappedStart, end: data.start + p1RelGappedEnd },
+                    p2: { start: data.start + p2RelGappedStart, end: data.start + p2RelGappedEnd }
+                });
+                return;
+            }
+            
             setLoading(true);
             setError('');
 
@@ -199,7 +372,7 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, idtCredent
                 const json: OligizeResponse = await res.json();
                 setPrimers(json);
                 setParamsNotMet(!!json.params_not_met);
-                
+
                 const localOptimizeUsed = localOptimize;
 
                 if (isAutoSearchNeeded) {
@@ -210,7 +383,7 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, idtCredent
                         s1: json.p1.start - json.split_idx,
                         s2: json.p2.end - json.split_idx
                     };
-                    setIsAutoSearchNeeded(false); 
+                    setIsAutoSearchNeeded(false);
                 } else {
                     lastShiftsApplied.current = { s1: moligo1Shift, s2: moligo2Shift };
                 }
@@ -247,7 +420,7 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, idtCredent
 
         const debounce = setTimeout(fetchPrimers, 200);
         return () => clearTimeout(debounce);
-    }, [data, moligo1Shift, moligo2Shift, searchParams, moligo1Len, moligo2Len]);
+    }, [data, moligo1Shift, moligo2Shift, searchParams, moligo1Len, moligo2Len, fixedAbsCoords, isAutoSearchNeeded]);
 
     // Persistence
     useEffect(() => { localStorage.setItem('moligo1_shift', String(moligo1Shift)); }, [moligo1Shift]);
@@ -630,7 +803,7 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, idtCredent
     return (
         <div className="mt-6 border border-slate-200 dark:border-slate-700 rounded-xl shadow-sm overflow-hidden bg-white dark:bg-slate-800 transition-all">
             <div className="px-5 py-3 bg-gradient-to-r from-slate-50 to-indigo-50/50 dark:from-slate-800 dark:to-indigo-900/20 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between flex-wrap gap-2">
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-3 flex-wrap">
                     <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-200">
                         Oligo provenance: <span className="font-mono text-indigo-600 dark:text-indigo-400">{jobName}</span>
                     </h2>
@@ -647,6 +820,45 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, idtCredent
                         >
                             🔬 MOLigize!
                         </button>
+                    )}
+                    {primers && (
+                        <>
+                            <button
+                                id="btn-pin-position"
+                                onClick={pinPosition}
+                                title="Save current oligo positions as a bookmark"
+                                className={`ml-1 flex items-center gap-1.5 px-3 py-1 text-xs font-bold rounded-full border transition-all duration-300 ${pinPulse
+                                        ? 'bg-indigo-600 border-indigo-600 text-white shadow-lg shadow-indigo-300/40 dark:shadow-indigo-900/40 scale-105'
+                                        : 'bg-white dark:bg-slate-700 text-indigo-500 dark:text-indigo-400 border-indigo-200 dark:border-indigo-800 hover:border-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/20'
+                                    }`}
+                            >
+                                <svg className="w-3.5 h-3.5" fill={pinPulse ? 'currentColor' : 'none'} viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                                        d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
+                                </svg>
+                                {pinPulse ? 'Saved!' : 'Pin Position'}
+                            </button>
+                            <button
+                                id="btn-fix-position"
+                                onClick={toggleFixPosition}
+                                title={!!fixedAbsCoords ? 'Click to unlock oligo and run a new search' : 'Click to lock oligo in its current position'}
+                                className={`ml-1 flex items-center gap-1.5 px-3 py-1 text-xs font-bold rounded-full border transition-all duration-200 ${!!fixedAbsCoords
+                                        ? 'bg-amber-500 border-amber-500 text-white shadow-md shadow-amber-200/50 dark:shadow-amber-900/30 ring-2 ring-amber-100 dark:ring-amber-900/30'
+                                        : 'bg-white dark:bg-slate-700 text-amber-500 dark:text-amber-400 border-amber-200 dark:border-amber-800 hover:border-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/20'
+                                    }`}
+                            >
+                                {!!fixedAbsCoords ? (
+                                    <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
+                                        <path fillRule="evenodd" d="M12 1a4 4 0 00-4 4v3H6a2 2 0 00-2 2v9a2 2 0 002 2h12a2 2 0 002-2v-9a2 2 0 00-2-2h-2V5a4 4 0 00-4-4zm2 7V5a2 2 0 10-4 0v3h4z" clipRule="evenodd" />
+                                    </svg>
+                                ) : (
+                                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
+                                    </svg>
+                                )}
+                                {!!fixedAbsCoords ? '🔒 Unfix' : 'Fix Position'}
+                            </button>
+                        </>
                     )}
                 </div>
                 <div className="flex items-center gap-3">
@@ -666,7 +878,7 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, idtCredent
                 <div className="bg-purple-50/50 dark:bg-purple-900/5 border-b border-purple-100 dark:border-purple-900/20 p-4 font-sans relative">
                     <div className="flex justify-between items-center mb-2">
                         <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest">Oligo Selection Parameters</h3>
-                        <button 
+                        <button
                             onClick={() => setShowAdvanced(!showAdvanced)}
                             className="text-[10px] font-bold text-indigo-500 hover:text-indigo-600 uppercase tracking-wider flex items-center gap-1"
                         >
@@ -978,6 +1190,144 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, idtCredent
                         )}
                     </div>
 
+                    {/* ── Saved Positions Panel ──────────────────────── */}
+                    {savedPositions.length > 0 && (
+                        <div className="mt-4 border-t border-indigo-100 dark:border-indigo-900/30 pt-4">
+                            {/* Header */}
+                            <div
+                                className="flex items-center justify-between cursor-pointer group mb-2"
+                                onClick={() => setIsSavedPosOpen(o => !o)}
+                            >
+                                <div className="flex items-center gap-2">
+                                    <svg className={`w-4 h-4 text-slate-400 group-hover:text-slate-600 transition-transform duration-200 ${isSavedPosOpen ? 'rotate-90' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                    </svg>
+                                    <span className="text-xs font-bold text-slate-500 uppercase tracking-widest group-hover:text-slate-700 dark:group-hover:text-slate-300 transition-colors">
+                                        📍 Saved Positions
+                                    </span>
+                                    <span className="text-[10px] font-bold bg-indigo-100 dark:bg-indigo-900/50 text-indigo-600 dark:text-indigo-400 rounded-full px-2 py-0.5">
+                                        {savedPositions.length}
+                                    </span>
+                                </div>
+                                <button
+                                    onClick={e => { e.stopPropagation(); setSavedPositions([]); setEditingLabelId(null); }}
+                                    className="text-[10px] font-bold text-slate-400 hover:text-red-500 transition-colors uppercase tracking-wider px-2 py-1 rounded hover:bg-red-50 dark:hover:bg-red-900/20"
+                                    title="Clear all saved positions"
+                                >
+                                    Clear all
+                                </button>
+                            </div>
+
+                            {/* Cards grid */}
+                            {isSavedPosOpen && (
+                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 animate-in fade-in slide-in-from-top-2 duration-200">
+                                    {savedPositions.map((pos) => (
+                                        <div
+                                            key={pos.id}
+                                            className="bg-white dark:bg-slate-800 rounded-xl border border-indigo-100 dark:border-indigo-900/40 shadow-sm hover:shadow-md hover:border-indigo-300 dark:hover:border-indigo-700 transition-all duration-200 flex flex-col overflow-hidden"
+                                        >
+                                            {/* Card top bar */}
+                                            <div className="flex items-center justify-between px-3 pt-2.5 pb-1.5 border-b border-slate-100 dark:border-slate-700">
+                                                {editingLabelId === pos.id ? (
+                                                    <input
+                                                        autoFocus
+                                                        value={editingLabelText}
+                                                        onChange={e => setEditingLabelText(e.target.value)}
+                                                        onBlur={() => commitLabelEdit(pos.id)}
+                                                        onKeyDown={e => {
+                                                            if (e.key === 'Enter') commitLabelEdit(pos.id);
+                                                            if (e.key === 'Escape') setEditingLabelId(null);
+                                                        }}
+                                                        className="flex-1 text-xs font-bold bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-700 rounded px-1.5 py-0.5 outline-none focus:ring-1 focus:ring-indigo-400 mr-1"
+                                                    />
+                                                ) : (
+                                                    <button
+                                                        onClick={() => { setEditingLabelId(pos.id); setEditingLabelText(pos.label); }}
+                                                        className="flex items-center gap-1 text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-200 transition-colors group/label"
+                                                        title="Click to rename"
+                                                    >
+                                                        <span>{pos.label}</span>
+                                                        <svg className="w-3 h-3 opacity-0 group-hover/label:opacity-60 transition-opacity" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536M9 13l6.586-6.586a2 2 0 112.828 2.828L11.828 15.828a2 2 0 01-1.414.586H9v-2.414a2 2 0 01.586-1.414z" />
+                                                        </svg>
+                                                    </button>
+                                                )}
+                                                <span className="text-[9px] text-slate-400 font-medium ml-auto shrink-0">{relativeTime(pos.createdAt)}</span>
+                                            </div>
+
+                                            {/* Coordinate rows */}
+                                            <div className="px-3 py-2 flex flex-col gap-1.5 flex-1 w-full max-w-full">
+                                                <div className="flex items-start gap-1.5 flex-1 w-full max-w-full min-w-0">
+                                                    <span className="text-[9px] font-bold text-amber-500 uppercase tracking-wider w-12 shrink-0 pt-0.5">Oligo 2</span>
+                                                    <div className="flex flex-col gap-1 w-full min-w-0">
+                                                        <div className="flex justify-between items-center bg-slate-50 dark:bg-slate-800/50 rounded px-1.5 py-0.5 border border-slate-100 dark:border-slate-700 w-full">
+                                                            <span className="font-mono text-[9px] text-slate-600 dark:text-slate-300 truncate font-semibold select-all" title={pos.p2.seq}>{pos.p2.seq}</span>
+                                                            <button 
+                                                                onClick={() => handleCopy(pos.p2.seq)}
+                                                                title="Copy sequence"
+                                                                className="opacity-0 group-hover:opacity-100 p-0.5 hover:bg-slate-200 dark:hover:bg-slate-700 rounded transition-all shrink-0"
+                                                            >
+                                                                <svg className="w-2.5 h-2.5 text-slate-400 hover:text-slate-600 dark:hover:text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" /></svg>
+                                                            </button>
+                                                        </div>
+                                                        <div className="flex gap-2 text-[9px] text-slate-400">
+                                                            <span className="font-mono text-[9px] text-slate-500 shrink-0">bp {pos.p2AbsStart}–{pos.p2AbsEnd}</span>
+                                                            <span className="ml-auto">GC: <b className="text-slate-500">{pos.p2.gc.toFixed(1)}%</b></span>
+                                                            <span>Tm: <b className="text-slate-500">{pos.p2.tm.toFixed(1)}°C</b></span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <div className="flex items-start gap-1.5 flex-1 w-full max-w-full min-w-0">
+                                                    <span className="text-[9px] font-bold text-emerald-500 uppercase tracking-wider w-12 shrink-0 pt-0.5">Oligo 1</span>
+                                                    <div className="flex flex-col gap-1 w-full min-w-0">
+                                                        <div className="flex justify-between items-center bg-slate-50 dark:bg-slate-800/50 rounded px-1.5 py-0.5 border border-slate-100 dark:border-slate-700 w-full">
+                                                            <span className="font-mono text-[9px] text-slate-600 dark:text-slate-300 truncate font-semibold select-all" title={pos.p1.seq}>{pos.p1.seq}</span>
+                                                            <button 
+                                                                onClick={() => handleCopy(pos.p1.seq)}
+                                                                title="Copy sequence"
+                                                                className="opacity-0 group-hover:opacity-100 p-0.5 hover:bg-slate-200 dark:hover:bg-slate-700 rounded transition-all shrink-0"
+                                                            >
+                                                                <svg className="w-2.5 h-2.5 text-slate-400 hover:text-slate-600 dark:hover:text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" /></svg>
+                                                            </button>
+                                                        </div>
+                                                        <div className="flex gap-2 text-[9px] text-slate-400">
+                                                            <span className="font-mono text-[9px] text-slate-500 shrink-0">bp {pos.p1AbsStart}–{pos.p1AbsEnd}</span>
+                                                            <span className="ml-auto">GC: <b className="text-slate-500">{pos.p1.gc.toFixed(1)}%</b></span>
+                                                            <span>Tm: <b className="text-slate-500">{pos.p1.tm.toFixed(1)}°C</b></span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            {/* Actions */}
+                                            <div className="flex border-t border-slate-100 dark:border-slate-700">
+                                                <button
+                                                    onClick={() => restorePosition(pos)}
+                                                    className="flex-1 flex items-center justify-center gap-1 py-2 text-[10px] font-bold text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-colors border-r border-slate-100 dark:border-slate-700"
+                                                    title="Restore this position and navigate MSA"
+                                                >
+                                                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                                    </svg>
+                                                    Restore
+                                                </button>
+                                                <button
+                                                    onClick={() => deletePosition(pos.id)}
+                                                    className="px-3 py-2 text-[10px] font-bold text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                                                    title="Delete this saved position"
+                                                >
+                                                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                                    </svg>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    )}
+
                     {primers && idtCredentials && (
                         <div className="mt-4 border-t border-slate-100 dark:border-slate-700 pt-4">
                             <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
@@ -1035,26 +1385,26 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, idtCredent
                     )}
                 </div>
 
-            {/* ── MOLigo Provenance Panel ────────────────────── */}
-            {primers && showMOLigo && (
-                <div className="border-t border-slate-200 dark:border-slate-700">
-                    <MOLigoPanel
-                        templateSeq={rawSeq}
-                        moligo1Seq={primers.p1.seq}
-                        moligo2Seq={primers.p2.seq}
-                        tagSeq={tagSeq}
-                        fwdPrimer={fwdPrimer}
-                        revPrimer={revPrimer}
-                        queryId={data.id}
-                        jobName={jobName}
-                        onTagChange={setTagSeq}
-                        onFwdChange={setFwdPrimer}
-                        onRevChange={setRevPrimer}
-                        idtCredentials={idtCredentials}
-                        idtAdvancedParams={idtAdvancedParams}
-                    />
-                </div>
-            )}
+                {/* ── MOLigo Provenance Panel ────────────────────── */}
+                {primers && showMOLigo && (
+                    <div className="border-t border-slate-200 dark:border-slate-700">
+                        <MOLigoPanel
+                            templateSeq={rawSeq}
+                            moligo1Seq={primers.p1.seq}
+                            moligo2Seq={primers.p2.seq}
+                            tagSeq={tagSeq}
+                            fwdPrimer={fwdPrimer}
+                            revPrimer={revPrimer}
+                            queryId={data.id}
+                            jobName={jobName}
+                            onTagChange={setTagSeq}
+                            onFwdChange={setFwdPrimer}
+                            onRevChange={setRevPrimer}
+                            idtCredentials={idtCredentials}
+                            idtAdvancedParams={idtAdvancedParams}
+                        />
+                    </div>
+                )}
             </div>
         </div >
     );
