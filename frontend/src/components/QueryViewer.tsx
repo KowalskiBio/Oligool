@@ -73,7 +73,7 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, onNavigate
     const [moligo2Len, setMoligo2Len] = useState(() => Number(localStorage.getItem('moligo_2_len')) || 20);
 
     // Interactive Sequence Table Drag State
-    const [dragState, setDragState] = useState<{ id: 'p1' | 'p2', type: 'move' | 'left' | 'right', startX: number, deltaChars: number, initShift: number, initLen: number } | null>(null);
+    const [dragState, setDragState] = useState<{ id: 'p1' | 'p2', type: 'move' | 'left' | 'right', startX: number, deltaChars: number, initShift1: number, initShift2: number, initLen: number } | null>(null);
     const containerRef = useRef<HTMLDivElement>(null);
     const charWidthRef = useRef<number>(7); // Approximation of monospace char width in px
 
@@ -449,7 +449,8 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, onNavigate
 
         setDragState({
             id, type, startX: e.clientX, deltaChars: 0,
-            initShift: id === 'p1' ? moligo1Shift : moligo2Shift,
+            initShift1: moligo1Shift,
+            initShift2: moligo2Shift,
             initLen: id === 'p1' ? moligo1Len : moligo2Len
         });
     };
@@ -466,33 +467,35 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, onNavigate
             if (dragState) {
                 const D = dragState.deltaChars;
                 if (D !== 0) {
-                    let newShift = dragState.initShift;
-                    let newLen = dragState.initLen;
                     const id = dragState.id;
                     const type = dragState.type;
 
-                    if (id === 'p1') {
-                        // Backend M1 starts at split + shift.
-                        if (type === 'move') { newShift += D; }
-                        else if (type === 'left') { newShift += D; newLen -= D; }
-                        else if (type === 'right') { newLen += D; }
-
-                        if (newLen < 10) { const diff = 10 - newLen; newLen = 10; if (type === 'left') newShift -= diff; }
-                        if (newLen > 60) { const diff = newLen - 60; newLen = 60; if (type === 'left') newShift += diff; }
-
-                        setMoligo1Shift(newShift);
-                        setMoligo1Len(newLen);
+                    if (type === 'move') {
+                        setMoligo1Shift(dragState.initShift1 + D);
+                        setMoligo2Shift(dragState.initShift2 + D);
                     } else {
-                        // Backend M2 ends at split + shift.
-                        if (type === 'move') { newShift += D; }
-                        else if (type === 'left') { newLen -= D; }
-                        else if (type === 'right') { newShift += D; newLen += D; }
+                        let newLen = dragState.initLen;
+                        if (id === 'p1') {
+                            let newShift = dragState.initShift1;
+                            if (type === 'left') { newShift += D; newLen -= D; }
+                            else if (type === 'right') { newLen += D; }
 
-                        if (newLen < 10) { const diff = 10 - newLen; newLen = 10; if (type === 'right') newShift -= diff; }
-                        if (newLen > 60) { const diff = newLen - 60; newLen = 60; if (type === 'right') newShift += diff; }
+                            if (newLen < 10) { const diff = 10 - newLen; newLen = 10; if (type === 'left') newShift -= diff; }
+                            if (newLen > 60) { const diff = newLen - 60; newLen = 60; if (type === 'left') newShift += diff; }
 
-                        setMoligo2Shift(newShift);
-                        setMoligo2Len(newLen);
+                            setMoligo1Shift(newShift);
+                            setMoligo1Len(newLen);
+                        } else {
+                            let newShift = dragState.initShift2;
+                            if (type === 'left') { newLen -= D; }
+                            else if (type === 'right') { newShift += D; newLen += D; }
+
+                            if (newLen < 10) { const diff = 10 - newLen; newLen = 10; if (type === 'right') newShift -= diff; }
+                            if (newLen > 60) { const diff = newLen - 60; newLen = 60; if (type === 'right') newShift += diff; }
+
+                            setMoligo2Shift(newShift);
+                            setMoligo2Len(newLen);
+                        }
                     }
                 }
             }
@@ -519,9 +522,11 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, onNavigate
 
         if (dragState) {
             const D = dragState.deltaChars;
-            if (dragState.id === 'p1') {
-                if (dragState.type === 'move') { p1Start += D; p1End += D; }
-                else if (dragState.type === 'left') { p1Start += D; }
+            if (dragState.type === 'move') {
+                p1Start += D; p1End += D;
+                p2Start += D; p2End += D;
+            } else if (dragState.id === 'p1') {
+                if (dragState.type === 'left') { p1Start += D; }
                 else if (dragState.type === 'right') { p1End += D; }
 
                 if (p1End - p1Start < 10) {
@@ -533,8 +538,7 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, onNavigate
                     else p1End = p1Start + 60;
                 }
             } else {
-                if (dragState.type === 'move') { p2Start += D; p2End += D; }
-                else if (dragState.type === 'left') { p2Start += D; }
+                if (dragState.type === 'left') { p2Start += D; }
                 else if (dragState.type === 'right') { p2End += D; }
 
                 if (p2End - p2Start < 10) {
@@ -599,6 +603,19 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, onNavigate
 
     const runIdtAnalysis = async () => {
         if (!idtCredentials || !primers) return;
+
+        const p1 = primers.p1.seq.trim();
+        const p2 = primers.p2.seq.trim();
+
+        if (!p1 || p1.length < 10) {
+            setIdtError(`Oligo 1 sequence is too short or empty to analyze (sent: "${p1}"). Ensure the oligo is at least 10 nt.`);
+            return;
+        }
+        if (!p2 || p2.length < 10) {
+            setIdtError(`Oligo 2 sequence is too short or empty to analyze (sent: "${p2}"). Ensure the oligo is at least 10 nt.`);
+            return;
+        }
+
         setIsIdtLoading(true);
         setIdtError(null);
         try {
@@ -618,20 +635,34 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, onNavigate
             }
             const { access_token } = await tRes.json();
 
+            const payload = {
+                p1_seq: p1,
+                p2_seq: p2,
+                token: access_token,
+                mg_conc: Number(idtAdvancedParams.mg_conc),
+                mv_conc: Number(idtAdvancedParams.mv_conc),
+                dntp_conc: Number(idtAdvancedParams.dntp_conc),
+                oligo_conc: Number(idtAdvancedParams.oligo_conc)
+            };
+
             const aRes = await fetch(((import.meta.env.VITE_API_BASE as string) || "") + '/idt/analyze', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    p1_seq: primers.p1.seq,
-                    p2_seq: primers.p2.seq,
-                    token: access_token,
-                    mg_conc: Number(idtAdvancedParams.mg_conc),
-                    mv_conc: Number(idtAdvancedParams.mv_conc),
-                    dntp_conc: Number(idtAdvancedParams.dntp_conc),
-                    oligo_conc: Number(idtAdvancedParams.oligo_conc)
-                })
+                body: JSON.stringify(payload)
             });
-            if (!aRes.ok) throw new Error("IDT Analysis Failed");
+
+            if (!aRes.ok) {
+                let detail = `IDT Analysis Failed (${aRes.status})`;
+                try {
+                    const errJson = await aRes.json();
+                    // IDT returns { Message: "..." } on 400 errors
+                    const msg: string = errJson.Message || errJson.detail || errJson.message || JSON.stringify(errJson);
+                    // Strip the internal stack trace — only keep up to the first newline
+                    detail = `IDT ${aRes.status}: ${msg.split('\r\n')[0].split('\n')[0]}`;
+                } catch { /* response wasn't JSON */ }
+                throw new Error(`${detail}\n\nSent — Oligo 1: ${p1}\nOligo 2: ${p2}`);
+            }
+
             const results = await aRes.json();
             setIdtResults(results);
         } catch (err: any) {

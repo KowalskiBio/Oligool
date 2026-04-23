@@ -527,10 +527,9 @@ async def analyze_idt_oligos(request: IdtAnalyzeRequest):
     def hit_idt(endpoint, seq1, seq2=None):
         url = f"{base_url}/{endpoint}"
         params = {}
-        payload = None
+        payload = {}
 
         if endpoint == "Hairpin":
-            # Hairpin: sequence in JSON body with specific concentration params
             payload = {
                 "Sequence": seq1,
                 "NaConc": request.mv_conc,
@@ -541,20 +540,13 @@ async def analyze_idt_oligos(request: IdtAnalyzeRequest):
                 "NucleotideType": "DNA"
             }
         elif endpoint == "SelfDimer" or endpoint == "HeteroDimer":
-            # Dimer endpoints in IDT API generally use query params for sequence
-            # but may also accept concentration params in some versions/deployments.
-            # However, standard /SelfDimer and /HeteroDimer are basic.
+            # Pass sequences precisely as 'primary' and 'secondary' query params for proper IDT binding
             params = {"primary": seq1}
             if seq2: params["secondary"] = seq2
-            # Add salt params to query if supported by this specific REST version
-            params.update({
-                "NaConc": request.mv_conc,
-                "MgConc": request.mg_conc,
-                "dNTPsConc": request.dntp_conc,
-                "OligoConc": request.oligo_conc,
-            })
+            
+            # Note: We keep payload as {} (empty dict) to ensure requests sends '{}' as the JSON body
+            # instead of 'null' or nothing. This safely satisfies the ASP.NET endpoint body binder.
         elif endpoint == "Analyze":
-            # Analyze: requires full payload for valid response
             payload = {
                 "Sequence": seq1,
                 "NaConc": request.mv_conc,
@@ -565,7 +557,7 @@ async def analyze_idt_oligos(request: IdtAnalyzeRequest):
             }
             
         try:
-            # IDT endpoints generally require POST, even if payload is empty or None
+            # All IDT endpoints typically require POST
             response = requests.post(url, json=payload, params=params, headers=headers, timeout=15)
             
             if not response.ok:
@@ -574,16 +566,23 @@ async def analyze_idt_oligos(request: IdtAnalyzeRequest):
         except Exception as e:
             return {"error": str(e)}
 
-    # Use SPECIFIC endpoints for each analysis type.
-    # The IDT API has /Hairpin, /SelfDimer, /HeteroDimer as separate endpoints
-    # that return DeltaG directly, instead of the general /Analyze endpoint.
-    m1_hairpin = hit_idt("Hairpin", request.p1_seq)
-    m1_selfdimer = hit_idt("SelfDimer", request.p1_seq)
-    m1_analyze = hit_idt("Analyze", request.p1_seq)
-    m2_hairpin = hit_idt("Hairpin", request.p2_seq)
-    m2_selfdimer = hit_idt("SelfDimer", request.p2_seq)
-    m2_analyze = hit_idt("Analyze", request.p2_seq)
-    hetero = hit_idt("HeteroDimer", request.p1_seq, request.p2_seq)
+    # Use SPECIFIC endpoints for each analysis type in PARALLEL to prevent extreme timeouts.
+    async def hit_idt_async(endpoint, seq1, seq2=None):
+        return await asyncio.to_thread(hit_idt, endpoint, seq1, seq2)
+
+    try:
+        results = await asyncio.gather(
+            hit_idt_async("Hairpin", request.p1_seq),
+            hit_idt_async("SelfDimer", request.p1_seq),
+            hit_idt_async("Analyze", request.p1_seq),
+            hit_idt_async("Hairpin", request.p2_seq),
+            hit_idt_async("SelfDimer", request.p2_seq),
+            hit_idt_async("Analyze", request.p2_seq),
+            hit_idt_async("HeteroDimer", request.p1_seq, request.p2_seq)
+        )
+        m1_hairpin, m1_selfdimer, m1_analyze, m2_hairpin, m2_selfdimer, m2_analyze, hetero = results
+    except Exception as e:
+        return {"error": f"Parallel execution failed: {str(e)}"}
 
     # Use ViennaRNA to add dot-bracket structure AND local ΔG to hairpins
     try:
