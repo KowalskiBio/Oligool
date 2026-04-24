@@ -70,6 +70,32 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
     const hoverRafRef = useRef<number>(0);
     const redrawRef = useRef<() => void>(() => { });
     const [showOverview, setShowOverview] = useState(true);
+    const scrollPressRef = useRef<ReturnType<typeof setInterval> | null>(null);
+    // Live-value refs for use inside setInterval (avoid stale closures)
+    const viewFractionRef = useRef(viewFraction);
+    const seqAreaWRef = useRef(0);
+    const totalVirtualWRef = useRef(0);
+
+    const panBy = (dir: -1 | 1) => {
+        const el = scrollRef.current;
+        if (!el) return;
+        const vf = viewFractionRef.current;
+        const saw = seqAreaWRef.current;
+        const tvw = totalVirtualWRef.current;
+        const step = Math.max(40, saw * vf * 0.25);
+        const newSL = Math.max(0, Math.min(tvw - saw, el.scrollLeft + dir * step));
+        el.scrollLeft = newSL;
+        setScrollLeft(newSL);
+    };
+
+    const startPan = (dir: -1 | 1) => {
+        panBy(dir);
+        scrollPressRef.current = setInterval(() => panBy(dir), 120);
+    };
+
+    const stopPan = () => {
+        if (scrollPressRef.current) { clearInterval(scrollPressRef.current); scrollPressRef.current = null; }
+    };
 
     // Offscreen canvas for minimap static background
     const offscreenMinimapRef = useRef<HTMLCanvasElement | null>(null);
@@ -104,6 +130,11 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
     const cellW = seqLen > 0 ? totalVirtualW / seqLen : 1;
     const visibleBases = seqLen * viewFraction;
     const totalH = MAIN_GC_TRACK_H + MAIN_MSA_TRACK_H + RULER_HEIGHT + sequences.length * ROW_HEIGHT + 4;
+
+    // Keep live refs up-to-date for use inside setInterval (avoids stale closures)
+    viewFractionRef.current = viewFraction;
+    seqAreaWRef.current = seqAreaW;
+    totalVirtualWRef.current = totalVirtualW;
 
     /* ── viewport fractions ────────────────────────────── */
     const startFrac = totalVirtualW > 0 ? scrollLeft / totalVirtualW : 0;
@@ -1301,6 +1332,34 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
                 <span className="ml-auto italic text-slate-400">
                     {viewMode === 'letters' ? 'Click a row to copy' : 'Drag minimap to zoom/select · Ctrl/⌘ + scroll to zoom'}
                 </span>
+            </div>
+
+            {/* ── scroll arrow bar ── */}
+            <div className="px-5 py-1 border-b border-slate-100 dark:border-slate-700 bg-white dark:bg-slate-800 flex items-center gap-2">
+                <button
+                    onMouseDown={() => startPan(-1)}
+                    onMouseUp={stopPan}
+                    onMouseLeave={stopPan}
+                    className="flex items-center justify-center w-7 h-7 rounded-md border border-slate-300 dark:border-slate-600 text-slate-500 dark:text-slate-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 hover:border-indigo-300 dark:hover:border-indigo-700 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors font-bold select-none"
+                    title="Scroll left"
+                >
+                    ←
+                </button>
+                <div className="flex-1 h-1.5 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
+                    <div
+                        className="h-full bg-indigo-400 dark:bg-indigo-600 rounded-full transition-all duration-75"
+                        style={{ marginLeft: `${startFrac * 100}%`, width: `${viewFraction * 100}%` }}
+                    />
+                </div>
+                <button
+                    onMouseDown={() => startPan(1)}
+                    onMouseUp={stopPan}
+                    onMouseLeave={stopPan}
+                    className="flex items-center justify-center w-7 h-7 rounded-md border border-slate-300 dark:border-slate-600 text-slate-500 dark:text-slate-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 hover:border-indigo-300 dark:hover:border-indigo-700 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors font-bold select-none"
+                    title="Scroll right"
+                >
+                    →
+                </button>
             </div>
 
             {/* ── scrollable canvas area ── */}

@@ -72,6 +72,10 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, onNavigate
     const [moligo1Len, setMoligo1Len] = useState(() => Number(localStorage.getItem('moligo_1_len')) || 20);
     const [moligo2Len, setMoligo2Len] = useState(() => Number(localStorage.getItem('moligo_2_len')) || 20);
 
+    // Oligo name state
+    const [oligo1Name, setOligo1Name] = useState(() => localStorage.getItem('oligo1_name') || 'Oligo 1 (Right / 3\')');
+    const [oligo2Name, setOligo2Name] = useState(() => localStorage.getItem('oligo2_name') || 'Oligo 2 (Left / 5\')');
+
     // Interactive Sequence Table Drag State
     const [dragState, setDragState] = useState<{ id: 'p1' | 'p2', type: 'move' | 'left' | 'right', startX: number, deltaChars: number, initShift1: number, initShift2: number, initLen: number } | null>(null);
     const containerRef = useRef<HTMLDivElement>(null);
@@ -115,7 +119,7 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, onNavigate
         };
     });
     const [showAdvanced, setShowAdvanced] = useState(false);
-    const [paramsNotMet, setParamsNotMet] = useState(false);
+    const [_paramsNotMet, setParamsNotMet] = useState(false); // kept for future warning UI
     const [isAutoSearchNeeded, setIsAutoSearchNeeded] = useState(true);
     const lastShiftsApplied = useRef({ s1: 0, s2: 0 });
 
@@ -432,6 +436,8 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, onNavigate
     useEffect(() => { localStorage.setItem('tag_seq', tagSeq); }, [tagSeq]);
     useEffect(() => { localStorage.setItem('fwd_primer', fwdPrimer); }, [fwdPrimer]);
     useEffect(() => { localStorage.setItem('rev_primer', revPrimer); }, [revPrimer]);
+    useEffect(() => { localStorage.setItem('oligo1_name', oligo1Name); }, [oligo1Name]);
+    useEffect(() => { localStorage.setItem('oligo2_name', oligo2Name); }, [oligo2Name]);
 
     if (!data) return null;
     const rawSeq = data.seq.replace(/-/g, '');
@@ -723,8 +729,15 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, onNavigate
 
             if (item) {
                 // If the sequence or dotbracket contains '&', it's a dimer
-                const fullSeq = item.Sequence || seq || '';
                 const db = item.DotBracket || '';
+                let fullSeq = item.Sequence;
+                if (!fullSeq && db.includes('&')) {
+                    // Construct dimer sequence if missing from IDT response
+                    fullSeq = (seq1 || '') + '&' + (seq2 || seq1 || '');
+                } else if (!fullSeq) {
+                    fullSeq = seq || '';
+                }
+                
                 isDimer = fullSeq.includes('&') || db.includes('&');
 
                 if (item.DotBracket) {
@@ -1116,17 +1129,20 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, onNavigate
                         </div>
                     )}
 
-                    {paramsNotMet && primers?.param_warnings && primers.param_warnings.length > 0 && (
-                        <div className="mb-4 px-3 py-2 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/50 rounded-md text-amber-700 dark:text-amber-400 text-xs flex flex-col gap-1">
-                            <div className="flex items-center gap-2 font-bold">
-                                <span className="text-sm">⚠️</span>
-                                Oligos outside search parameters:
+                    {/* Primer3 parameter warning — kept for future use, hidden in UI.
+                        To re-enable: replace this comment block with the JSX below.
+                        {paramsNotMet && primers?.param_warnings && primers.param_warnings.length > 0 && (
+                            <div className="mb-4 px-3 py-2 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/50 rounded-md text-amber-700 dark:text-amber-400 text-xs flex flex-col gap-1">
+                                <div className="flex items-center gap-2 font-bold">
+                                    <span className="text-sm">⚠️</span>
+                                    Oligos outside search parameters:
+                                </div>
+                                <ul className="ml-5 list-disc text-[11px] space-y-0.5">
+                                    {primers.param_warnings.map((w, i) => <li key={i}>{w}</li>)}
+                                </ul>
                             </div>
-                            <ul className="ml-5 list-disc text-[11px] space-y-0.5">
-                                {primers.param_warnings.map((w, i) => <li key={i}>{w}</li>)}
-                            </ul>
-                        </div>
-                    )}
+                        )}
+                    */}
 
                     {error && <div className="text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 p-2 rounded mb-4 border border-red-100 dark:border-red-900/30">{error}</div>}
 
@@ -1135,7 +1151,7 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, onNavigate
                             <div className="bg-white dark:bg-slate-800 rounded-lg border border-indigo-100 dark:border-indigo-900/30 p-3 shadow-sm relative group flex flex-col justify-between">
                                 <div>
                                     <div className="flex justify-between items-start mb-2">
-                                        <div className="text-xs font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wider">Oligo 2 (Left / 5')</div>
+                                        <div className="text-xs font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wider">{oligo2Name}</div>
                                         <button
                                             onClick={() => handleCopy(primers.p2.seq)}
                                             className="text-xs bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400 px-2 py-1 rounded hover:bg-amber-100 dark:hover:bg-amber-900/40 border border-amber-200 dark:border-amber-800/50"
@@ -1169,7 +1185,7 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, onNavigate
                             <div className="bg-white dark:bg-slate-800 rounded-lg border border-green-200 dark:border-green-900/30 p-3 shadow-sm relative group flex flex-col justify-between">
                                 <div>
                                     <div className="flex justify-between items-start mb-2">
-                                        <div className="text-xs font-bold text-green-600 dark:text-green-400 uppercase tracking-wider">Oligo 1 (Right / 3')</div>
+                                        <div className="text-xs font-bold text-green-600 dark:text-green-400 uppercase tracking-wider">{oligo1Name}</div>
                                         <button
                                             onClick={() => handleCopy(primers.p1.seq)}
                                             className="text-xs bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400 px-2 py-1 rounded hover:bg-green-100 dark:hover:bg-green-900/40 border border-green-200 dark:border-green-800/50"
@@ -1415,6 +1431,38 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, onNavigate
                         </div>
                     )}
                 </div>
+
+                {/* ── Rename Oligos Panel ─────────────────────────── */}
+                {primers && (
+                    <div className="mt-4 border-t border-slate-100 dark:border-slate-700 pt-4">
+                        <div className="flex items-center gap-2 mb-3">
+                            <div className="w-1.5 h-4 bg-slate-400 rounded-full"></div>
+                            <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest">Rename Oligos</h4>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div className="flex flex-col gap-1">
+                                <label className="text-[10px] font-bold text-amber-500 uppercase tracking-wider">Oligo 2 (Left / 5') Label</label>
+                                <input
+                                    type="text"
+                                    value={oligo2Name}
+                                    onChange={e => setOligo2Name(e.target.value)}
+                                    placeholder="Oligo 2 (Left / 5')"
+                                    className="px-2.5 py-1.5 text-xs border border-amber-200 dark:border-amber-800/50 rounded-md bg-amber-50/30 dark:bg-amber-900/10 text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-1 focus:ring-amber-400"
+                                />
+                            </div>
+                            <div className="flex flex-col gap-1">
+                                <label className="text-[10px] font-bold text-emerald-500 uppercase tracking-wider">Oligo 1 (Right / 3') Label</label>
+                                <input
+                                    type="text"
+                                    value={oligo1Name}
+                                    onChange={e => setOligo1Name(e.target.value)}
+                                    placeholder="Oligo 1 (Right / 3')"
+                                    className="px-2.5 py-1.5 text-xs border border-green-200 dark:border-green-800/50 rounded-md bg-green-50/30 dark:bg-green-900/10 text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-1 focus:ring-green-400"
+                                />
+                            </div>
+                        </div>
+                    </div>
+                )}
 
                 {/* ── MOLigo Provenance Panel ────────────────────── */}
                 {primers && showMOLigo && (

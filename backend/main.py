@@ -469,9 +469,8 @@ class IdtAnalyzeRequest(BaseModel):
 
 @app.post("/idt/token")
 async def get_idt_token(request: IdtAuthRequest):
-    import json
+    import requests
     import base64
-    from urllib import request as url_request, parse, error as url_error
     
     # Verified working endpoint from user's script
     url = "https://eu.idtdna.com/IdentityServer/connect/token"
@@ -484,81 +483,77 @@ async def get_idt_token(request: IdtAuthRequest):
         headers = {
             "Content-Type": "application/x-www-form-urlencoded",
             "Authorization": "Basic " + auth_string,
+            "Accept": "application/json"
         }
 
         # Data exactly as in working script
-        data_dict = {
+        payload = {
             "grant_type": "password",
             "scope": "test",
             "username": request.username,
             "password": request.password,
         }
         
-        request_data = parse.urlencode(data_dict).encode("utf-8")
+        response = requests.post(url, data=payload, headers=headers, timeout=15)
+        
+        if not response.ok:
+            # Try to extract detail from IDT response
+            try:
+                err_data = response.json()
+                detail = err_data.get("error_description") or err_data.get("error") or response.text
+            except:
+                detail = response.text
+            raise HTTPException(status_code=response.status_code, detail=f"IDT Auth Error: {detail}")
 
-        post_request = url_request.Request(
-            url,
-            data=request_data,
-            headers=headers,
-            method="POST",
-        )
+        return response.json()
 
-        with url_request.urlopen(post_request, timeout=10) as resp:
-            body = resp.read().decode("utf-8", errors="replace")
-            return json.loads(body)
-
-    except url_error.HTTPError as e:
-        body = e.read().decode("utf-8", errors="replace")
-        raise HTTPException(status_code=e.code, detail=f"IDT Auth Error: {body}")
     except Exception as e:
+        if isinstance(e, HTTPException):
+            raise e
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/idt/analyze")
 async def analyze_idt_oligos(request: IdtAnalyzeRequest):
     import requests
-    headers = {
+    session = requests.Session()
+    session.headers.update({
         "Authorization": f"Bearer {request.token}",
-        "Content-Type": "application/json"
-    }
+        "Content-Type": "application/json",
+        "Accept": "application/json"
+    })
     # User confirmed: use EU API host for actual calls
     base_url = "https://eu.idtdna.com/restapi/v1/OligoAnalyzer"
+
+    # Limit concurrency to avoid being flagged/throttled by IDT
+    semaphore = asyncio.Semaphore(3)
 
     def hit_idt(endpoint, seq1, seq2=None):
         url = f"{base_url}/{endpoint}"
         params = {}
-        payload = {}
+        # Default payload with salt parameters for all structure types
+        payload = {
+            "NaConc": request.mv_conc,
+            "MgConc": request.mg_conc,
+            "dNTPsConc": request.dntp_conc,
+            "OligoConc": request.oligo_conc,
+            "NucleotideType": "DNA"
+        }
 
         if endpoint == "Hairpin":
-            payload = {
-                "Sequence": seq1,
-                "NaConc": request.mv_conc,
-                "FoldingTemp": 34.0, # Use target Tm as folding temp
-                "MgConc": request.mg_conc,
-                "dNTPsConc": request.dntp_conc,
-                "OligoConc": request.oligo_conc,
-                "NucleotideType": "DNA"
-            }
+            payload["Sequence"] = seq1
+            payload["FoldingTemp"] = 34.0 # Use target Tm as folding temp
         elif endpoint == "SelfDimer" or endpoint == "HeteroDimer":
             # Pass sequences precisely as 'primary' and 'secondary' query params for proper IDT binding
             params = {"primary": seq1}
             if seq2: params["secondary"] = seq2
-            
-            # Note: We keep payload as {} (empty dict) to ensure requests sends '{}' as the JSON body
-            # instead of 'null' or nothing. This safely satisfies the ASP.NET endpoint body binder.
+            # Note: Dimers often also expect salt params in the body for ΔG calculation
         elif endpoint == "Analyze":
-            payload = {
-                "Sequence": seq1,
-                "NaConc": request.mv_conc,
-                "MgConc": request.mg_conc,
-                "dNTPsConc": request.dntp_conc,
-                "OligoConc": request.oligo_conc,
-                "NucleotideType": "DNA"
-            }
+            payload["Sequence"] = seq1
             
         try:
             # All IDT endpoints typically require POST
-            response = requests.post(url, json=payload, params=params, headers=headers, timeout=15)
+            response = session.post(url, json=payload, params=params, timeout=30)
             
             if not response.ok:
                 return {"error": f"IDT {endpoint} Error: {response.status_code} - {response.text}"}
@@ -568,7 +563,8 @@ async def analyze_idt_oligos(request: IdtAnalyzeRequest):
 
     # Use SPECIFIC endpoints for each analysis type in PARALLEL to prevent extreme timeouts.
     async def hit_idt_async(endpoint, seq1, seq2=None):
-        return await asyncio.to_thread(hit_idt, endpoint, seq1, seq2)
+        async with semaphore:
+            return await asyncio.to_thread(hit_idt, endpoint, seq1, seq2)
 
     try:
         results = await asyncio.gather(
@@ -657,29 +653,32 @@ async def analyze_idt_oligos(request: IdtAnalyzeRequest):
                 mfe_dg = vienna_dg_for_structure(mfe_struct, mfe_energy)
                 mfe_tm = vienna_tm_for_structure(mfe_struct)
                 
-                # Process IDT data: enrich with Vienna MFE
+                # Process IDT data: keep only the best IDT item (they all share the same MFE
+                # structure, so keeping duplicates just repeats the same visual)
+                best_item = None
+                best_idt_dg = None
                 for item in data_list:
-                    # Robust Tm extraction from IDT
                     idt_tm = item.get("thermo") or item.get("MeltingTemperature") or item.get("Tm") or item.get("tm") or item.get("MeltTemp")
                     item["IDT_Tm"] = idt_tm
                     item["Sequence"] = comp_seq
-                    
-                    # Use ViennaRNA MFE structure for SVG/visualization
                     item["DotBracket"] = mfe_struct
                     item["ViennaRNA_DeltaG"] = mfe_dg
                     item["Local_Tm"] = mfe_tm
-                    
-                    # Remove ASCII/Visual junk
                     for k in ["AsciiStructure", "VisualPrint", "asciiStructure", "visualPrint"]:
                         item.pop(k, None)
-                    
-                    final_results.append(item)
-                
+                    idt_dg = _extract_idt_delta_g(item)
+                    if best_item is None or (idt_dg is not None and (best_idt_dg is None or idt_dg < best_idt_dg)):
+                        best_item = item
+                        best_idt_dg = idt_dg
+
+                if best_item is not None:
+                    final_results.append(best_item)
+
                 seen_structures.add(mfe_struct)
-                
+
                 # Append ViennaRNA suboptimal structures (unique)
                 added = 0
-                max_subs = 5 if seq2 else max(0, 5 - len(data_list))
+                max_subs = 4
                 for sub in subs:
                     if added >= max_subs: break
                     if sub.structure in seen_structures: continue
