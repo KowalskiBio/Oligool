@@ -33,11 +33,14 @@ interface MSAViewerProps {
     isDarkMode?: boolean;
     /** When set, MSA will zoom/pan to show these global gapped column indices */
     navigateTarget?: { colStart: number; colEnd: number; ts: number } | null;
+    /** Called when user drag-selects a region in the GC%/MSA header for oligo placement */
+    onOligoRegionSelect?: (startCol: number, endCol: number) => void;
 }
 
 /* ── constants ────────────────────────────────────────── */
-const LABEL_WIDTH = 140;
+// Removed fixed labelWidth; now calculated dynamically in the component.
 const RIGHT_PADDING = 20;
+const MINIMAP_LABEL_W = 35; // narrow label column in the overview minimap
 const RULER_HEIGHT = 24;
 const ROW_HEIGHT = 18;
 const MAX_VIEWER_HEIGHT = 500;
@@ -51,7 +54,7 @@ const MINIMAP_HEIGHT = MINIMAP_GC_H + MINIMAP_RULER_H + 50 + MINIMAP_HANDLE_H;
 const MAIN_GC_TRACK_H = 40;
 const MAIN_MSA_TRACK_H = 30;
 
-const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, primers, isDarkMode, navigateTarget }) => {
+const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, primers, isDarkMode, navigateTarget, onOligoRegionSelect }) => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const hoverOverlayRef = useRef<HTMLCanvasElement>(null);
     const minimapRef = useRef<HTMLCanvasElement>(null);
@@ -59,9 +62,32 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
     const containerRef = useRef<HTMLDivElement>(null);
     const targetScrollRef = useRef<number | null>(null);
     const isDragging = useRef(false);
+    const [isBarDragging, setIsBarDragging] = useState(false);
+    const scrollTrackRef = useRef<HTMLDivElement>(null);
     const [availableWidth, setAvailableWidth] = useState(900);
+    const [labelHoverInfo, setLabelHoverInfo] = useState<{ text: string, x: number, y: number } | null>(null);
     const [scrollLeft, setScrollLeft] = useState(0);
     const [scrollTop, setScrollTop] = useState(0);
+
+    // Initial label width calculation
+    const calculateAutoWidth = useCallback((seqs: ParsedSequence[]) => {
+        if (seqs.length === 0) return 140;
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return 220;
+        ctx.font = 'bold 10px ui-sans-serif, system-ui, sans-serif';
+        let maxW = 0;
+        seqs.forEach(s => {
+            const w = ctx.measureText(s.id).width;
+            if (w > maxW) maxW = w;
+        });
+        return Math.min(280, Math.max(80, Math.ceil(maxW + 16)));
+    }, []);
+
+    const [labelWidth, setLabelWidth] = useState(140);
+    const [isResizingLabel, setIsResizingLabel] = useState(false);
+    const [oligoSelection, setOligoSelection] = useState<{ startCol: number; endCol: number } | null>(null);
+
     const [viewFraction, setViewFraction] = useState(1);
     const [viewMode, setViewMode] = useState<'bars' | 'letters'>('bars');
     const [copyFeedback, setCopyFeedback] = useState('');
@@ -97,6 +123,42 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
         if (scrollPressRef.current) { clearInterval(scrollPressRef.current); scrollPressRef.current = null; }
     };
 
+    const handleBarMouseDown = (e: React.MouseEvent) => {
+        if (!scrollTrackRef.current || !scrollRef.current) return;
+        setIsBarDragging(true);
+
+        const performMove = (clientX: number) => {
+            if (!scrollTrackRef.current || !scrollRef.current) return;
+            const rect = scrollTrackRef.current.getBoundingClientRect();
+            const x = clientX - rect.left;
+            const frac = Math.max(0, Math.min(1, x / rect.width));
+
+            // We want the indicator (which represents viewFraction) to be centered on the click if possible
+            let targetStart = frac - (viewFractionRef.current / 2);
+            targetStart = Math.max(0, Math.min(1 - viewFractionRef.current, targetStart));
+
+            const sl = targetStart * totalVirtualWRef.current;
+            scrollRef.current.scrollLeft = sl;
+            setScrollLeft(sl);
+        };
+
+        const onMouseMove = (moveEvent: MouseEvent) => {
+            performMove(moveEvent.clientX);
+        };
+
+        const onMouseUp = () => {
+            setIsBarDragging(false);
+            window.removeEventListener('mousemove', onMouseMove);
+            window.removeEventListener('mouseup', onMouseUp);
+            document.body.style.userSelect = '';
+        };
+
+        document.body.style.userSelect = 'none';
+        window.addEventListener('mousemove', onMouseMove);
+        window.addEventListener('mouseup', onMouseUp);
+        performMove(e.clientX);
+    };
+
     // Offscreen canvas for minimap static background
     const offscreenMinimapRef = useRef<HTMLCanvasElement | null>(null);
     const staticMinimapDrawnRef = useRef<boolean>(false);
@@ -111,7 +173,43 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
         lines.forEach((l) => {
             if (l.startsWith('>')) {
                 if (cur) seqs.push({ id: cur, seq });
-                cur = l.substring(1).trim();
+                
+                const header = l.substring(1).trim();
+                let displayName = header;
+
+                // Try to find organism info (often in brackets like [organism=Homo sapiens] or [Homo sapiens])
+                const bracketMatch = header.match(/\[([^\]]+)\]/);
+                if (bracketMatch) {
+                    const content = bracketMatch[1];
+                    const orgMatch = content.match(/organism=([^;]+)/i);
+                    displayName = orgMatch ? orgMatch[1] : content;
+                } else {
+                    // Standard NCBI header format: ">Accession Genus species Description..."
+                    const parts = header.split(/\s+/);
+                    if (parts.length >= 2) {
+                        // Remove the accession part (first word)
+                        const afterAcc = header.substring(parts[0].length).trim();
+                        
+                        // Capture everything until we hit common technical metadata or separators
+                        // This allows capturing "Human papillomavirus 6" or "Staphylococcus aureus subsp. aureus"
+                        const match = afterAcc.match(/^([^,;()\[\]]+?)(?:\s+(?:complete|partial|sequence|rRNA|genomic|DNA|isolate|strain|clone|16S|mRNA|chromosome|segment|internal|v\d+|genome)|$)/i);
+                        
+                        if (match && match[1].trim()) {
+                            displayName = match[1].trim();
+                        } else {
+                            // Fallback to first few words if regex fails
+                            displayName = parts.slice(1, 5).join(' ');
+                        }
+                    }
+                }
+                
+                // Cap at 35 chars at a word boundary so gene/protein suffixes don't inflate the label column
+                if (displayName.length > 35) {
+                    const cut = displayName.substring(0, 35);
+                    displayName = cut.includes(' ') ? cut.replace(/\s+\S*$/, '') : cut;
+                }
+
+                cur = displayName;
                 seq = '';
             } else {
                 seq += l.trim();
@@ -124,8 +222,34 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
     const seqLen = sequences.length > 0 ? Math.max(...sequences.map((s) => s.seq.length)) : 0;
     const querySeq = sequences.length > 0 ? sequences[0].seq : '';
 
+    useEffect(() => {
+        setLabelWidth(calculateAutoWidth(sequences));
+    }, [sequences, calculateAutoWidth]);
+
+    const handleResizeMouseDown = (e: React.MouseEvent) => {
+        setIsResizingLabel(true);
+        const startX = e.clientX;
+        const startW = labelWidth;
+
+        const onMouseMove = (moveEvent: MouseEvent) => {
+            const delta = moveEvent.clientX - startX;
+            setLabelWidth(Math.max(80, Math.min(600, startW + delta)));
+        };
+
+        const onMouseUp = () => {
+            setIsResizingLabel(false);
+            window.removeEventListener('mousemove', onMouseMove);
+            window.removeEventListener('mouseup', onMouseUp);
+            document.body.style.userSelect = '';
+        };
+
+        document.body.style.userSelect = 'none';
+        window.addEventListener('mousemove', onMouseMove);
+        window.addEventListener('mouseup', onMouseUp);
+    };
+
     /* ── sizing ─────────────────────────────────────────── */
-    const seqAreaW = Math.max(1, availableWidth - LABEL_WIDTH - RIGHT_PADDING);
+    const seqAreaW = Math.max(1, availableWidth - labelWidth - RIGHT_PADDING);
     const totalVirtualW = seqAreaW / viewFraction;
     const cellW = seqLen > 0 ? totalVirtualW / seqLen : 1;
     const visibleBases = seqLen * viewFraction;
@@ -325,7 +449,7 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
         cvs.height = MINIMAP_HEIGHT * dpr;
         ctx.scale(dpr, dpr);
 
-        const mmSeqW = availableWidth - LABEL_WIDTH - RIGHT_PADDING;
+        const mmSeqW = availableWidth - MINIMAP_LABEL_W - RIGHT_PADDING;
         const rowsTop = MINIMAP_GC_H + MINIMAP_RULER_H;
         const rowAreaH = MINIMAP_HEIGHT - rowsTop - MINIMAP_HANDLE_H;
         const rowH = rowAreaH / sequences.length;
@@ -338,11 +462,11 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
         ctx.font = '7px ui-monospace, SFMono-Regular, monospace';
         ctx.textAlign = 'right';
         ctx.textBaseline = 'middle';
-        ctx.fillText('GC%', LABEL_WIDTH - 4, MINIMAP_GC_H / 2);
-        ctx.fillText('MSA', LABEL_WIDTH - 4, rowsTop + rowAreaH / 2);
+        ctx.fillText('GC%', MINIMAP_LABEL_W - 4, MINIMAP_GC_H / 2);
+        ctx.fillText('MSA', MINIMAP_LABEL_W - 4, rowsTop + rowAreaH / 2);
 
         for (let col = 0; col < seqLen; col++) {
-            const x = LABEL_WIDTH + (col / seqLen) * mmSeqW;
+            const x = MINIMAP_LABEL_W + (col / seqLen) * mmSeqW;
             const w = Math.max(1, mmSeqW / seqLen);
             const gc = gcContent[col] || 0;
             const r = Math.round(255 - gc * 150);
@@ -353,7 +477,7 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
             ctx.fillRect(x, MINIMAP_GC_H - barH, w, barH);
         }
         ctx.fillStyle = isDark ? '#334155' : '#e2e8f0';
-        ctx.fillRect(LABEL_WIDTH, MINIMAP_GC_H - 0.5, mmSeqW, 0.5);
+        ctx.fillRect(MINIMAP_LABEL_W, MINIMAP_GC_H - 0.5, mmSeqW, 0.5);
 
         ctx.fillStyle = '#94a3b8';
         ctx.font = '8px ui-monospace, SFMono-Regular, monospace';
@@ -362,7 +486,7 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
         const tickInt = getPrettyStep(150, mmSeqW / seqLen);
         for (let col = 0; col < seqLen; col++) {
             if ((col + 1) % tickInt === 0) {
-                const x = LABEL_WIDTH + ((col + 0.5) / seqLen) * mmSeqW;
+                const x = MINIMAP_LABEL_W + ((col + 0.5) / seqLen) * mmSeqW;
                 ctx.fillStyle = isDark ? '#334155' : '#cbd5e1';
                 ctx.fillRect(x, MINIMAP_GC_H + MINIMAP_RULER_H - 4, 1, 4);
                 ctx.fillStyle = '#94a3b8';
@@ -370,7 +494,7 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
             }
         }
         ctx.fillStyle = isDark ? '#334155' : '#e2e8f0';
-        ctx.fillRect(LABEL_WIDTH, rowsTop - 0.5, mmSeqW, 0.5);
+        ctx.fillRect(MINIMAP_LABEL_W, rowsTop - 0.5, mmSeqW, 0.5);
 
         const sampleStep = Math.max(1, Math.floor(sequences.length / 200));
         for (let row = 0; row < sequences.length; row += sampleStep) {
@@ -381,8 +505,8 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
             const sStart = seqStart(s.seq);
             const sEnd = seqEnd(s.seq);
             if (sStart <= sEnd) {
-                const x1 = LABEL_WIDTH + (sStart / seqLen) * mmSeqW;
-                const x2 = LABEL_WIDTH + ((sEnd + 1) / seqLen) * mmSeqW;
+                const x1 = MINIMAP_LABEL_W + (sStart / seqLen) * mmSeqW;
+                const x2 = MINIMAP_LABEL_W + ((sEnd + 1) / seqLen) * mmSeqW;
                 ctx.fillStyle = isQuery ? (isDark ? '#1e3a8a' : '#bfdbfe') : (isDark ? '#334155' : '#d1d5db');
                 ctx.fillRect(x1, y, x2 - x1, rowDrawH);
             }
@@ -402,11 +526,11 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
 
                     if (isInternalDeletion || isInsertion) {
                         ctx.fillStyle = '#9333ea';
-                        ctx.fillRect(LABEL_WIDTH + x, y, 1.2, rowDrawH);
+                        ctx.fillRect(MINIMAP_LABEL_W + x, y, 1.2, rowDrawH);
                         break;
                     } else if (!isQuery && ch !== '-' && ch !== qch && qch !== '-') {
                         ctx.fillStyle = '#dc2626';
-                        ctx.fillRect(LABEL_WIDTH + x, y, 1.2, rowDrawH);
+                        ctx.fillRect(MINIMAP_LABEL_W + x, y, 1.2, rowDrawH);
                         break;
                     }
                 }
@@ -416,18 +540,18 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
         if (primers) {
             const mmRulerY = MINIMAP_GC_H;
             const mmRulerH = MINIMAP_RULER_H;
-            const p1x = LABEL_WIDTH + (primers.p1.start / seqLen) * mmSeqW;
+            const p1x = MINIMAP_LABEL_W + (primers.p1.start / seqLen) * mmSeqW;
             const p1w = Math.max(1, ((primers.p1.end - primers.p1.start) / seqLen) * mmSeqW);
             ctx.fillStyle = '#22c55e';
             ctx.fillRect(p1x, mmRulerY + mmRulerH - 4, p1w, 4);
-            const p2x = LABEL_WIDTH + (primers.p2.start / seqLen) * mmSeqW;
+            const p2x = MINIMAP_LABEL_W + (primers.p2.start / seqLen) * mmSeqW;
             const p2w = Math.max(1, ((primers.p2.end - primers.p2.start) / seqLen) * mmSeqW);
             ctx.fillStyle = '#facc15';
             ctx.fillRect(p2x, mmRulerY + mmRulerH - 4, p2w, 4);
         }
 
         ctx.fillStyle = isDark ? '#334155' : '#cbd5e1';
-        ctx.fillRect(LABEL_WIDTH - 1, 0, 1, MINIMAP_HEIGHT);
+        ctx.fillRect(MINIMAP_LABEL_W - 1, 0, 1, MINIMAP_HEIGHT);
 
         staticMinimapDrawnRef.current = true;
     }, [sequences, querySeq, seqLen, availableWidth, gcContent, primers, isDark]);
@@ -453,14 +577,14 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
             ctx.drawImage(offscreenMinimapRef.current, 0, 0, availableWidth * dpr, MINIMAP_HEIGHT * dpr, 0, 0, availableWidth, MINIMAP_HEIGHT);
         }
 
-        const mmSeqW = availableWidth - LABEL_WIDTH - RIGHT_PADDING;
+        const mmSeqW = availableWidth - MINIMAP_LABEL_W - RIGHT_PADDING;
         const rowsTop = MINIMAP_GC_H + MINIMAP_RULER_H;
         const rowAreaH = MINIMAP_HEIGHT - rowsTop - MINIMAP_HANDLE_H;
 
         if (selectionRange) {
             const s = Math.min(selectionRange.start, selectionRange.end);
             const e = Math.max(selectionRange.start, selectionRange.end);
-            const selX = Math.floor(LABEL_WIDTH + s * mmSeqW) + 0.5;
+            const selX = Math.floor(MINIMAP_LABEL_W + s * mmSeqW) + 0.5;
             const selW = Math.max(1, Math.floor((e - s) * mmSeqW));
             ctx.fillStyle = 'rgba(74, 222, 128, 0.4)';
             ctx.fillRect(selX, rowsTop, selW, rowAreaH);
@@ -470,10 +594,10 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
         }
 
         if (viewFraction < 0.99) {
-            const selX = Math.floor(LABEL_WIDTH + startFrac * mmSeqW) + 0.5;
+            const selX = Math.floor(MINIMAP_LABEL_W + startFrac * mmSeqW) + 0.5;
             const selW = Math.max(1, Math.ceil((endFrac - startFrac) * mmSeqW));
             ctx.fillStyle = isDark ? 'rgba(15, 23, 42, 0.6)' : 'rgba(255,255,255,0.6)';
-            ctx.fillRect(LABEL_WIDTH, rowsTop, selX - LABEL_WIDTH - 0.5, rowAreaH);
+            ctx.fillRect(MINIMAP_LABEL_W, rowsTop, selX - MINIMAP_LABEL_W - 0.5, rowAreaH);
             ctx.fillRect(selX + selW, rowsTop, availableWidth - (selX + selW), rowAreaH);
             ctx.strokeStyle = '#3b82f6';
             ctx.lineWidth = 1;
@@ -484,14 +608,14 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
             const minHandleW = 16;
             const handleDrawW = Math.max(selW, minHandleW);
             let handleX = selX + selW / 2 - handleDrawW / 2;
-            handleX = Math.max(LABEL_WIDTH, Math.min(LABEL_WIDTH + mmSeqW - handleDrawW, handleX));
+            handleX = Math.max(MINIMAP_LABEL_W, Math.min(MINIMAP_LABEL_W + mmSeqW - handleDrawW, handleX));
             ctx.fillStyle = '#3b82f6';
             ctx.fillRect(Math.floor(handleX), rowsTop + rowAreaH, handleDrawW, MINIMAP_HANDLE_H - 1);
         }
 
         const hoverCol = hoverColRef.current;
         if (hoverCol !== null && hoverCol >= 0 && hoverCol < seqLen) {
-            const hx = LABEL_WIDTH + (hoverCol / seqLen) * mmSeqW;
+            const hx = MINIMAP_LABEL_W + (hoverCol / seqLen) * mmSeqW;
             ctx.strokeStyle = mismatchCols.has(hoverCol) ? '#ef4444' : '#3b82f6';
             ctx.lineWidth = 1;
             ctx.beginPath();
@@ -501,7 +625,7 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
         }
 
         ctx.fillStyle = isDark ? '#334155' : '#cbd5e1';
-        ctx.fillRect(LABEL_WIDTH - 1, 0, 1, MINIMAP_HEIGHT);
+        ctx.fillRect(MINIMAP_LABEL_W - 1, 0, 1, MINIMAP_HEIGHT);
     }, [sequences.length, availableWidth, startFrac, endFrac, viewFraction, selectionRange, isDark, drawMinimapBackground, seqLen, mismatchCols]);
 
     useEffect(() => {
@@ -518,11 +642,11 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
         const canvas = minimapRef.current;
         if (!canvas) return;
         const rect = canvas.getBoundingClientRect();
-        const mmSeqW = rect.width - LABEL_WIDTH - RIGHT_PADDING;
-        const mouseXFrac = Math.max(0, Math.min(1, (e.clientX - rect.left - LABEL_WIDTH) / mmSeqW));
+        const mmSeqW = rect.width - MINIMAP_LABEL_W - RIGHT_PADDING;
+        const mouseXFrac = Math.max(0, Math.min(1, (e.clientX - rect.left - MINIMAP_LABEL_W) / mmSeqW));
 
         // Capture current viewport
-        const curSeqAreaW = availableWidth - LABEL_WIDTH - RIGHT_PADDING;
+        const curSeqAreaW = availableWidth - labelWidth - RIGHT_PADDING;
         const curStart = scrollLeft / (curSeqAreaW / viewFraction);
         const curEnd = curStart + viewFraction;
         const handleZone = 10 / mmSeqW; // 10px side handle zone
@@ -632,8 +756,8 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
         const canvas = minimapRef.current;
         if (!canvas) return;
         const rect = canvas.getBoundingClientRect();
-        const mmSeqW = rect.width - LABEL_WIDTH - RIGHT_PADDING;
-        const mouseXFrac = (e.clientX - rect.left - LABEL_WIDTH) / mmSeqW;
+        const mmSeqW = rect.width - MINIMAP_LABEL_W - RIGHT_PADDING;
+        const mouseXFrac = (e.clientX - rect.left - MINIMAP_LABEL_W) / mmSeqW;
 
         // Set hover column for cursor line
         const col = Math.floor(mouseXFrac * seqLen);
@@ -644,7 +768,7 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
             hoverRafRef.current = requestAnimationFrame(() => redrawRef.current());
         }
 
-        const curSeqAreaW = availableWidth - LABEL_WIDTH - RIGHT_PADDING;
+        const curSeqAreaW = availableWidth - labelWidth - RIGHT_PADDING;
         const curTotalVW = curSeqAreaW / viewFraction;
         const curStart = scrollLeft / curTotalVW;
         const curEnd = curStart + viewFraction;
@@ -661,7 +785,7 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
         } else {
             canvas.style.cursor = 'crosshair';
         }
-    }, [seqAreaW, viewFraction, scrollLeft, availableWidth, seqLen]);
+    }, [viewFraction, scrollLeft, availableWidth, seqLen]);
 
     const handleMinimapMouseLeave = useCallback(() => {
         if (hoverColRef.current !== null) {
@@ -702,7 +826,7 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
         ctx.save();
         ctx.beginPath();
         // Allow drawing into the right padding for labels/ticks, but limit Y to entire virtual height
-        ctx.rect(LABEL_WIDTH, scrollTop, availableWidth - LABEL_WIDTH, canvasH);
+        ctx.rect(labelWidth, scrollTop, availableWidth - labelWidth, canvasH);
         ctx.clip();
 
         /* ── row contents (within clip) ── */
@@ -724,7 +848,7 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
                     const ch = (s.seq[col] || '-').toUpperCase();
                     const qch = (querySeq[col] || '-').toUpperCase();
 
-                    const x = LABEL_WIDTH + col * cellW - scrollLeft;
+                    const x = labelWidth + col * cellW - scrollLeft;
 
                     let bg = '#f3f4f6'; // default/match gray
                     let fg = '#374151';
@@ -770,8 +894,8 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
             }
             else {
                 if (sStart <= sEnd) {
-                    const barX1 = Math.floor(Math.max(LABEL_WIDTH, LABEL_WIDTH + sStart * cellW - scrollLeft));
-                    const barX2 = Math.ceil(Math.min(LABEL_WIDTH + seqAreaW, LABEL_WIDTH + (sEnd + 1) * cellW - scrollLeft));
+                    const barX1 = Math.floor(Math.max(labelWidth, labelWidth + sStart * cellW - scrollLeft));
+                    const barX2 = Math.ceil(Math.min(labelWidth + seqAreaW, labelWidth + (sEnd + 1) * cellW - scrollLeft));
                     if (barX2 > barX1) {
                         ctx.fillStyle = isQuery
                             ? (isDark ? '#1e3a8a' : '#bfdbfe')
@@ -785,7 +909,7 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
                     const qch = (querySeq[col] || '-').toUpperCase();
                     if (ch === '-') continue;
 
-                    const x = Math.floor(LABEL_WIDTH + col * cellW - scrollLeft);
+                    const x = Math.floor(labelWidth + col * cellW - scrollLeft);
 
                     const isInternalDeletion = !isQuery && ch === '-' && col >= sStart && col <= sEnd;
                     const isInsertion = !isQuery && qch === '-' && ch !== '-';
@@ -809,7 +933,7 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
             }
 
             ctx.fillStyle = isDark ? '#1e293b' : '#f1f5f9';
-            ctx.fillRect(LABEL_WIDTH, y + ROW_HEIGHT - 0.5, seqAreaW, 0.5);
+            ctx.fillRect(labelWidth, y + ROW_HEIGHT - 0.5, seqAreaW, 0.5);
         }
 
         /* ══════════════════════════════════════════════════════
@@ -821,10 +945,10 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
 
         // ── GC content track (sticky) ──
         ctx.fillStyle = isDark ? '#1e293b' : '#f8fafc';
-        ctx.fillRect(LABEL_WIDTH, stickyY, availableWidth - LABEL_WIDTH, MAIN_GC_TRACK_H);
+        ctx.fillRect(labelWidth, stickyY, availableWidth - labelWidth, MAIN_GC_TRACK_H);
         const gcBarW = Math.max(1, Math.ceil(cellW));
         for (let col = firstCol; col <= lastCol; col++) {
-            const x = Math.floor(LABEL_WIDTH + col * cellW - scrollLeft);
+            const x = Math.floor(labelWidth + col * cellW - scrollLeft);
             const gc = gcContent[col] || 0;
             const r = Math.round(255 - gc * 150);
             const g = Math.round(180 + gc * 60);
@@ -834,14 +958,14 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
             ctx.fillRect(x, stickyY + MAIN_GC_TRACK_H - barH, gcBarW, barH);
         }
         ctx.fillStyle = isDark ? '#334155' : '#e2e8f0';
-        ctx.fillRect(LABEL_WIDTH, stickyY + MAIN_GC_TRACK_H - 0.5, availableWidth - LABEL_WIDTH, 0.5);
+        ctx.fillRect(labelWidth, stickyY + MAIN_GC_TRACK_H - 0.5, availableWidth - labelWidth, 0.5);
 
         // ── MSA overview track (sticky) ──
         const msaTop = stickyY + MAIN_GC_TRACK_H;
         const msaRowH = MAIN_MSA_TRACK_H / sequences.length; // fractional for positioning
         const msaDrawH = Math.max(1, msaRowH); // minimum 1px for visibility
         ctx.fillStyle = isDark ? '#0f172a' : '#f1f5f9';
-        ctx.fillRect(LABEL_WIDTH, msaTop, availableWidth - LABEL_WIDTH, MAIN_MSA_TRACK_H);
+        ctx.fillRect(labelWidth, msaTop, availableWidth - labelWidth, MAIN_MSA_TRACK_H);
 
         const sampleStep = Math.max(1, Math.floor(sequences.length / 200));
         for (let row = 0; row < sequences.length; row += sampleStep) {
@@ -851,8 +975,8 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
             const sStart = seqStart(s.seq);
             const sEnd = seqEnd(s.seq);
             if (sStart <= sEnd) {
-                const barX1 = Math.max(LABEL_WIDTH, LABEL_WIDTH + sStart * cellW - scrollLeft);
-                const barX2 = Math.min(LABEL_WIDTH + seqAreaW, LABEL_WIDTH + (sEnd + 1) * cellW - scrollLeft);
+                const barX1 = Math.max(labelWidth, labelWidth + sStart * cellW - scrollLeft);
+                const barX2 = Math.min(labelWidth + seqAreaW, labelWidth + (sEnd + 1) * cellW - scrollLeft);
                 if (barX2 > barX1) {
                     ctx.fillStyle = isQuery
                         ? (isDark ? '#1e3a8a' : '#bfdbfe')
@@ -860,12 +984,12 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
                     ctx.fillRect(barX1, y, barX2 - barX1, msaDrawH);
                 }
             }
-            const seqW = availableWidth - LABEL_WIDTH - RIGHT_PADDING;
+            const seqW = availableWidth - labelWidth - RIGHT_PADDING;
             const pxStep = Math.max(1, seqLen / seqW);
 
             // Optimized: Iterate over visible pixels, not every column.
-            // (availableWidth - LABEL_WIDTH) is the visible sequence area width.
-            for (let x = 0; x < availableWidth - LABEL_WIDTH; x++) {
+            // (availableWidth - labelWidth) is the visible sequence area width.
+            for (let x = 0; x < availableWidth - labelWidth; x++) {
                 const colBase = Math.floor(((x + scrollLeft) / seqW) * seqLen * viewFraction);
                 if (colBase < 0 || colBase >= seqLen) continue;
 
@@ -884,11 +1008,11 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
 
                     if (isInternalDeletion || isInsertion) {
                         ctx.fillStyle = '#9333ea';
-                        ctx.fillRect(LABEL_WIDTH + x, y, 1.2, msaDrawH);
+                        ctx.fillRect(labelWidth + x, y, 1.2, msaDrawH);
                         break;
                     } else if (!isQuery && ch !== '-' && ch !== qch && qch !== '-') {
                         ctx.fillStyle = '#dc2626';
-                        ctx.fillRect(LABEL_WIDTH + x, y, 1.2, msaDrawH);
+                        ctx.fillRect(labelWidth + x, y, 1.2, msaDrawH);
                         break;
                     }
                 }
@@ -896,16 +1020,39 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
         }
 
         ctx.fillStyle = isDark ? '#334155' : '#e2e8f0';
-        ctx.fillRect(LABEL_WIDTH, msaTop + MAIN_MSA_TRACK_H - 0.5, availableWidth - LABEL_WIDTH, 0.5);
+        ctx.fillRect(labelWidth, msaTop + MAIN_MSA_TRACK_H - 0.5, availableWidth - labelWidth, 0.5);
+
+        /* ── Oligo selection highlight on GC%/MSA header ── */
+        if (oligoSelection) {
+            const s = Math.min(oligoSelection.startCol, oligoSelection.endCol);
+            const e = Math.max(oligoSelection.startCol, oligoSelection.endCol);
+            const selX1 = Math.max(labelWidth, labelWidth + s * cellW - scrollLeft);
+            const selX2 = Math.min(labelWidth + seqAreaW, labelWidth + (e + 1) * cellW - scrollLeft);
+            if (selX2 > selX1) {
+                const trackH = MAIN_GC_TRACK_H + MAIN_MSA_TRACK_H;
+                ctx.fillStyle = 'rgba(251, 191, 36, 0.25)';
+                ctx.fillRect(selX1, stickyY, selX2 - selX1, trackH);
+                ctx.strokeStyle = '#f59e0b';
+                ctx.lineWidth = 1.5;
+                ctx.strokeRect(selX1 + 0.5, stickyY + 0.5, selX2 - selX1 - 1, trackH - 1);
+                // label bp range
+                ctx.fillStyle = '#f59e0b';
+                ctx.font = 'bold 9px ui-monospace, SFMono-Regular, monospace';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'top';
+                const midX = (selX1 + selX2) / 2;
+                ctx.fillText(`${s + 1}–${e + 1}`, Math.max(selX1 + 2, Math.min(selX2 - 2, midX)), stickyY + 2);
+            }
+        }
 
         /* ── ruler (sticky) ── */
         const rulerY = stickyY + MAIN_GC_TRACK_H + MAIN_MSA_TRACK_H;
         ctx.fillStyle = isDark ? '#1e293b' : '#f8fafc';
-        ctx.fillRect(LABEL_WIDTH, rulerY, availableWidth - LABEL_WIDTH, RULER_HEIGHT);
+        ctx.fillRect(labelWidth, rulerY, availableWidth - labelWidth, RULER_HEIGHT);
         ctx.strokeStyle = isDark ? '#334155' : '#e2e8f0';
         ctx.lineWidth = 1;
         ctx.beginPath();
-        ctx.moveTo(LABEL_WIDTH, rulerY + RULER_HEIGHT - 0.5);
+        ctx.moveTo(labelWidth, rulerY + RULER_HEIGHT - 0.5);
         ctx.lineTo(availableWidth, rulerY + RULER_HEIGHT - 0.5);
         ctx.stroke();
 
@@ -917,7 +1064,7 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
         ctx.textBaseline = 'bottom';
         for (let col = firstCol; col <= lastCol; col++) {
             if ((col + 1) % tickInterval === 0) {
-                const x = LABEL_WIDTH + col * cellW - scrollLeft;
+                const x = labelWidth + col * cellW - scrollLeft;
                 ctx.fillStyle = isDark ? '#334155' : '#cbd5e1';
                 ctx.fillRect(x, rulerY + RULER_HEIGHT - 6, 1, 6);
                 ctx.fillStyle = '#94a3b8';
@@ -927,12 +1074,12 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
 
         /* ── Oligo markers in main ruler ── */
         if (primers) {
-            const p1x = LABEL_WIDTH + primers.p1.start * cellW - scrollLeft;
+            const p1x = labelWidth + primers.p1.start * cellW - scrollLeft;
             const p1w = (primers.p1.end - primers.p1.start) * cellW;
             ctx.fillStyle = '#22c55e';
             ctx.fillRect(p1x, rulerY + RULER_HEIGHT - 4, p1w, 4);
 
-            const p2x = LABEL_WIDTH + primers.p2.start * cellW - scrollLeft;
+            const p2x = labelWidth + primers.p2.start * cellW - scrollLeft;
             const p2w = (primers.p2.end - primers.p2.start) * cellW;
             ctx.fillStyle = '#facc15';
             ctx.fillRect(p2x, rulerY + RULER_HEIGHT - 4, p2w, 4);
@@ -944,21 +1091,21 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
 
         // Background covers entire label column at sticky position
         ctx.fillStyle = isDark ? '#0f172a' : '#ffffff';
-        ctx.fillRect(0, scrollTop, LABEL_WIDTH, canvasH);
+        ctx.fillRect(0, scrollTop, labelWidth, canvasH);
 
         // Border line for labels
         ctx.fillStyle = isDark ? '#334155' : '#e2e8f0';
-        ctx.fillRect(LABEL_WIDTH - 1, scrollTop, 1, canvasH);
+        ctx.fillRect(labelWidth - 1, scrollTop, 1, canvasH);
 
-        // GC track label (sticky)
+        // GC track label (sticky) — right-aligned so they sit immediately left of the bars
         ctx.fillStyle = isDark ? '#94a3b8' : '#64748b';
         ctx.font = '10px ui-monospace, SFMono-Regular, monospace';
         ctx.textAlign = 'right';
         ctx.textBaseline = 'middle';
-        ctx.fillText('GC%', LABEL_WIDTH - 6, scrollTop + MAIN_GC_TRACK_H / 2);
+        ctx.fillText('GC%', labelWidth - 8, scrollTop + MAIN_GC_TRACK_H / 2);
 
         // MSA overview label (sticky)
-        ctx.fillText('MSA', LABEL_WIDTH - 6, scrollTop + MAIN_GC_TRACK_H + MAIN_MSA_TRACK_H / 2);
+        ctx.fillText('MSA', labelWidth - 8, scrollTop + MAIN_GC_TRACK_H + MAIN_MSA_TRACK_H / 2);
 
         // Sequence row labels (culled by Y-axis, skip rows behind sticky header)
         const headerH = MAIN_GC_TRACK_H + MAIN_MSA_TRACK_H + RULER_HEIGHT;
@@ -983,13 +1130,13 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
             ctx.textBaseline = 'middle';
 
             let displayTxt = text;
-            if (ctx.measureText(displayTxt).width > LABEL_WIDTH - 20) {
-                while (displayTxt.length > 5 && ctx.measureText(displayTxt + '...').width > LABEL_WIDTH - 20) {
+            if (ctx.measureText(displayTxt).width > labelWidth - 20) {
+                while (displayTxt.length > 5 && ctx.measureText(displayTxt + '…').width > labelWidth - 20) {
                     displayTxt = displayTxt.slice(0, -1);
                 }
-                displayTxt += '...';
+                displayTxt += '…';
             }
-            ctx.fillText(displayTxt, LABEL_WIDTH - 12, labelY);
+            ctx.fillText(displayTxt, labelWidth - 8, labelY);
         }
 
         ctx.restore(); // restore translate
@@ -1002,7 +1149,7 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
             hoverCvs.style.width = `${availableWidth}px`;
             hoverCvs.style.height = `${canvasH}px`;
         }
-    }, [sequences, querySeq, scrollLeft, scrollTop, cellW, seqAreaW, availableWidth, totalH, seqLen, viewMode, primers, gcContent, isDarkMode]);
+    }, [sequences, querySeq, scrollLeft, scrollTop, cellW, seqAreaW, availableWidth, totalH, seqLen, viewMode, primers, gcContent, isDarkMode, oligoSelection]);
 
     /* ── lightweight hover overlay (draws only a thin line) ── */
     const drawHoverOverlay = useCallback(() => {
@@ -1027,8 +1174,8 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
         const hoverCol = hoverColRef.current;
         if (hoverCol === null || hoverCol < 0 || hoverCol >= seqLen) return;
 
-        const hx = LABEL_WIDTH + hoverCol * cellW - scrollLeft + cellW / 2;
-        if (hx < LABEL_WIDTH || hx > LABEL_WIDTH + seqAreaW) return;
+        const hx = labelWidth + hoverCol * cellW - scrollLeft + cellW / 2;
+        if (hx < labelWidth || hx > labelWidth + seqAreaW) return;
 
         ctx.strokeStyle = mismatchCols.has(hoverCol) ? '#ef4444' : '#3b82f6';
         ctx.lineWidth = 1;
@@ -1067,8 +1214,8 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
             const rect = scrollRef.current?.getBoundingClientRect();
             if (!rect) return;
 
-            const offsetX = e.clientX - rect.left - LABEL_WIDTH;
-            const seqAreaWidth = rect.width - LABEL_WIDTH - RIGHT_PADDING; // Should match seqAreaW effectively
+            const offsetX = e.clientX - rect.left - labelWidth;
+            const seqAreaWidth = rect.width - labelWidth - RIGHT_PADDING; // Should match seqAreaW effectively
 
             // If mouse is over labels, just zoom center or left? Let's assume clamping to 0 if < 0.
             const validOffsetX = Math.max(0, Math.min(seqAreaWidth, offsetX));
@@ -1100,69 +1247,97 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
         const cvs = canvasRef.current;
         if (!cvs) return;
         const rect = cvs.getBoundingClientRect();
-        const mouseX = e.clientX - rect.left - LABEL_WIDTH;
+        const mouseXRaw = e.clientX - rect.left;
+        const mouseYRaw = e.clientY - rect.top;
+
+        // Label Area Hover Detection
+        if (mouseXRaw < labelWidth) {
+            const rowsStartY = MAIN_GC_TRACK_H + MAIN_MSA_TRACK_H + RULER_HEIGHT;
+            const virtualY = mouseYRaw + scrollTop;
+            const row = Math.floor((virtualY - rowsStartY) / ROW_HEIGHT);
+
+            if (row >= 0 && row < sequences.length && virtualY >= rowsStartY) {
+                setLabelHoverInfo({
+                    text: sequences[row].id,
+                    x: e.clientX,
+                    y: e.clientY
+                });
+                cvs.style.cursor = 'help';
+            } else {
+                setLabelHoverInfo(null);
+                cvs.style.cursor = 'default';
+            }
+            // Clear sequence hover
+            if (hoverColRef.current !== null) {
+                hoverColRef.current = null;
+                cancelAnimationFrame(hoverRafRef.current);
+                hoverRafRef.current = requestAnimationFrame(() => redrawRef.current());
+            }
+            return;
+        }
+
+        setLabelHoverInfo(null);
+        // GC%/MSA track area gets a special crosshair for oligo selection
+        if (mouseYRaw < MAIN_GC_TRACK_H + MAIN_MSA_TRACK_H) {
+            cvs.style.cursor = 'crosshair';
+        } else {
+            cvs.style.cursor = viewMode === 'letters' ? 'pointer' : 'crosshair';
+        }
+
+        const mouseX = mouseXRaw - labelWidth;
         const col = Math.floor((scrollLeft + mouseX) / cellW);
         const newCol = col >= 0 && col < seqLen ? col : null;
         if (newCol === hoverColRef.current) return;
         hoverColRef.current = newCol;
         cancelAnimationFrame(hoverRafRef.current);
         hoverRafRef.current = requestAnimationFrame(() => redrawRef.current());
-    }, [scrollLeft, cellW, seqLen]);
+    }, [scrollLeft, cellW, seqLen, sequences, scrollTop, viewMode]);
 
     const handleCanvasMouseLeave = useCallback(() => {
+        setLabelHoverInfo(null);
         if (hoverColRef.current === null) return;
         hoverColRef.current = null;
         cancelAnimationFrame(hoverRafRef.current);
         hoverRafRef.current = requestAnimationFrame(() => redrawRef.current());
     }, []);
 
-    /* ── main canvas mouse down for drag-to-zoom selection ── */
+    /* ── main canvas mouse down → oligo region selection everywhere ── */
     const handleCanvasMouseDown = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
         const cvs = canvasRef.current;
         if (!cvs) return;
         const rect = cvs.getBoundingClientRect();
+        const mouseXCanvas = e.clientX - rect.left;
+        if (mouseXCanvas < labelWidth) return; // ignore clicks on label column
 
-        // Convert mouse X to a sequence fraction
-        const curSeqAreaW = availableWidth - LABEL_WIDTH - RIGHT_PADDING;
-        const mouseX = e.clientX - rect.left - LABEL_WIDTH;
-        const curTotalVW = curSeqAreaW / viewFraction;
-        const mouseFrac = (scrollLeft + mouseX) / curTotalVW;
-        const clampedFrac = Math.max(0, Math.min(1, mouseFrac));
-
-        // Start a selection drag (same logic as minimap)
-        setSelectionRange({ start: clampedFrac, end: clampedFrac });
+        const mouseX = mouseXCanvas - labelWidth;
+        const startC = Math.max(0, Math.min(seqLen - 1, Math.floor((scrollLeft + mouseX) / cellW)));
+        setOligoSelection({ startCol: startC, endCol: startC });
 
         const onMove = (ev: MouseEvent) => {
-            const newMouseX = ev.clientX - rect.left - LABEL_WIDTH;
-            const newFrac = Math.max(0, Math.min(1, (scrollLeft + newMouseX) / curTotalVW));
-            setSelectionRange({ start: clampedFrac, end: newFrac });
+            const newX = ev.clientX - rect.left - labelWidth;
+            const endC = Math.max(0, Math.min(seqLen - 1, Math.floor((scrollLeft + newX) / cellW)));
+            setOligoSelection({ startCol: startC, endCol: endC });
         };
 
         const onUp = () => {
             document.removeEventListener('mousemove', onMove);
             document.removeEventListener('mouseup', onUp);
-
-            setSelectionRange((prev) => {
+            setOligoSelection(prev => {
                 if (!prev) return null;
-                const s = Math.min(prev.start, prev.end);
-                const e2 = Math.max(prev.start, prev.end);
-                if (e2 - s < 0.005) return null;
-
-                const newVF = e2 - s;
-                const newTotalW = curSeqAreaW / newVF;
-                const newSL = s * newTotalW;
-
-                setViewFraction(newVF);
-                setScrollLeft(newSL);
-                targetScrollRef.current = newSL;
-                return null;
+                const s = Math.min(prev.startCol, prev.endCol);
+                const e2 = Math.max(prev.startCol, prev.endCol);
+                // Require at least 5 columns to avoid accidental click-as-selection
+                if (e2 - s >= 5 && onOligoRegionSelect) {
+                    onOligoRegionSelect(s, e2);
+                }
+                return prev;
             });
         };
 
         document.addEventListener('mousemove', onMove);
         document.addEventListener('mouseup', onUp);
         e.preventDefault();
-    }, [availableWidth, viewFraction, scrollLeft, seqAreaW]);
+    }, [labelWidth, seqLen, scrollLeft, cellW, onOligoRegionSelect]);
 
     /* ── canvas click → copy sequence OR select ─────────────────── */
     const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
@@ -1247,7 +1422,7 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
                         <button
                             onClick={() => {
                                 // Keep the current center
-                                const seqAreaW = availableWidth - LABEL_WIDTH - RIGHT_PADDING;
+                                const seqAreaW = availableWidth - labelWidth - RIGHT_PADDING;
                                 const currentTotalW = seqAreaW / viewFraction;
                                 const centerFrac = (scrollLeft + seqAreaW / 2) / currentTotalW;
 
@@ -1335,31 +1510,38 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
             </div>
 
             {/* ── scroll arrow bar ── */}
-            <div className="px-5 py-1 border-b border-slate-100 dark:border-slate-700 bg-white dark:bg-slate-800 flex items-center gap-2">
-                <button
-                    onMouseDown={() => startPan(-1)}
-                    onMouseUp={stopPan}
-                    onMouseLeave={stopPan}
-                    className="flex items-center justify-center w-7 h-7 rounded-md border border-slate-300 dark:border-slate-600 text-slate-500 dark:text-slate-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 hover:border-indigo-300 dark:hover:border-indigo-700 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors font-bold select-none"
-                    title="Scroll left"
+            <div className="py-1 border-b border-slate-100 dark:border-slate-700 bg-white dark:bg-slate-800 flex items-center" style={{ paddingRight: `${RIGHT_PADDING}px` }}>
+                {/* Arrows live in the label column so the track aligns with the sequence bars */}
+                <div style={{ width: `${labelWidth}px`, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '4px', paddingRight: '4px' }}>
+                    <button
+                        onMouseDown={() => startPan(-1)}
+                        onMouseUp={stopPan}
+                        onMouseLeave={stopPan}
+                        className="flex items-center justify-center w-7 h-7 rounded-md border border-slate-300 dark:border-slate-600 text-slate-500 dark:text-slate-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 hover:border-indigo-300 dark:hover:border-indigo-700 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors font-bold select-none"
+                        title="Scroll left"
+                    >
+                        ←
+                    </button>
+                    <button
+                        onMouseDown={() => startPan(1)}
+                        onMouseUp={stopPan}
+                        onMouseLeave={stopPan}
+                        className="flex items-center justify-center w-7 h-7 rounded-md border border-slate-300 dark:border-slate-600 text-slate-500 dark:text-slate-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 hover:border-indigo-300 dark:hover:border-indigo-700 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors font-bold select-none"
+                        title="Scroll right"
+                    >
+                        →
+                    </button>
+                </div>
+                <div
+                    ref={scrollTrackRef}
+                    onMouseDown={handleBarMouseDown}
+                    className="flex-1 h-1.5 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden cursor-pointer relative"
                 >
-                    ←
-                </button>
-                <div className="flex-1 h-1.5 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
                     <div
-                        className="h-full bg-indigo-400 dark:bg-indigo-600 rounded-full transition-all duration-75"
+                        className={`h-full bg-indigo-400 dark:bg-indigo-600 rounded-full transition-all ${isBarDragging ? 'duration-0' : 'duration-75'}`}
                         style={{ marginLeft: `${startFrac * 100}%`, width: `${viewFraction * 100}%` }}
                     />
                 </div>
-                <button
-                    onMouseDown={() => startPan(1)}
-                    onMouseUp={stopPan}
-                    onMouseLeave={stopPan}
-                    className="flex items-center justify-center w-7 h-7 rounded-md border border-slate-300 dark:border-slate-600 text-slate-500 dark:text-slate-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 hover:border-indigo-300 dark:hover:border-indigo-700 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors font-bold select-none"
-                    title="Scroll right"
-                >
-                    →
-                </button>
             </div>
 
             {/* ── scrollable canvas area ── */}
@@ -1370,7 +1552,7 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
                 onScroll={handleScroll}
                 onWheel={handleWheel}
             >
-                <div style={{ width: `${LABEL_WIDTH + totalVirtualW}px`, height: `${totalH}px`, position: 'absolute', pointerEvents: 'none' }} />
+                <div style={{ width: `${labelWidth + totalVirtualW}px`, height: `${totalH}px`, position: 'absolute', pointerEvents: 'none' }} />
                 <div style={{ position: 'sticky', top: 0, left: 0, zIndex: 10, width: 'fit-content' }}>
                     <canvas
                         ref={canvasRef}
@@ -1393,6 +1575,12 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
                             zIndex: 20
                         }}
                     />
+                    {/* ── Resizable Handle ── */}
+                    <div
+                        onMouseDown={handleResizeMouseDown}
+                        className={`absolute top-0 bottom-0 z-[30] w-1.5 cursor-col-resize hover:bg-indigo-400/30 transition-colors ${isResizingLabel ? 'bg-indigo-500/50' : 'bg-transparent'}`}
+                        style={{ left: `${labelWidth - 3}px` }}
+                    />
                 </div>
             </div>
 
@@ -1414,6 +1602,19 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
                     </div>
                 )
             }
+
+            {/* ── label tooltip ── */}
+            {labelHoverInfo && (
+                <div
+                    className="fixed z-[9999] px-2 py-1 bg-slate-800 text-white text-xs rounded shadow-lg pointer-events-none whitespace-nowrap border border-slate-600"
+                    style={{
+                        left: `${labelHoverInfo.x + 12}px`,
+                        top: `${labelHoverInfo.y + 12}px`
+                    }}
+                >
+                    {labelHoverInfo.text}
+                </div>
+            )}
         </div >
     );
 };

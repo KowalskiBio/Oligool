@@ -46,6 +46,7 @@ function App() {
   const [showSecrets, setShowSecrets] = useState(false);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [navigateTarget, setNavigateTarget] = useState<{ colStart: number; colEnd: number; ts: number } | null>(null);
+  const [oligoRegion, setOligoRegion] = useState<{ startCol: number; endCol: number } | null>(null);
 
   useEffect(() => {
     if (isDarkMode) {
@@ -692,6 +693,7 @@ function App() {
                 primers={selectedPrimers}
                 isDarkMode={isDarkMode}
                 navigateTarget={navigateTarget}
+                onOligoRegionSelect={(startCol, endCol) => setOligoRegion({ startCol, endCol })}
               />
               {step === 'done' && selectedSequence && (
                 <QueryViewer
@@ -699,6 +701,7 @@ function App() {
                   jobName={jobName}
                   onPrimersUpdate={setSelectedPrimers}
                   onNavigateTo={(colStart, colEnd) => setNavigateTarget({ colStart, colEnd, ts: Date.now() })}
+                  oligoRegion={oligoRegion}
                   idtCredentials={{
                     clientId: idtClientId,
                     clientSecret: idtClientSecret,

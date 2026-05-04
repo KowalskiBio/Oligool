@@ -8,6 +8,8 @@ interface QueryViewerProps {
     jobName: string;
     onPrimersUpdate: (primers: { p1: { start: number, end: number }, p2: { start: number, end: number } } | null) => void;
     onNavigateTo?: (colStart: number, colEnd: number) => void;
+    /** Gapped column range selected by the user in MSAViewer for constrained oligo search */
+    oligoRegion?: { startCol: number; endCol: number } | null;
     idtCredentials?: {
         clientId: string;
         clientSecret: string;
@@ -58,7 +60,7 @@ interface SavedPosition {
     moligo1Len: number; moligo2Len: number;
 }
 
-export default function QueryViewer({ data, jobName, onPrimersUpdate, onNavigateTo, idtCredentials }: QueryViewerProps) {
+export default function QueryViewer({ data, jobName, onPrimersUpdate, onNavigateTo, oligoRegion, idtCredentials }: QueryViewerProps) {
     const [copyFeedback, setCopyFeedback] = useState('');
 
     // IDT Analysis State
@@ -122,6 +124,17 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, onNavigate
     const [_paramsNotMet, setParamsNotMet] = useState(false); // kept for future warning UI
     const [isAutoSearchNeeded, setIsAutoSearchNeeded] = useState(true);
     const lastShiftsApplied = useRef({ s1: 0, s2: 0 });
+    // When region analysis is active, fetchPrimers uses this subsequence so sliders stay within the region
+    const regionSeqContextRef = useRef<{ rawSub: string; ungappedOffset: number } | null>(null);
+    const [regionAnalysisActive, setRegionAnalysisActive] = useState(false);
+    // Reset toggle whenever a new region is drawn
+    useEffect(() => {
+        if (!regionAnalysisActive) return;
+        regionSeqContextRef.current = null;
+        setRegionAnalysisActive(false);
+        setIsAutoSearchNeeded(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [oligoRegion]);
 
     // MOLigo state
     const [showMOLigo, setShowMOLigo] = useState(() => localStorage.getItem('show_moligo_prov') === 'true');
@@ -254,7 +267,8 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, onNavigate
             setIdtResults(null);
             setIdtError(null);
             onPrimersUpdate(null);
-            // Reset shifts for the new viewport to trigger initial best-place search
+            regionSeqContextRef.current = null;
+            setRegionAnalysisActive(false);
             setMoligo1Shift(0);
             setMoligo2Shift(0);
             lastShiftsApplied.current = { s1: 0, s2: 0 };
@@ -272,6 +286,94 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, onNavigate
             }
         }
         return gappedSeq.length;
+    };
+
+    /* ── Region-constrained oligo search ────────────────────────── */
+    const handleRegionAnalysis = async () => {
+        if (!oligoRegion || !data) return;
+
+        const relStart = Math.max(0, oligoRegion.startCol - data.start);
+        const relEnd = Math.min(data.seq.length - 1, oligoRegion.endCol - data.start);
+        if (relStart >= relEnd) return;
+
+        const rawSub = data.seq.slice(relStart, relEnd + 1).replace(/-/g, '');
+        if (rawSub.length < 2) return;
+
+        const ungappedOffset = data.seq.slice(0, relStart).replace(/-/g, '').length;
+
+        setLoading(true);
+        setError('');
+        try {
+            const res = await fetch(((import.meta.env.VITE_API_BASE as string) || '') + '/moligize', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    sequence: rawSub,
+                    moligo1_shift: 0,
+                    moligo2_shift: 0,
+                    moligo1_len: moligo1Len,
+                    moligo2_len: moligo2Len,
+                    auto_search: true,
+                    local_optimize: true,
+                    scan_full_region: true,
+                    salt_mono: Number(advancedParams.salt_mono),
+                    salt_div: Number(advancedParams.salt_div),
+                    dntp_conc: Number(advancedParams.dntp_conc),
+                    dna_conc: Number(advancedParams.dna_conc),
+                    search_params: {
+                        min_len: Number(searchParams.min_len),
+                        max_len: Number(searchParams.max_l),
+                        tm_min: Number(searchParams.tm_min),
+                        tm_max: Number(searchParams.tm_max),
+                        tm_diff: Number(searchParams.tm_diff),
+                        gc_min: Number(searchParams.gc_min),
+                        gc_max: Number(searchParams.gc_max)
+                    }
+                })
+            });
+            if (!res.ok) throw new Error(await res.text());
+
+            const json: OligizeResponse = await res.json();
+
+            // Store the region context BEFORE updating shifts so fetchPrimers (debounced)
+            // also uses the same subsequence and doesn't overwrite with full-sequence results.
+            regionSeqContextRef.current = { rawSub, ungappedOffset };
+            setRegionAnalysisActive(true);
+
+            // Offset positions into the full window coordinate space
+            const p1Start = json.p1.start + ungappedOffset;
+            const p1End = json.p1.end + ungappedOffset;
+            const p2Start = json.p2.start + ungappedOffset;
+            const p2End = json.p2.end + ungappedOffset;
+            const splitIdx = json.split_idx + ungappedOffset;
+
+            const adjusted: OligizeResponse = {
+                ...json,
+                p1: { ...json.p1, start: p1Start, end: p1End },
+                p2: { ...json.p2, start: p2Start, end: p2End },
+                split_idx: splitIdx,
+            };
+
+            setPrimers(adjusted);
+            setParamsNotMet(!!json.params_not_met);
+            // Sync shifts relative to the region's split so subsequent slider moves stay within the region.
+            // regionSeqContextRef ensures fetchPrimers sends rawSub, making these shifts compatible.
+            setMoligo1Shift(json.p1.start - json.split_idx);
+            setMoligo2Shift(json.p2.end - json.split_idx);
+            lastShiftsApplied.current = { s1: json.p1.start - json.split_idx, s2: json.p2.end - json.split_idx };
+            setIsAutoSearchNeeded(false);
+            if (json.p1.len !== moligo1Len) setMoligo1Len(json.p1.len);
+            if (json.p2.len !== moligo2Len) setMoligo2Len(json.p2.len);
+
+            onPrimersUpdate({
+                p1: { start: data.start + mapUngappedToGapped(p1Start, data.seq), end: data.start + mapUngappedToGapped(p1End, data.seq) },
+                p2: { start: data.start + mapUngappedToGapped(p2Start, data.seq), end: data.start + mapUngappedToGapped(p2End, data.seq) }
+            });
+        } catch (err: any) {
+            setError(err.message || 'Region analysis failed');
+        } finally {
+            setLoading(false);
+        }
     };
 
     useEffect(() => {
@@ -337,11 +439,17 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, onNavigate
                 const isShiftChange = moligo1Shift !== lastShiftsApplied.current.s1 || moligo2Shift !== lastShiftsApplied.current.s2;
                 const localOptimize = isShiftChange || isAutoSearchNeeded;
 
+                // Use the region subsequence when region analysis is active; this keeps
+                // slider adjustments within the selected region instead of jumping to the
+                // best position in the full window sequence.
+                const regionCtx = regionSeqContextRef.current;
+                const seqToSend = regionCtx ? regionCtx.rawSub : raw;
+
                 const res = await fetch(((import.meta.env.VITE_API_BASE as string) || "") + '/moligize', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        sequence: raw,
+                        sequence: seqToSend,
                         moligo1_shift: moligo1Shift,
                         moligo2_shift: moligo2Shift,
                         moligo1_len: moligo1Len,
@@ -374,7 +482,20 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, onNavigate
                     }
                 }
                 const json: OligizeResponse = await res.json();
-                setPrimers(json);
+
+                // When using a region subsequence, offset all positions back into full-window space
+                const offset = regionCtx ? regionCtx.ungappedOffset : 0;
+                const p1StartU = json.p1.start + offset;
+                const p1EndU   = json.p1.end   + offset;
+                const p2StartU = json.p2.start + offset;
+                const p2EndU   = json.p2.end   + offset;
+
+                setPrimers({
+                    ...json,
+                    p1: { ...json.p1, start: p1StartU, end: p1EndU },
+                    p2: { ...json.p2, start: p2StartU, end: p2EndU },
+                    split_idx: json.split_idx + offset,
+                });
                 setParamsNotMet(!!json.params_not_met);
 
                 const localOptimizeUsed = localOptimize;
@@ -398,11 +519,10 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, onNavigate
                     if (json.p2.len !== moligo2Len) setMoligo2Len(json.p2.len);
                 }
 
-                const p1StartGapped = mapUngappedToGapped(json.p1.start, data.seq);
-                const p1EndGapped = mapUngappedToGapped(json.p1.end, data.seq);
-
-                const p2StartGapped = mapUngappedToGapped(json.p2.start, data.seq);
-                const p2EndGapped = mapUngappedToGapped(json.p2.end, data.seq);
+                const p1StartGapped = mapUngappedToGapped(p1StartU, data.seq);
+                const p1EndGapped   = mapUngappedToGapped(p1EndU,   data.seq);
+                const p2StartGapped = mapUngappedToGapped(p2StartU, data.seq);
+                const p2EndGapped   = mapUngappedToGapped(p2EndU,   data.seq);
 
                 onPrimersUpdate({
                     p1: {
@@ -854,15 +974,27 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, onNavigate
                     <span className="text-sm text-slate-500 dark:text-slate-400">
                         (bp {data.start + 1}–{data.end + 1}, len {rawSeq.length})
                     </span>
-                    {primers && (
+                    {oligoRegion && (
                         <button
-                            onClick={() => setShowMOLigo(!showMOLigo)}
-                            className={`ml-2 px-3 py-1 text-xs font-bold rounded-full border transition-all ${showMOLigo
-                                ? 'bg-teal-500 text-white border-teal-500 shadow-md ring-2 ring-teal-100 dark:ring-teal-900/40'
-                                : 'bg-white dark:bg-slate-700 text-teal-500 dark:text-teal-400 border-teal-200 dark:border-teal-800 hover:border-teal-400 hover:bg-teal-50 dark:hover:bg-teal-900/20'
-                                }`}
+                            onClick={() => {
+                                if (regionAnalysisActive) {
+                                    regionSeqContextRef.current = null;
+                                    setRegionAnalysisActive(false);
+                                    setIsAutoSearchNeeded(true);
+                                } else {
+                                    handleRegionAnalysis();
+                                }
+                            }}
+                            disabled={loading && !regionAnalysisActive}
+                            className={`ml-2 px-3 py-1 text-xs font-bold rounded-full border transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-sm ${regionAnalysisActive
+                                ? 'bg-amber-500 text-white border-amber-500 hover:bg-amber-600 ring-2 ring-amber-200 dark:ring-amber-800'
+                                : 'bg-white dark:bg-slate-700 text-amber-500 dark:text-amber-400 border-amber-300 dark:border-amber-700 hover:bg-amber-50 dark:hover:bg-amber-900/20 hover:border-amber-500'
+                            }`}
+                            title={regionAnalysisActive
+                                ? `Region active (cols ${oligoRegion.startCol + 1}–${oligoRegion.endCol + 1}) — click to deactivate`
+                                : `Search oligos only within MSA columns ${oligoRegion.startCol + 1}–${oligoRegion.endCol + 1}`}
                         >
-                            🔬 MOLigize!
+                            🎯 Region analysis
                         </button>
                     )}
                     {primers && (
@@ -901,6 +1033,16 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, onNavigate
                                     </svg>
                                 )}
                                 {!!fixedAbsCoords ? '🔒 Unfix' : 'Fix Position'}
+                            </button>
+                            <button
+                                onClick={() => {
+                                    setFixedAbsCoords(null);
+                                    setIsAutoSearchNeeded(true);
+                                }}
+                                title="Recalculate best oligo with current parameters"
+                                className="ml-1 flex items-center gap-1.5 px-3 py-1 text-xs font-bold rounded-full border transition-all bg-white dark:bg-slate-700 text-sky-500 dark:text-sky-400 border-sky-200 dark:border-sky-800 hover:border-sky-400 hover:bg-sky-50 dark:hover:bg-sky-900/20"
+                            >
+                                ↻ Recalculate
                             </button>
                         </>
                     )}

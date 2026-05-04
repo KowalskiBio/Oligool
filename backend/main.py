@@ -119,7 +119,9 @@ async def search_and_align(request: SearchRequest):
 
             msa_input = [{"id": query_id, "seq": query_seq}]
             for hit in blast_hits:
-                msa_input.append({"id": hit["accession"], "seq": hit["sequence"]})
+                # Include description in ID so MSA preserves it in headers
+                full_id = f"{hit['accession']} {hit['description']}"
+                msa_input.append({"id": full_id, "seq": hit["sequence"]})
 
             # Step 3: Run MSA
             alignment = run_msa(msa_input)
@@ -203,10 +205,11 @@ class MoligizeRequest(BaseModel):
     salt_mono: Optional[float] = 50.0
     salt_div: Optional[float] = 10.0
     dntp_conc: Optional[float] = 0.8
-    dna_conc: Optional[float] = 1000.0
+    dna_conc: Optional[float] = 200.0
     # Search behavior
     auto_search: bool = False # If true, finds best spot initially
     local_optimize: bool = False # If true, finds best length for CURRENT shift
+    scan_full_region: bool = False # If true, disables center bias so the whole sequence is scanned equally
     # Search params
     search_params: Optional[Dict] = None
 
@@ -223,7 +226,7 @@ async def moligize_sequence(request: MoligizeRequest):
         'mv_conc': float(request.salt_mono if request.salt_mono is not None else 50.0),
         'dv_conc': float(request.salt_div if request.salt_div is not None else 10.0),
         'dntp_conc': float(request.dntp_conc if request.dntp_conc is not None else 0.8),
-        'dna_conc': float(request.dna_conc if request.dna_conc is not None else 1000.0),
+        'dna_conc': float(request.dna_conc if request.dna_conc is not None else 200.0),
         'tm_method': 'santalucia',
         'salt_corrections_method': 'santalucia',
     }
@@ -380,7 +383,10 @@ async def moligize_sequence(request: MoligizeRequest):
                 for lc in left_by_end[sp]:
                     for rc in right_by_start[sp]:
                         if abs(rc[3] - lc[3]) <= tm_diff:
-                            score = (abs(rc[4] - preferred_len) + abs(lc[4] - preferred_len)) * 10 + abs(sp - split_pt) * 0.1
+                            # Center bias is disabled in region-scan mode so every position
+                            # in the region is evaluated on Tm/length quality alone.
+                            pos_penalty = 0.0 if request.scan_full_region else abs(sp - split_pt) * 0.1
+                            score = (abs(rc[4] - preferred_len) + abs(lc[4] - preferred_len)) * 10 + pos_penalty
                             if score < best_score:
                                 best_score, best_pair = score, (rc, lc)
 
