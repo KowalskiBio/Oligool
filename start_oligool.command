@@ -24,10 +24,10 @@ fi
 if [ -d "$MAFFT_DIR" ]; then
     OS="$(uname -s)"
     if [ "$OS" = "Darwin" ]; then
-        export PATH="$MAFFT_DIR/mafft-mac:$PATH"
+        export PATH="$MAFFT_DIR/mafft-mac/mafftdir/bin:$PATH"
         export MAFFT_BINARIES="$MAFFT_DIR/mafft-mac/mafftdir/libexec"
     elif [ "$OS" = "Linux" ]; then
-        export PATH="$MAFFT_DIR/mafft-linux64:$PATH"
+        export PATH="$MAFFT_DIR/mafft-linux64/mafftdir/bin:$PATH"
         export MAFFT_BINARIES="$MAFFT_DIR/mafft-linux64/mafftdir/libexec"
     fi
 fi
@@ -55,11 +55,11 @@ if ! command -v mafft >/dev/null 2>&1; then
         curl -sL "https://mafft.cbrc.jp/alignment/software/mafft-7.520-mac.zip" -o "$MAFFT_DIR/mafft.zip"
         unzip -q "$MAFFT_DIR/mafft.zip" -d "$MAFFT_DIR"
         rm "$MAFFT_DIR/mafft.zip"
-        export PATH="$MAFFT_DIR/mafft-mac:$PATH"
+        export PATH="$MAFFT_DIR/mafft-mac/mafftdir/bin:$PATH"
         export MAFFT_BINARIES="$MAFFT_DIR/mafft-mac/mafftdir/libexec"
     elif [ "$OS" = "Linux" ]; then
         curl -sL "https://mafft.cbrc.jp/alignment/software/mafft-7.520-linux.tgz" | tar -xz -C "$MAFFT_DIR"
-        export PATH="$MAFFT_DIR/mafft-linux64:$PATH"
+        export PATH="$MAFFT_DIR/mafft-linux64/mafftdir/bin:$PATH"
         export MAFFT_BINARIES="$MAFFT_DIR/mafft-linux64/mafftdir/libexec"
     fi
 fi
