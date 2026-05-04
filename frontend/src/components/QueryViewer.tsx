@@ -137,7 +137,6 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, onNavigate
     }, [oligoRegion]);
 
     // MOLigo state
-    const [showMOLigo, setShowMOLigo] = useState(() => localStorage.getItem('show_moligo_prov') === 'true');
     const [tagSeq, setTagSeq] = useState(() => localStorage.getItem('tag_seq') || 'taattgaattgaaagataagtgt');
     const [fwdPrimer, setFwdPrimer] = useState(() => localStorage.getItem('fwd_primer') || 'CGCGGTAGTAAGAAGTGAGA');
     const [revPrimer, setRevPrimer] = useState(() => localStorage.getItem('rev_primer') || 'ACTCGTAGGGAATAAACCGT');
@@ -552,7 +551,6 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, onNavigate
     useEffect(() => { localStorage.setItem('moligo_1_len', String(moligo1Len)); }, [moligo1Len]);
     useEffect(() => { localStorage.setItem('moligo_2_len', String(moligo2Len)); }, [moligo2Len]);
     useEffect(() => { localStorage.setItem('oligo_search_params', JSON.stringify(searchParams)); }, [searchParams]);
-    useEffect(() => { localStorage.setItem('show_moligo_prov', String(showMOLigo)); }, [showMOLigo]);
     useEffect(() => { localStorage.setItem('tag_seq', tagSeq); }, [tagSeq]);
     useEffect(() => { localStorage.setItem('fwd_primer', fwdPrimer); }, [fwdPrimer]);
     useEffect(() => { localStorage.setItem('rev_primer', revPrimer); }, [revPrimer]);
@@ -1607,7 +1605,7 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, onNavigate
                 )}
 
                 {/* ── MOLigo Provenance Panel ────────────────────── */}
-                {primers && showMOLigo && (
+                {primers && (
                     <div className="border-t border-slate-200 dark:border-slate-700">
                         <MOLigoPanel
                             templateSeq={rawSeq}
