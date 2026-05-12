@@ -16,6 +16,7 @@ export interface MOLigoProps {
     onTagChange?: (val: string) => void;
     onFwdChange?: (val: string) => void;
     onRevChange?: (val: string) => void;
+    onProceed?: () => void;
     idtCredentials?: {
         clientId: string;
         clientSecret: string;
@@ -53,12 +54,38 @@ export default function MOLigoPanel(props: MOLigoProps) {
         templateSeq,
         moligo1Seq, moligo2Seq,
         tagSeq, fwdPrimer, revPrimer,
-        onTagChange, onFwdChange, onRevChange,
+        onTagChange, onFwdChange, onRevChange, onProceed,
         idtCredentials, idtAdvancedParams
     } = props;
 
     const [isSeqMode, setIsSeqMode] = useState(() => localStorage.getItem('moligo_prov_seq_mode') === 'true');
     const [isSchematicOpen, setIsSchematicOpen] = useState(() => localStorage.getItem('moligo_prov_schematic_open') !== 'false');
+    const [copyFeedback, setCopyFeedback] = useState<string>('');
+
+    const handleCopy = (text: string) => {
+        const doFallback = () => {
+            const el = document.createElement('textarea');
+            el.value = text;
+            el.style.position = 'fixed';
+            el.style.left = '-9999px';
+            el.style.top = '-9999px';
+            document.body.appendChild(el);
+            el.focus();
+            el.select();
+            try { document.execCommand('copy'); setCopyFeedback('Copied!'); }
+            catch { setCopyFeedback('Failed'); }
+            document.body.removeChild(el);
+            setTimeout(() => setCopyFeedback(''), 2000);
+        };
+        if (navigator.clipboard && window.isSecureContext) {
+            navigator.clipboard.writeText(text).then(() => {
+                setCopyFeedback('Copied!');
+                setTimeout(() => setCopyFeedback(''), 2000);
+            }).catch(() => doFallback());
+        } else {
+            doFallback();
+        }
+    };
 
     // Product Analysis State
     const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -546,13 +573,10 @@ export default function MOLigoPanel(props: MOLigoProps) {
                             <div className="flex justify-between items-center px-1">
                                 <label className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">Oligo 2 (Reporter: RevP + M2)</label>
                                 <button
-                                    onClick={() => {
-                                        const seq = (revPrimer || "") + moligo2Seq;
-                                        navigator.clipboard.writeText(seq);
-                                    }}
+                                    onClick={() => handleCopy((revPrimer || "") + moligo2Seq)}
                                     className="text-[10px] font-bold px-2 py-0.5 rounded border border-slate-200 dark:border-slate-700 hover:bg-white dark:hover:bg-slate-800 transition-colors"
                                 >
-                                    Copy
+                                    {copyFeedback || 'Copy'}
                                 </button>
                             </div>
                             <div className="p-3 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 font-mono text-xs break-all shadow-sm">
@@ -569,18 +593,15 @@ export default function MOLigoPanel(props: MOLigoProps) {
                             <div className="flex justify-between items-center px-1">
                                 <label className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">Oligo 1 (Capture: M1 + TAG + RC-FwdP)</label>
                                 <button
-                                    onClick={() => {
-                                        const seq = moligo1Seq + (tagSeq || "") + fwdRCSeq;
-                                        navigator.clipboard.writeText(seq);
-                                    }}
+                                    onClick={() => handleCopy(moligo1Seq + (tagSeq?.toLowerCase() || "") + fwdRCSeq)}
                                     className="text-[10px] font-bold px-2 py-0.5 rounded border border-slate-200 dark:border-slate-700 hover:bg-white dark:hover:bg-slate-800 transition-colors"
                                 >
-                                    Copy
+                                    {copyFeedback || 'Copy'}
                                 </button>
                             </div>
                             <div className="p-3 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 font-mono text-xs break-all shadow-sm">
                                 <span style={{ color: C.m1 }}>{moligo1Seq}</span>
-                                <span style={{ color: C.tag }}>{tagSeq}</span>
+                                <span style={{ color: C.tag }}>{tagSeq?.toLowerCase()}</span>
                                 <span style={{ color: C.fwdRC }}>{fwdRCSeq}</span>
                             </div>
                             <div className="text-[10px] text-slate-400 px-1">
@@ -599,7 +620,7 @@ export default function MOLigoPanel(props: MOLigoProps) {
                 )}
 
                 {/* ── Report & Analysis Actions ── */}
-                <div className="mt-8 flex justify-end items-center gap-4">
+                <div className="mt-8 flex justify-end items-center gap-4 flex-wrap">
                     {analysisError && <span className="text-xs text-red-500 font-medium uppercase tracking-tight">{analysisError}</span>}
                     <button
                         onClick={runProductAnalysis}
@@ -620,13 +641,14 @@ export default function MOLigoPanel(props: MOLigoProps) {
                         {isAnalyzing ? 'Analyzing Products...' : 'Analyze Products'}
                     </button>
                     <button
-                        onClick={() => window.print()}
-                        className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-lg font-bold transition-all shadow-md active:scale-95 border border-indigo-500"
+                        id="btn-proceed-design"
+                        onClick={onProceed}
+                        className="flex items-center gap-2 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white px-6 py-2.5 rounded-lg font-bold transition-all shadow-lg shadow-emerald-200/50 dark:shadow-emerald-900/30 active:scale-95 border border-emerald-400"
                     >
                         <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
                         </svg>
-                        Create PDF Report
+                        Proceed with the Design
                     </button>
                     <MOLigoReport {...props} />
                 </div>

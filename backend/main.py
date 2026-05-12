@@ -800,6 +800,188 @@ async def analyze_idt_oligos(request: IdtAnalyzeRequest):
         "pairwise": find_dg_and_raw(hetero)
     }
 
+
+# ────────────────────────────────────────────────────────────────
+# Flanking Primers Design  (ported from Primerool)
+# ────────────────────────────────────────────────────────────────
+class FlankingPrimerParams(BaseModel):
+    # The full raw sequence window as used in QueryViewer
+    full_seq: str
+    # Absolute oligo coordinates in full_seq (0-based, end-exclusive)
+    oligo_start: int   # start of leftmost oligo
+    oligo_end: int     # end   of rightmost oligo
+    # How many bp upstream/downstream of the oligo to include as the design window
+    flank_window: int = 200
+    # Basic Primer3 constraints
+    opt_size: int = 20
+    min_size: int = 18
+    max_size: int = 25
+    opt_tm: float = 62.0
+    min_tm: float = 57.0
+    max_tm: float = 67.0
+    min_gc: float = 20.0
+    max_gc: float = 80.0
+    num_return: int = 5
+    # Thermodynamics (for analyze_primer)
+    mv_conc: float = 50.0
+    dv_conc: float = 1.5
+    dntp_conc: float = 0.2
+    dna_conc: float = 50.0
+
+
+@app.post("/flanking_primers/design")
+async def design_flanking_primers(req: FlankingPrimerParams):
+    try:
+        import primer3
+    except ImportError:
+        raise HTTPException(status_code=500, detail="primer3-py not installed")
+
+    seq = req.full_seq.upper().replace(" ", "").replace("\n", "")
+    n   = len(seq)
+
+    if req.oligo_start < 0 or req.oligo_end > n or req.oligo_start >= req.oligo_end:
+        raise HTTPException(status_code=400, detail="Invalid oligo coordinates")
+
+    # Upstream = left flank  (before oligo_start)
+    up_start = max(0, req.oligo_start - req.flank_window)
+    upstream = seq[up_start:req.oligo_start]
+
+    # Downstream = right flank (after oligo_end)
+    down_end = min(n, req.oligo_end + req.flank_window)
+    downstream = seq[req.oligo_end:down_end]
+
+    therm = {
+        "mv_conc":   req.mv_conc,
+        "dv_conc":   req.dv_conc,
+        "dntp_conc": req.dntp_conc,
+        "dna_conc":  req.dna_conc,
+    }
+
+    p3_global = {
+        "PRIMER_OPT_SIZE":            req.opt_size,
+        "PRIMER_MIN_SIZE":            req.min_size,
+        "PRIMER_MAX_SIZE":            req.max_size,
+        "PRIMER_OPT_TM":              req.opt_tm,
+        "PRIMER_MIN_TM":              req.min_tm,
+        "PRIMER_MAX_TM":              req.max_tm,
+        "PRIMER_MIN_GC":              req.min_gc,
+        "PRIMER_MAX_GC":              req.max_gc,
+        "PRIMER_NUM_RETURN":          req.num_return,
+        "PRIMER_EXPLAIN_FLAG":        1,
+        "PRIMER_PICK_INTERNAL_OLIGO": 0,
+    }
+
+    def _round(x, nd=1):
+        if x is None: return None
+        try: return round(float(x), nd)
+        except: return None
+
+    def _gc(s):
+        s = (s or "").upper()
+        if not s: return 0.0
+        return 100.0 * sum(1 for b in s if b in "GC") / len(s)
+
+    def _analyze(s):
+        kwargs = {k: therm[k] for k in ["mv_conc", "dv_conc", "dntp_conc", "dna_conc"]}
+        try: tm = primer3.bindings.calc_tm(s, **kwargs)
+        except TypeError: tm = primer3.bindings.calc_tm(s)
+        try: hp = primer3.bindings.calc_hairpin(s, **kwargs)
+        except TypeError: hp = primer3.bindings.calc_hairpin(s)
+        try: hd = primer3.bindings.calc_homodimer(s, **kwargs)
+        except TypeError: hd = primer3.bindings.calc_homodimer(s)
+        return {
+            "sequence":   s,
+            "length":     len(s),
+            "gc_percent": _round(_gc(s), 1),
+            "tm":         _round(tm, 1),
+            "hairpin":  {"structure_found": bool(getattr(hp, "structure_found", False)), "tm": _round(getattr(hp, "tm", None), 1), "dg": _round(getattr(hp, "dg", None), 1)},
+            "homodimer":{"structure_found": bool(getattr(hd, "structure_found", False)), "tm": _round(getattr(hd, "tm", None), 1), "dg": _round(getattr(hd, "dg", None), 1)},
+        }
+
+    results = {"forward": {"num_returned": 0, "primers": [], "explain": ""},
+               "reverse": {"num_returned": 0, "primers": [], "explain": ""},
+               "pair_metrics": None}
+
+    # ── FORWARD (Left flank → picks LEFT primer from last flank_window bp) ──
+    if upstream and len(upstream) >= req.min_size:
+        up_args = dict(p3_global)
+        up_args.update({"PRIMER_PICK_LEFT_PRIMER": 1, "PRIMER_PICK_RIGHT_PRIMER": 0,
+                        "PRIMER_PRODUCT_SIZE_RANGE": [[50, 50000]]})
+        up_res = primer3.design_primers(
+            {"SEQUENCE_ID": "upstream", "SEQUENCE_TEMPLATE": upstream,
+             "SEQUENCE_INCLUDED_REGION": [0, len(upstream)]},
+            up_args)
+        n_l = int(up_res.get("PRIMER_LEFT_NUM_RETURNED", 0) or 0)
+        results["forward"]["num_returned"] = n_l
+        results["forward"]["explain"] = up_res.get("PRIMER_LEFT_EXPLAIN", "")
+        for i in range(min(req.num_return, n_l)):
+            s   = up_res.get(f"PRIMER_LEFT_{i}_SEQUENCE")
+            pos = up_res.get(f"PRIMER_LEFT_{i}")
+            a   = _analyze(s)
+            if pos:
+                start, length = int(pos[0]), int(pos[1])
+                # Convert local upstream coords → absolute coords in full_seq
+                abs_start = up_start + start
+                a["interval"] = [abs_start, abs_start + length]
+                a["position"] = [start, length]
+            a["primer3"] = {
+                "tm":         _round(up_res.get(f"PRIMER_LEFT_{i}_TM"), 1),
+                "gc_percent": _round(up_res.get(f"PRIMER_LEFT_{i}_GC_PERCENT"), 1),
+                "self_any":   _round(up_res.get(f"PRIMER_LEFT_{i}_SELF_ANY"), 1),
+                "self_end":   _round(up_res.get(f"PRIMER_LEFT_{i}_SELF_END"), 1),
+                "hairpin_th": _round(up_res.get(f"PRIMER_LEFT_{i}_HAIRPIN_TH"), 1),
+            }
+            results["forward"]["primers"].append(a)
+
+    # ── REVERSE (Right flank → picks RIGHT primer from first flank_window bp) ──
+    if downstream and len(downstream) >= req.min_size:
+        down_args = dict(p3_global)
+        down_args.update({"PRIMER_PICK_LEFT_PRIMER": 0, "PRIMER_PICK_RIGHT_PRIMER": 1,
+                          "PRIMER_PRODUCT_SIZE_RANGE": [[50, 50000]]})
+        down_res = primer3.design_primers(
+            {"SEQUENCE_ID": "downstream", "SEQUENCE_TEMPLATE": downstream,
+             "SEQUENCE_INCLUDED_REGION": [0, len(downstream)]},
+            down_args)
+        n_r = int(down_res.get("PRIMER_RIGHT_NUM_RETURNED", 0) or 0)
+        results["reverse"]["num_returned"] = n_r
+        results["reverse"]["explain"] = down_res.get("PRIMER_RIGHT_EXPLAIN", "")
+        for i in range(min(req.num_return, n_r)):
+            s   = down_res.get(f"PRIMER_RIGHT_{i}_SEQUENCE")
+            pos = down_res.get(f"PRIMER_RIGHT_{i}")
+            a   = _analyze(s)
+            if pos:
+                right_end, length = int(pos[0]), int(pos[1])
+                local_start = right_end - length + 1
+                abs_start = req.oligo_end + local_start
+                a["interval"] = [abs_start, abs_start + length]
+                a["position"] = [local_start, length]
+            a["primer3"] = {
+                "tm":         _round(down_res.get(f"PRIMER_RIGHT_{i}_TM"), 1),
+                "gc_percent": _round(down_res.get(f"PRIMER_RIGHT_{i}_GC_PERCENT"), 1),
+                "self_any":   _round(down_res.get(f"PRIMER_RIGHT_{i}_SELF_ANY"), 1),
+                "self_end":   _round(down_res.get(f"PRIMER_RIGHT_{i}_SELF_END"), 1),
+                "hairpin_th": _round(down_res.get(f"PRIMER_RIGHT_{i}_HAIRPIN_TH"), 1),
+            }
+            results["reverse"]["primers"].append(a)
+
+    # ── Pair heterodimer QC ──
+    if results["forward"]["primers"] and results["reverse"]["primers"]:
+        f0 = results["forward"]["primers"][0]["sequence"]
+        r0 = results["reverse"]["primers"][0]["sequence"]
+        kwargs = {k: therm[k] for k in ["mv_conc", "dv_conc", "dntp_conc", "dna_conc"]}
+        try: het = primer3.bindings.calc_heterodimer(f0, r0, **kwargs)
+        except TypeError: het = primer3.bindings.calc_heterodimer(f0, r0)
+        results["pair_metrics"] = {
+            "heterodimer": {
+                "structure_found": bool(getattr(het, "structure_found", False)),
+                "tm": _round(getattr(het, "tm", None), 1),
+                "dg": _round(getattr(het, "dg", None), 1),
+            }
+        }
+
+    return results
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("backend.main:app", host="0.0.0.0", port=8000, reload=True)

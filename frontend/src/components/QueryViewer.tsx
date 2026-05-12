@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import MOLigoPanel from './MOLigoPanel';
+import FlankingPrimersPanel from './FlankingPrimersPanel';
 import HairpinSVG from './HairpinSVG';
 import DimerSVG from './DimerSVG';
 
@@ -17,6 +18,12 @@ interface QueryViewerProps {
         password?: string;
         mgConc?: number;
     };
+    // MSA Viewer props — forwarded to FlankingPrimersPanel
+    alignment?: string;
+    onVisibleQueryChange?: (data: { id: string; seq: string; start: number; end: number }) => void;
+    navigateTarget?: { colStart: number; colEnd: number; ts: number } | null;
+    isDarkMode?: boolean;
+    onOligoRegionSelect?: (startCol: number, endCol: number) => void;
 }
 
 interface IdtData {
@@ -60,7 +67,7 @@ interface SavedPosition {
     moligo1Len: number; moligo2Len: number;
 }
 
-export default function QueryViewer({ data, jobName, onPrimersUpdate, onNavigateTo, oligoRegion, idtCredentials }: QueryViewerProps) {
+export default function QueryViewer({ data, jobName, onPrimersUpdate, onNavigateTo, oligoRegion, idtCredentials, alignment, onVisibleQueryChange, navigateTarget, isDarkMode, onOligoRegionSelect }: QueryViewerProps) {
     const [copyFeedback, setCopyFeedback] = useState('');
 
     // IDT Analysis State
@@ -147,6 +154,8 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, onNavigate
     const [editingLabelText, setEditingLabelText] = useState('');
     const [pinPulse, setPinPulse] = useState(false);
     const [isSavedPosOpen, setIsSavedPosOpen] = useState(true);
+    const [showFlankingPrimers, setShowFlankingPrimers] = useState(false);
+    const [flankingCopyFeedback, setFlankingCopyFeedback] = useState('');
 
     // Fix Position toggle — when set, fetchPrimers is bypassed and oligos stick to global absolute coordinates
     const [fixedAbsCoords, setFixedAbsCoords] = useState<{
@@ -177,10 +186,33 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, onNavigate
     };
 
     const handleCopy = (text: string) => {
-        navigator.clipboard.writeText(text).then(() => {
-            setCopyFeedback('Copied!');
+        const doFallback = () => {
+            const el = document.createElement('textarea');
+            el.value = text;
+            el.style.position = 'fixed';
+            el.style.left = '-9999px';
+            el.style.top = '-9999px';
+            document.body.appendChild(el);
+            el.focus();
+            el.select();
+            try {
+                document.execCommand('copy');
+                setCopyFeedback('Copied!');
+            } catch {
+                setCopyFeedback('Copy failed');
+            }
+            document.body.removeChild(el);
             setTimeout(() => setCopyFeedback(''), 2000);
-        });
+        };
+
+        if (navigator.clipboard && window.isSecureContext) {
+            navigator.clipboard.writeText(text).then(() => {
+                setCopyFeedback('Copied!');
+                setTimeout(() => setCopyFeedback(''), 2000);
+            }).catch(() => doFallback());
+        } else {
+            doFallback();
+        }
     };
 
     // ── Saved Positions helpers ───────────────────────────────────────────
@@ -963,6 +995,7 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, onNavigate
     };
 
     return (
+        <>
         <div className="mt-6 border border-slate-200 dark:border-slate-700 rounded-xl shadow-sm overflow-hidden bg-white dark:bg-slate-800 transition-all">
             <div className="px-5 py-3 bg-gradient-to-r from-slate-50 to-indigo-50/50 dark:from-slate-800 dark:to-indigo-900/20 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between flex-wrap gap-2">
                 <div className="flex items-center gap-3 flex-wrap">
@@ -1619,12 +1652,70 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, onNavigate
                             onTagChange={setTagSeq}
                             onFwdChange={setFwdPrimer}
                             onRevChange={setRevPrimer}
+                            onProceed={() => {
+                                setShowFlankingPrimers(true);
+                                setTimeout(() => {
+                                    document.getElementById('flanking-primers-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                                }, 100);
+                            }}
                             idtCredentials={idtCredentials}
                             idtAdvancedParams={idtAdvancedParams}
                         />
                     </div>
                 )}
             </div>
-        </div >
+        </div>
+
+        {/* ── Flanking Primers Provenance (shown on Proceed) — separate top-level card ── */}
+        {showFlankingPrimers && primers && (
+            <div
+                id="flanking-primers-section"
+                className="mt-8 border border-slate-200 dark:border-slate-700 rounded-2xl overflow-hidden shadow-sm animate-in fade-in slide-in-from-bottom-4 duration-500"
+            >
+                {/* Header */}
+                <div className="flex items-center justify-between px-5 py-3 bg-slate-50 dark:bg-slate-900/60 border-b border-slate-200 dark:border-slate-700">
+                    <div className="flex items-center gap-2">
+                        <svg className="w-4 h-4 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
+                        </svg>
+                        <span className="text-sm font-bold text-slate-500 uppercase tracking-widest">Flanking Primers Provenance</span>
+                    </div>
+                    <button onClick={() => setShowFlankingPrimers(false)}
+                        className="text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 px-2 py-1 rounded hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors">
+                        ✕ Close
+                    </button>
+                </div>
+
+                <FlankingPrimersPanel
+                    rawSeq={rawSeq}
+                    oligoStart={Math.min(primers.p1.start, primers.p2.start)}
+                    oligoEnd={Math.max(primers.p1.end, primers.p2.end)}
+                    p1Start={primers.p1.start}
+                    p1End={primers.p1.end}
+                    p2Start={primers.p2.start}
+                    p2End={primers.p2.end}
+                    alignment={alignment}
+                    oligoPrimers={primers}
+                    onVisibleQueryChange={onVisibleQueryChange}
+                    navigateTarget={navigateTarget}
+                    isDarkMode={isDarkMode}
+                    onOligoRegionSelect={onOligoRegionSelect}
+                />
+                <div className="px-5 py-4 bg-slate-50 dark:bg-slate-900/60 border-t border-slate-200 dark:border-slate-700 flex justify-end mt-4">
+                    <button
+                        onClick={() => window.print()}
+                        className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2.5 rounded-lg font-bold transition-all shadow-md active:scale-95 border border-indigo-500"
+                    >
+                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                        </svg>
+                        Create PDF Report
+                    </button>
+                </div>
+            </div>
+        )}
+        </>
     );
 }
+
+

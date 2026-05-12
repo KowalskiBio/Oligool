@@ -30,6 +30,8 @@ interface MSAViewerProps {
     onVisibleQueryChange?: (data: { id: string; seq: string; start: number; end: number }) => void;
     jobName?: string;
     primers?: { p1: { start: number, end: number }, p2: { start: number, end: number } } | null;
+    /** Flanking primers designed in the lower panel — drawn as distinct bars in the minimap */
+    flankingPrimers?: { fwd: { start: number; end: number } | null; rev: { start: number; end: number } | null } | null;
     isDarkMode?: boolean;
     /** When set, MSA will zoom/pan to show these global gapped column indices */
     navigateTarget?: { colStart: number; colEnd: number; ts: number } | null;
@@ -54,7 +56,7 @@ const MINIMAP_HEIGHT = MINIMAP_GC_H + MINIMAP_RULER_H + 50 + MINIMAP_HANDLE_H;
 const MAIN_GC_TRACK_H = 40;
 const MAIN_MSA_TRACK_H = 30;
 
-const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, primers, isDarkMode, navigateTarget, onOligoRegionSelect }) => {
+const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, primers, flankingPrimers, isDarkMode, navigateTarget, onOligoRegionSelect }) => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const hoverOverlayRef = useRef<HTMLCanvasElement>(null);
     const minimapRef = useRef<HTMLCanvasElement>(null);
@@ -550,11 +552,29 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
             ctx.fillRect(p2x, mmRulerY + mmRulerH - 4, p2w, 4);
         }
 
+        // Flanking primers (designed in lower panel) — drawn above the oligo bars
+        if (flankingPrimers) {
+            const mmRulerY = MINIMAP_GC_H;
+            const mmRulerH = MINIMAP_RULER_H;
+            if (flankingPrimers.fwd) {
+                const fx = MINIMAP_LABEL_W + (flankingPrimers.fwd.start / seqLen) * mmSeqW;
+                const fw = Math.max(2, ((flankingPrimers.fwd.end - flankingPrimers.fwd.start) / seqLen) * mmSeqW);
+                ctx.fillStyle = '#10b981'; // emerald-500
+                ctx.fillRect(fx, mmRulerY, fw, 3);
+            }
+            if (flankingPrimers.rev) {
+                const rx = MINIMAP_LABEL_W + (flankingPrimers.rev.start / seqLen) * mmSeqW;
+                const rw = Math.max(2, ((flankingPrimers.rev.end - flankingPrimers.rev.start) / seqLen) * mmSeqW);
+                ctx.fillStyle = '#14b8a6'; // teal-500
+                ctx.fillRect(rx, mmRulerY, rw, 3);
+            }
+        }
+
         ctx.fillStyle = isDark ? '#334155' : '#cbd5e1';
         ctx.fillRect(MINIMAP_LABEL_W - 1, 0, 1, MINIMAP_HEIGHT);
 
         staticMinimapDrawnRef.current = true;
-    }, [sequences, querySeq, seqLen, availableWidth, gcContent, primers, isDark]);
+    }, [sequences, querySeq, seqLen, availableWidth, gcContent, primers, flankingPrimers, isDark]);
 
     const drawMinimap = useCallback(() => {
         const cvs = minimapRef.current;
@@ -871,13 +891,19 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
                         bg = isDark ? '#1e293b' : '#f3f4f6';
                         fg = isDark ? '#cbd5e1' : '#374151';
 
-                        if (isQuery && primers) {
-                            if (col >= primers.p1.start && col < primers.p1.end) {
-                                bg = isDark ? '#064e3b' : '#bbf7d0';
-                                fg = isDark ? '#6ee7b7' : '#14532d';
-                            } else if (col >= primers.p2.start && col < primers.p2.end) {
-                                bg = isDark ? '#78350f' : '#fef3c7';
-                                fg = isDark ? '#fcd34d' : '#92400e';
+                        if (isQuery) {
+                            if (primers && col >= primers.p1.start && col < primers.p1.end) {
+                                bg = isDark ? '#065f46' : '#86efac';
+                                fg = isDark ? '#a7f3d0' : '#064e3b';
+                            } else if (primers && col >= primers.p2.start && col < primers.p2.end) {
+                                bg = isDark ? '#92400e' : '#fde047';
+                                fg = isDark ? '#fef3c7' : '#78350f';
+                            } else if (flankingPrimers?.fwd && col >= flankingPrimers.fwd.start && col < flankingPrimers.fwd.end) {
+                                bg = isDark ? '#047857' : '#34d399';
+                                fg = isDark ? '#d1fae5' : '#022c22';
+                            } else if (flankingPrimers?.rev && col >= flankingPrimers.rev.start && col < flankingPrimers.rev.end) {
+                                bg = isDark ? '#0f766e' : '#2dd4bf';
+                                fg = isDark ? '#ccfbf1' : '#042f2e';
                             }
                         }
                     }
@@ -920,12 +946,18 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
                     } else if (!isQuery && ch !== '-' && ch !== qch && qch !== '-') {
                         ctx.fillStyle = '#dc2626';
                         ctx.fillRect(x, y + 2, barW, ROW_HEIGHT - 4);
-                    } else if (isQuery && primers && ch !== '-') {
-                        if (col >= primers.p1.start && col < primers.p1.end) {
+                    } else if (isQuery && ch !== '-') {
+                        if (primers && col >= primers.p1.start && col < primers.p1.end) {
                             ctx.fillStyle = '#22c55e';
                             ctx.fillRect(x, y + 2, barW, ROW_HEIGHT - 4);
-                        } else if (col >= primers.p2.start && col < primers.p2.end) {
+                        } else if (primers && col >= primers.p2.start && col < primers.p2.end) {
                             ctx.fillStyle = '#facc15';
+                            ctx.fillRect(x, y + 2, barW, ROW_HEIGHT - 4);
+                        } else if (flankingPrimers?.fwd && col >= flankingPrimers.fwd.start && col < flankingPrimers.fwd.end) {
+                            ctx.fillStyle = '#10b981';
+                            ctx.fillRect(x, y + 2, barW, ROW_HEIGHT - 4);
+                        } else if (flankingPrimers?.rev && col >= flankingPrimers.rev.start && col < flankingPrimers.rev.end) {
+                            ctx.fillStyle = '#14b8a6';
                             ctx.fillRect(x, y + 2, barW, ROW_HEIGHT - 4);
                         }
                     }
@@ -1085,6 +1117,43 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
             ctx.fillRect(p2x, rulerY + RULER_HEIGHT - 4, p2w, 4);
         }
 
+        /* ── Flanking primer markers in main ruler ── */
+        if (flankingPrimers) {
+            if (flankingPrimers.fwd) {
+                const fx = labelWidth + flankingPrimers.fwd.start * cellW - scrollLeft;
+                const fw = Math.max(3, (flankingPrimers.fwd.end - flankingPrimers.fwd.start) * cellW);
+                ctx.fillStyle = 'rgba(16, 185, 129, 0.25)'; // emerald fill
+                ctx.fillRect(fx, rulerY, fw, RULER_HEIGHT - 4);
+                ctx.fillStyle = '#10b981';
+                ctx.fillRect(fx, rulerY, fw, 3); // top stripe
+                ctx.fillRect(fx, rulerY + RULER_HEIGHT - 7, fw, 3); // bottom stripe
+                // label
+                if (fw > 20) {
+                    ctx.fillStyle = '#059669';
+                    ctx.font = 'bold 8px ui-monospace, SFMono-Regular, monospace';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText('FWD', fx + fw / 2, rulerY + RULER_HEIGHT / 2);
+                }
+            }
+            if (flankingPrimers.rev) {
+                const rx = labelWidth + flankingPrimers.rev.start * cellW - scrollLeft;
+                const rw = Math.max(3, (flankingPrimers.rev.end - flankingPrimers.rev.start) * cellW);
+                ctx.fillStyle = 'rgba(20, 184, 166, 0.25)'; // teal fill
+                ctx.fillRect(rx, rulerY, rw, RULER_HEIGHT - 4);
+                ctx.fillStyle = '#14b8a6';
+                ctx.fillRect(rx, rulerY, rw, 3);
+                ctx.fillRect(rx, rulerY + RULER_HEIGHT - 7, rw, 3);
+                if (rw > 20) {
+                    ctx.fillStyle = '#0d9488';
+                    ctx.font = 'bold 8px ui-monospace, SFMono-Regular, monospace';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText('REV', rx + rw / 2, rulerY + RULER_HEIGHT / 2);
+                }
+            }
+        }
+
         ctx.restore(); /* end clip */
 
         /* ── labels (drawn OUTSIDE clip so they're never obscured) ── */
@@ -1149,7 +1218,7 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
             hoverCvs.style.width = `${availableWidth}px`;
             hoverCvs.style.height = `${canvasH}px`;
         }
-    }, [sequences, querySeq, scrollLeft, scrollTop, cellW, seqAreaW, availableWidth, totalH, seqLen, viewMode, primers, gcContent, isDarkMode, oligoSelection]);
+    }, [sequences, querySeq, scrollLeft, scrollTop, cellW, seqAreaW, availableWidth, totalH, seqLen, viewMode, primers, flankingPrimers, gcContent, isDarkMode, oligoSelection]);
 
     /* ── lightweight hover overlay (draws only a thin line) ── */
     const drawHoverOverlay = useCallback(() => {

@@ -606,32 +606,58 @@ function App() {
             </div>
           </div>
 
-          {/* Loading states */}
-          {step === 'blasting' && (
-            <div className="bg-white dark:bg-slate-800 shadow-sm rounded-xl border border-slate-200 dark:border-slate-700 p-8 mb-6 text-center">
-              <div className="inline-block animate-spin rounded-full h-8 w-8 border-2 border-indigo-600 border-t-transparent mb-3"></div>
-              <p className="text-slate-600 dark:text-slate-400 font-medium text-lg">Processing Pipeline...</p>
-
-              {/* Progress UI */}
-              <div className="w-full max-w-md mx-auto mt-6 bg-slate-200 dark:bg-slate-700 rounded-full h-2.5 overflow-hidden">
-                <div
-                  className="bg-indigo-600 h-2.5 transition-all duration-1000 ease-linear rounded-full"
-                  style={{ width: `${Math.min((elapsedSeconds / 60) * 100, 100)}%` }}
-                ></div>
-              </div>
-              <div className="mt-2 text-sm font-mono text-indigo-600 dark:text-indigo-400 font-semibold">
-                {Math.floor(elapsedSeconds / 60)}:{(elapsedSeconds % 60).toString().padStart(2, '0')} elapsed
+          {/* Loading states (Foreshadowing Blueprint) */}
+          {(step === 'blasting' || step === 'aligning') && (
+            <div className="space-y-6 animate-pulse duration-1000 mt-8">
+              {/* Status Indicator */}
+              <div className="flex flex-col items-center justify-center gap-2 mb-8">
+                <div className="flex items-center gap-3 text-slate-500 dark:text-slate-400 font-mono text-sm">
+                  <div className={`w-5 h-5 border-2 ${step === 'blasting' ? 'border-indigo-500' : 'border-purple-500'} border-t-transparent rounded-full animate-spin`}></div>
+                  {step === 'blasting' ? 'Running BLAST search and collecting homologs...' : 'Finalizing MAFFT alignment...'}
+                  <span className="font-semibold text-indigo-500 ml-2">
+                    {Math.floor(elapsedSeconds / 60)}:{(elapsedSeconds % 60).toString().padStart(2, '0')} elapsed
+                  </span>
+                </div>
+                <p className="text-xs text-slate-400 dark:text-slate-500">This may take 1-2 minutes depending on sequence count. Preparing environment...</p>
               </div>
 
-              <p className="text-sm text-slate-400 dark:text-slate-500 mt-4">Running BLAST search against NCBI and performing MAFFT alignment.</p>
-              <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">This may take 1-2 minutes depending on sequence count.</p>
-            </div>
-          )}
+              {/* MSA Viewer Blueprint */}
+              <div className="border border-slate-200 dark:border-slate-700/50 rounded-xl overflow-hidden shadow-sm bg-white dark:bg-slate-800 opacity-60 pointer-events-none">
+                <div className="h-14 bg-slate-50 dark:bg-slate-900/40 border-b border-slate-200 dark:border-slate-700/50 flex items-center px-4 gap-4">
+                  <div className="h-4 w-32 bg-slate-200 dark:bg-slate-700 rounded"></div>
+                  <div className="h-4 w-24 bg-slate-200 dark:bg-slate-700 rounded"></div>
+                </div>
+                <div className="h-10 border-b border-slate-200 dark:border-slate-700/50 bg-slate-50/50 dark:bg-slate-800/50 flex items-center px-4">
+                  <div className="h-2 w-full bg-slate-200 dark:bg-slate-700 rounded opacity-50"></div>
+                </div>
+                <div className="p-4 space-y-3 bg-white dark:bg-slate-800">
+                  <div className="flex gap-4"><div className="w-24 h-4 bg-slate-200 dark:bg-slate-700 rounded"></div><div className="flex-1 h-4 bg-slate-100 dark:bg-slate-700/50 rounded"></div></div>
+                  <div className="flex gap-4"><div className="w-24 h-4 bg-slate-200 dark:bg-slate-700 rounded"></div><div className="flex-1 h-4 bg-slate-100 dark:bg-slate-700/50 rounded"></div></div>
+                  <div className="flex gap-4"><div className="w-24 h-4 bg-slate-200 dark:bg-slate-700 rounded"></div><div className="flex-1 h-4 bg-slate-100 dark:bg-slate-700/50 rounded"></div></div>
+                  <div className="flex gap-4"><div className="w-24 h-4 bg-slate-200 dark:bg-slate-700 rounded"></div><div className="flex-1 h-4 bg-slate-100 dark:bg-slate-700/50 rounded"></div></div>
+                  <div className="flex gap-4"><div className="w-24 h-4 bg-slate-200 dark:bg-slate-700 rounded"></div><div className="flex-1 h-4 bg-slate-100 dark:bg-slate-700/50 rounded"></div></div>
+                </div>
+              </div>
 
-          {step === 'aligning' && (
-            <div className="bg-white dark:bg-slate-800 shadow-sm rounded-xl border border-slate-200 dark:border-slate-700 p-8 mb-6 text-center">
-              <div className="inline-block animate-spin rounded-full h-8 w-8 border-2 border-purple-600 border-t-transparent mb-3"></div>
-              <p className="text-slate-600 dark:text-slate-400 font-medium">Finalizing alignment format...</p>
+              {/* Provenance Blueprint */}
+              <div className="border border-slate-200 dark:border-slate-700/50 rounded-xl overflow-hidden shadow-sm bg-white dark:bg-slate-800 opacity-40 mt-6 pointer-events-none">
+                <div className="h-14 bg-gradient-to-r from-slate-50 to-indigo-50/30 dark:from-slate-800 dark:to-indigo-900/10 border-b border-slate-200 dark:border-slate-700/50 px-5 flex items-center justify-between">
+                  <div className="h-5 w-48 bg-slate-200 dark:bg-slate-700 rounded"></div>
+                  <div className="h-4 w-24 bg-slate-200 dark:bg-slate-700 rounded"></div>
+                </div>
+                <div className="p-5 flex flex-col md:flex-row gap-6">
+                  <div className="flex-1 space-y-4">
+                    <div className="h-32 bg-slate-100 dark:bg-slate-700/50 rounded-lg border border-slate-200 dark:border-slate-700/50"></div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="h-12 bg-slate-100 dark:bg-slate-700/50 rounded-lg border border-slate-200 dark:border-slate-700/50"></div>
+                      <div className="h-12 bg-slate-100 dark:bg-slate-700/50 rounded-lg border border-slate-200 dark:border-slate-700/50"></div>
+                    </div>
+                  </div>
+                  <div className="w-full md:w-64 space-y-4">
+                    <div className="h-40 bg-slate-100 dark:bg-slate-700/50 rounded-lg border border-slate-200 dark:border-slate-700/50"></div>
+                  </div>
+                </div>
+              </div>
             </div>
           )}
 
@@ -709,6 +735,11 @@ function App() {
                     password: idtPassword,
                     mgConc: parseFloat(idtMgConc) || 0
                   }}
+                  alignment={alignment}
+                  onVisibleQueryChange={setSelectedSequence}
+                  navigateTarget={navigateTarget}
+                  isDarkMode={isDarkMode}
+                  onOligoRegionSelect={(startCol, endCol) => setOligoRegion({ startCol, endCol })}
                 />
               )}
             </>
