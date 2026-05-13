@@ -555,7 +555,6 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
         // Flanking primers (designed in lower panel) — drawn above the oligo bars
         if (flankingPrimers) {
             const mmRulerY = MINIMAP_GC_H;
-            const mmRulerH = MINIMAP_RULER_H;
             if (flankingPrimers.fwd) {
                 const fx = MINIMAP_LABEL_W + (flankingPrimers.fwd.start / seqLen) * mmSeqW;
                 const fw = Math.max(2, ((flankingPrimers.fwd.end - flankingPrimers.fwd.start) / seqLen) * mmSeqW);

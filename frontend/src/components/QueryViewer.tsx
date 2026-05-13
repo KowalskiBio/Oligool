@@ -155,7 +155,7 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, onNavigate
     const [pinPulse, setPinPulse] = useState(false);
     const [isSavedPosOpen, setIsSavedPosOpen] = useState(true);
     const [showFlankingPrimers, setShowFlankingPrimers] = useState(false);
-    const [flankingCopyFeedback, setFlankingCopyFeedback] = useState('');
+
 
     // Fix Position toggle — when set, fetchPrimers is bypassed and oligos stick to global absolute coordinates
     const [fixedAbsCoords, setFixedAbsCoords] = useState<{
