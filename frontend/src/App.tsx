@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import MSAViewer from './components/MSAViewer';
 import QueryViewer from './components/QueryViewer';
 import BlastResults from './components/BlastResults';
+import RabbitGame from './components/RabbitGame';
 
 type Step = 'input' | 'blasting' | 'aligning' | 'done';
 
@@ -620,6 +621,8 @@ function App() {
                 </div>
                 <p className="text-xs text-slate-400 dark:text-slate-500">This may take 1-2 minutes depending on sequence count. Preparing environment...</p>
               </div>
+
+              <div className="[animation:none]"><RabbitGame /></div>
 
               {/* MSA Viewer Blueprint */}
               <div className="border border-slate-200 dark:border-slate-700/50 rounded-xl overflow-hidden shadow-sm bg-white dark:bg-slate-800 opacity-60 pointer-events-none">
