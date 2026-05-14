@@ -87,58 +87,9 @@ export default function MOLigoPanel(props: MOLigoProps) {
         }
     };
 
-    // Product Analysis State
-    const [isAnalyzing, setIsAnalyzing] = useState(false);
-    const [idtResults, setIdtResults] = useState<any>(null);
-    const [analysisError, setAnalysisError] = useState<string | null>(null);
-
     const fwdRCSeq = reverseComplement(fwdPrimer || "");
     const fullOligo2 = (revPrimer || "") + moligo2Seq;
     const fullOligo1 = moligo1Seq + (tagSeq || "") + fwdRCSeq;
-
-    const runProductAnalysis = async () => {
-        if (!idtCredentials) {
-            setAnalysisError("IDT Credentials not found. Please set them in settings.");
-            return;
-        }
-        setIsAnalyzing(true);
-        setAnalysisError(null);
-        try {
-            const tRes = await fetch(((import.meta.env.VITE_API_BASE as string) || "") + '/idt/token', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    client_id: idtCredentials.clientId,
-                    client_secret: idtCredentials.clientSecret,
-                    username: idtCredentials.username,
-                    password: idtCredentials.password
-                })
-            });
-            if (!tRes.ok) throw new Error("IDT Auth Failed");
-            const { access_token } = await tRes.json();
-
-            const aRes = await fetch(((import.meta.env.VITE_API_BASE as string) || "") + '/idt/analyze', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    p1_seq: fullOligo1,
-                    p2_seq: fullOligo2,
-                    token: access_token,
-                    mg_conc: idtAdvancedParams?.mg_conc ?? 10.0,
-                    mv_conc: idtAdvancedParams?.mv_conc ?? 50.0,
-                    dntp_conc: idtAdvancedParams?.dntp_conc ?? 0.8,
-                    oligo_conc: idtAdvancedParams?.oligo_conc ?? 0.25
-                })
-            });
-            if (!aRes.ok) throw new Error("Product Analysis Failed");
-            const results = await aRes.json();
-            setIdtResults(results);
-        } catch (err: any) {
-            setAnalysisError(err.message);
-        } finally {
-            setIsAnalyzing(false);
-        }
-    };
 
     const getIdtStatusColor = (dg: number | undefined) => {
         if (dg === undefined || dg === null) return 'text-slate-400';
@@ -611,43 +562,15 @@ export default function MOLigoPanel(props: MOLigoProps) {
                     </div>
                 </div>
 
-                {idtResults && (
-                    <div className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                        {renderResultCard("Oligo 2 Stability (RevP+M2)", idtResults.m2.hairpin)}
-                        {renderResultCard("Oligo 1 Stability (M1+TAG+RC-FwdP)", idtResults.m1.hairpin)}
-                        {renderResultCard("HeteroDimer Pairwise", idtResults.pairwise)}
-                    </div>
-                )}
+
 
                 {/* ── Report & Analysis Actions ── */}
-                <div className="mt-8 flex justify-end items-center gap-4 flex-wrap">
-                    {analysisError && <span className="text-xs text-red-500 font-medium uppercase tracking-tight">{analysisError}</span>}
-                    <button
-                        onClick={runProductAnalysis}
-                        disabled={isAnalyzing}
-                        className={`flex items-center gap-2 px-5 py-2.5 rounded-lg font-bold transition-all shadow-md active:scale-95 border ${
-                            isAnalyzing 
-                            ? 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed' 
-                            : 'bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300'
-                        }`}
-                    >
-                        {isAnalyzing ? (
-                            <div className="w-4 h-4 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
-                        ) : (
-                            <svg className="w-5 h-5 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-                            </svg>
-                        )}
-                        {isAnalyzing ? 'Analyzing Products...' : 'Analyze Products'}
-                    </button>
+                <div className="mt-8 mb-6 flex justify-center items-center gap-4 flex-wrap">
                     <button
                         id="btn-proceed-design"
                         onClick={onProceed}
                         className="flex items-center gap-2 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white px-6 py-2.5 rounded-lg font-bold transition-all shadow-lg shadow-emerald-200/50 dark:shadow-emerald-900/30 active:scale-95 border border-emerald-400"
                     >
-                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
-                        </svg>
                         Proceed with the Design
                     </button>
                     <MOLigoReport {...props} />

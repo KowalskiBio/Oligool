@@ -1700,6 +1700,8 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, onNavigate
                     navigateTarget={navigateTarget}
                     isDarkMode={isDarkMode}
                     onOligoRegionSelect={onOligoRegionSelect}
+                    idtCredentials={idtCredentials}
+                    idtAdvancedParams={idtAdvancedParams}
                 />
                 <div className="px-5 py-4 bg-slate-50 dark:bg-slate-900/60 border-t border-slate-200 dark:border-slate-700 flex justify-end mt-4">
                     <button

@@ -205,7 +205,7 @@ class MoligizeRequest(BaseModel):
     salt_mono: Optional[float] = 50.0
     salt_div: Optional[float] = 10.0
     dntp_conc: Optional[float] = 0.8
-    dna_conc: Optional[float] = 200.0
+    dna_conc: Optional[float] = 400.0
     # Search behavior
     auto_search: bool = False # If true, finds best spot initially
     local_optimize: bool = False # If true, finds best length for CURRENT shift
@@ -470,7 +470,7 @@ class IdtAnalyzeRequest(BaseModel):
     mg_conc: float = 10.0
     mv_conc: float = 50.0
     dntp_conc: float = 0.8
-    oligo_conc: float = 0.25
+    oligo_conc: float = 0.2
 
 
 @app.post("/idt/token")
@@ -824,9 +824,15 @@ class FlankingPrimerParams(BaseModel):
     num_return: int = 5
     # Thermodynamics (for analyze_primer)
     mv_conc: float = 50.0
-    dv_conc: float = 1.5
-    dntp_conc: float = 0.2
-    dna_conc: float = 50.0
+    dv_conc: float = 3
+    dntp_conc: float = 0.8
+    dna_conc: float = 400.0
+    
+    # Manual Regions (Optional)
+    manual_left_start: Optional[int] = None
+    manual_left_end: Optional[int] = None
+    manual_right_start: Optional[int] = None
+    manual_right_end: Optional[int] = None
 
 
 @app.post("/flanking_primers/design")
@@ -842,13 +848,23 @@ async def design_flanking_primers(req: FlankingPrimerParams):
     if req.oligo_start < 0 or req.oligo_end > n or req.oligo_start >= req.oligo_end:
         raise HTTPException(status_code=400, detail="Invalid oligo coordinates")
 
-    # Upstream = left flank  (before oligo_start)
-    up_start = max(0, req.oligo_start - req.flank_window)
-    upstream = seq[up_start:req.oligo_start]
+    # Upstream = left flank
+    if req.manual_left_start is not None and req.manual_left_end is not None:
+        up_start = req.manual_left_start
+        up_end = req.manual_left_end
+    else:
+        up_start = max(0, req.oligo_start - req.flank_window)
+        up_end = req.oligo_start
+    upstream = seq[up_start:up_end]
 
-    # Downstream = right flank (after oligo_end)
-    down_end = min(n, req.oligo_end + req.flank_window)
-    downstream = seq[req.oligo_end:down_end]
+    # Downstream = right flank
+    if req.manual_right_start is not None and req.manual_right_end is not None:
+        down_start = req.manual_right_start
+        down_end = req.manual_right_end
+    else:
+        down_start = req.oligo_end
+        down_end = min(n, req.oligo_end + req.flank_window)
+    downstream = seq[down_start:down_end]
 
     therm = {
         "mv_conc":   req.mv_conc,
@@ -885,17 +901,17 @@ async def design_flanking_primers(req: FlankingPrimerParams):
         kwargs = {k: therm[k] for k in ["mv_conc", "dv_conc", "dntp_conc", "dna_conc"]}
         try: tm = primer3.bindings.calc_tm(s, **kwargs)
         except TypeError: tm = primer3.bindings.calc_tm(s)
-        try: hp = primer3.bindings.calc_hairpin(s, **kwargs)
+        try: hp = primer3.bindings.calc_hairpin(s, temp_c=25.0, **kwargs)
         except TypeError: hp = primer3.bindings.calc_hairpin(s)
-        try: hd = primer3.bindings.calc_homodimer(s, **kwargs)
+        try: hd = primer3.bindings.calc_homodimer(s, temp_c=25.0, **kwargs)
         except TypeError: hd = primer3.bindings.calc_homodimer(s)
         return {
             "sequence":   s,
             "length":     len(s),
             "gc_percent": _round(_gc(s), 1),
             "tm":         _round(tm, 1),
-            "hairpin":  {"structure_found": bool(getattr(hp, "structure_found", False)), "tm": _round(getattr(hp, "tm", None), 1), "dg": _round(getattr(hp, "dg", None), 1)},
-            "homodimer":{"structure_found": bool(getattr(hd, "structure_found", False)), "tm": _round(getattr(hd, "tm", None), 1), "dg": _round(getattr(hd, "dg", None), 1)},
+            "hairpin":  {"structure_found": bool(getattr(hp, "structure_found", False)), "tm": _round(getattr(hp, "tm", None), 1), "dg": _round((getattr(hp, "dg", None) or 0) / 1000, 2)},
+            "homodimer":{"structure_found": bool(getattr(hd, "structure_found", False)), "tm": _round(getattr(hd, "tm", None), 1), "dg": _round((getattr(hd, "dg", None) or 0) / 1000, 2)},
         }
 
     results = {"forward": {"num_returned": 0, "primers": [], "explain": ""},
@@ -952,7 +968,7 @@ async def design_flanking_primers(req: FlankingPrimerParams):
             if pos:
                 right_end, length = int(pos[0]), int(pos[1])
                 local_start = right_end - length + 1
-                abs_start = req.oligo_end + local_start
+                abs_start = down_start + local_start
                 a["interval"] = [abs_start, abs_start + length]
                 a["position"] = [local_start, length]
             a["primer3"] = {

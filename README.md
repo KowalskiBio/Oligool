@@ -21,6 +21,11 @@ Oligool is a native desktop application for molecular biologists designed to str
 - **🔡 Seq Mode**: Toggle high-detail view to see base-by-base lettering along the schematic's architecture.
 - **Persistence**: Your TAGs, PBS sequences, and design preferences are remembered automatically.
 
+### 5. Flanking Primers Pipeline
+- **Automated Design**: Integrates with Primer3 for precise generation of flanking primers upstream and downstream of your MOLigo targets based on user-defined thermodynamic parameters.
+- **Manual Mode Bypass**: Allows explicit highlighted selection directly within the sequence viewer to instantly test specific primer regions, bypassing Primer3 algorithms.
+- **Per-Primer QC Diagnostics**: Triggers granular, on-demand IDT structural analysis (hairpins, self-dimers, and pairwise heterodimers) for each individual primer candidate directly within the UI, ensuring production-ready selections.
+
 ---
 
 ## Setup & Development
