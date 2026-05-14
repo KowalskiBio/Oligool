@@ -34,10 +34,8 @@ interface Props {
     // MSA Viewer
     alignment?: string;
     oligoPrimers?: OligoPrimers | null;
-    onVisibleQueryChange?: (data: { id: string; seq: string; start: number; end: number }) => void;
     navigateTarget?: { colStart: number; colEnd: number; ts: number } | null;
     isDarkMode?: boolean;
-    onOligoRegionSelect?: (startCol: number, endCol: number) => void;
     idtCredentials?: any;
     idtAdvancedParams?: any;
 }
@@ -47,7 +45,7 @@ const API = ((import.meta.env.VITE_API_BASE as string) || '');
 export default function FlankingPrimersPanel({
     rawSeq, oligoStart, oligoEnd,
     p1Start, p1End, p2Start, p2End,
-    alignment, oligoPrimers, onVisibleQueryChange, navigateTarget, isDarkMode, onOligoRegionSelect,
+    alignment, oligoPrimers, navigateTarget, isDarkMode,
     idtCredentials, idtAdvancedParams,
 }: Props) {
     // Primer3 params
@@ -191,7 +189,8 @@ export default function FlankingPrimersPanel({
             const tm = calcTm(fwdSeq);
             fwdPrimerObj = {
                 sequence: fwdSeq,
-                interval: [manualLeftStart, manualLeftEnd],
+                length: fwdSeq.length,
+                interval: [manualLeftStart, manualLeftEnd] as [number, number],
                 tm: tm, gc_percent: gc,
                 primer3: { tm: tm, gc_percent: gc, self_any: null, self_end: null, hairpin_th: null },
                 hairpin: { structure_found: false, tm: null, dg: null },
@@ -208,7 +207,8 @@ export default function FlankingPrimersPanel({
             const tm = calcTm(revSeq);
             revPrimerObj = {
                 sequence: revSeq,
-                interval: [manualRightStart, manualRightEnd],
+                length: revSeq.length,
+                interval: [manualRightStart, manualRightEnd] as [number, number],
                 tm: tm, gc_percent: gc,
                 primer3: { tm: tm, gc_percent: gc, self_any: null, self_end: null, hairpin_th: null },
                 hairpin: { structure_found: false, tm: null, dg: null },

@@ -1,8 +1,6 @@
 import { useState, useEffect } from 'react';
 import { TAG_DATABASE } from '../constants/tags';
 import MOLigoReport from './MOLigoReport';
-import HairpinSVG from './HairpinSVG';
-import DimerSVG from './DimerSVG';
 
 export interface MOLigoProps {
     templateSeq: string;
@@ -54,8 +52,7 @@ export default function MOLigoPanel(props: MOLigoProps) {
         templateSeq,
         moligo1Seq, moligo2Seq,
         tagSeq, fwdPrimer, revPrimer,
-        onTagChange, onFwdChange, onRevChange, onProceed,
-        idtCredentials, idtAdvancedParams
+        onTagChange, onFwdChange, onRevChange, onProceed
     } = props;
 
     const [isSeqMode, setIsSeqMode] = useState(() => localStorage.getItem('moligo_prov_seq_mode') === 'true');
@@ -88,49 +85,6 @@ export default function MOLigoPanel(props: MOLigoProps) {
     };
 
     const fwdRCSeq = reverseComplement(fwdPrimer || "");
-    const fullOligo2 = (revPrimer || "") + moligo2Seq;
-    const fullOligo1 = moligo1Seq + (tagSeq || "") + fwdRCSeq;
-
-    const getIdtStatusColor = (dg: number | undefined) => {
-        if (dg === undefined || dg === null) return 'text-slate-400';
-        if (dg < -9) return 'text-red-500 font-bold';
-        if (dg < -6) return 'text-amber-500 font-bold';
-        return 'text-emerald-500 font-bold';
-    };
-
-    const renderResultCard = (title: string, data: any) => {
-        if (!data || data.error) return null;
-        const items = Array.isArray(data.raw) ? data.raw : [data.raw];
-        const topDg = data.DeltaG;
-
-        return (
-            <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-3 shadow-sm flex flex-col gap-2">
-                <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-800 pb-2">
-                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider text-ellipsis overflow-hidden whitespace-nowrap">{title}</span>
-                    <span className={`text-xs flex-shrink-0 ${getIdtStatusColor(topDg)}`}>{topDg != null ? `${topDg.toFixed(2)} kcal/mol` : 'N/A'}</span>
-                </div>
-                <div className="flex flex-col gap-3 mt-1">
-                    {items.slice(0, 1).map((item: any, i: number) => (
-                        <div key={i} className="flex flex-col gap-2">
-                            {item.DotBracket && (
-                                <div className="bg-slate-50 dark:bg-slate-800/50 rounded p-2">
-                                    {item.Sequence.includes('&') ? (
-                                        <DimerSVG seq={item.Sequence} dotBracket={item.DotBracket} />
-                                    ) : (
-                                        <HairpinSVG seq={item.Sequence} dotBracket={item.DotBracket} />
-                                    )}
-                                </div>
-                            )}
-                            <div className="flex justify-between items-center text-[9px] text-slate-400 font-medium px-1">
-                                <span>Vienna ΔG: <b className="text-slate-500">{item.ViennaRNA_DeltaG?.toFixed(2) || 'N/A'}</b></span>
-                                <span>Vienna Tm: <b className="text-slate-500">{item.Local_Tm?.toFixed(1) || 'N/A'}°C</b></span>
-                            </div>
-                        </div>
-                    ))}
-                </div>
-            </div>
-        );
-    };
 
     useEffect(() => {
         localStorage.setItem('moligo_prov_seq_mode', String(isSeqMode));

@@ -736,10 +736,8 @@ function App() {
                     mgConc: parseFloat(idtMgConc) || 0
                   }}
                   alignment={alignment}
-                  onVisibleQueryChange={setSelectedSequence}
                   navigateTarget={navigateTarget}
                   isDarkMode={isDarkMode}
-                  onOligoRegionSelect={(startCol, endCol) => setOligoRegion({ startCol, endCol })}
                 />
               )}
             </>

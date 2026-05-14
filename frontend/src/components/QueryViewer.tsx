@@ -20,10 +20,8 @@ interface QueryViewerProps {
     };
     // MSA Viewer props — forwarded to FlankingPrimersPanel
     alignment?: string;
-    onVisibleQueryChange?: (data: { id: string; seq: string; start: number; end: number }) => void;
     navigateTarget?: { colStart: number; colEnd: number; ts: number } | null;
     isDarkMode?: boolean;
-    onOligoRegionSelect?: (startCol: number, endCol: number) => void;
 }
 
 interface IdtData {
@@ -67,7 +65,7 @@ interface SavedPosition {
     moligo1Len: number; moligo2Len: number;
 }
 
-export default function QueryViewer({ data, jobName, onPrimersUpdate, onNavigateTo, oligoRegion, idtCredentials, alignment, onVisibleQueryChange, navigateTarget, isDarkMode, onOligoRegionSelect }: QueryViewerProps) {
+export default function QueryViewer({ data, jobName, onPrimersUpdate, onNavigateTo, oligoRegion, idtCredentials, alignment, navigateTarget, isDarkMode }: QueryViewerProps) {
     const [copyFeedback, setCopyFeedback] = useState('');
 
     // IDT Analysis State
@@ -1696,10 +1694,8 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, onNavigate
                     p2End={primers.p2.end}
                     alignment={alignment}
                     oligoPrimers={primers}
-                    onVisibleQueryChange={onVisibleQueryChange}
                     navigateTarget={navigateTarget}
                     isDarkMode={isDarkMode}
-                    onOligoRegionSelect={onOligoRegionSelect}
                     idtCredentials={idtCredentials}
                     idtAdvancedParams={idtAdvancedParams}
                 />
