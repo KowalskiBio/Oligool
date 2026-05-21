@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import MSAViewer from './MSAViewer';
 import DimerSVG from './DimerSVG';
 import HairpinSVG from './HairpinSVG';
@@ -38,6 +38,8 @@ interface Props {
     isDarkMode?: boolean;
     idtCredentials?: any;
     idtAdvancedParams?: any;
+    gappedData?: { seq: string; start: number; ungappedOffset?: number };
+    onFlankingPrimersUpdate?: (primers: { fwd: { start: number, end: number } | null, rev: { start: number, end: number } | null } | null) => void;
 }
 
 const API = ((import.meta.env.VITE_API_BASE as string) || '');
@@ -46,13 +48,13 @@ export default function FlankingPrimersPanel({
     rawSeq, oligoStart, oligoEnd,
     p1Start, p1End, p2Start, p2End,
     alignment, oligoPrimers, navigateTarget, isDarkMode,
-    idtCredentials, idtAdvancedParams,
+    idtCredentials, idtAdvancedParams, gappedData, onFlankingPrimersUpdate
 }: Props) {
     // Primer3 params
     const [flankWindow, setFlankWindow] = useState(200);
     const [optSize, setOptSize] = useState(20);
-    const [minSize, setMinSize] = useState(18);
-    const [maxSize, setMaxSize] = useState(25);
+    const [minSize, setMinSize] = useState(16);
+    const [maxSize, setMaxSize] = useState(27);
     const [optTm, setOptTm] = useState(62.0);
     const [minTm, setMinTm] = useState(57.0);
     const [maxTm, setMaxTm] = useState(67.0);
@@ -142,6 +144,19 @@ export default function FlankingPrimersPanel({
         } catch (e: any) { setError(e.message); }
         finally { setLoading(false); }
     };
+
+    // Auto-design when the MOLigo bounds change from user dragging it in the upper viewer
+    const prevOligoRef = useRef({ start: oligoStart, end: oligoEnd });
+    useEffect(() => {
+        if (prevOligoRef.current.start !== oligoStart || prevOligoRef.current.end !== oligoEnd) {
+            prevOligoRef.current = { start: oligoStart, end: oligoEnd };
+            // Automatically redesign if the user hasn't set manual flanking region overrides
+            if (manualLeftStart === null && manualRightStart === null) {
+                design();
+            }
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [oligoStart, oligoEnd]);
 
     const designManual = () => {
         if (manualLeftStart === null && manualRightStart === null) {
@@ -402,26 +417,55 @@ export default function FlankingPrimersPanel({
 
     const actualOligoStart = Math.min(p1Start, p2Start);
     const actualOligoEnd = Math.max(p1End, p2End);
-    const moligoLength = actualOligoEnd - actualOligoStart;
 
-    // To center the moligo, we want the upstream sequence shown (F) to satisfy:
-    // F % lineLength === Math.floor((lineLength - moligoLength) / 2)
-    const desiredPadding = Math.max(0, Math.floor((lineLength - moligoLength) / 2));
-    const k = Math.floor(flankWindow / lineLength);
-    let viewStart = actualOligoStart - (k * lineLength + desiredPadding);
-    if (viewStart < 0) viewStart = Math.max(0, actualOligoStart - flankWindow); // fallback
+    let viewStart = Math.max(0, actualOligoStart - flankWindow);
 
     const viewEnd = Math.min(rawSeq.length, actualOligoEnd + flankWindow);
 
     const fwdInterval = selFwd?.interval;
     const revInterval = selRev?.interval;
 
+    const mapToGapped = (u: number) => {
+        if (!gappedData) return u;
+        const { seq, start, ungappedOffset } = gappedData;
+        
+        let targetRelative = u - (ungappedOffset || 0);
+
+        if (targetRelative < 0) {
+            // Outside view on left
+            return Math.max(0, start + targetRelative);
+        }
+
+        let count = 0;
+        for (let i = 0; i < seq.length; i++) {
+            if (seq[i] !== '-') {
+                if (count === targetRelative) return start + i;
+                count++;
+            }
+        }
+        // Outside view on right
+        return start + seq.length + (targetRelative - count);
+    };
+
     // flankingPrimers for MSAViewer — show "Used" primer if selected, otherwise show top candidate
     const activeFwd = selFwd ?? result?.forward.primers[0] ?? null;
     const activeRev = selRev ?? result?.reverse.primers[0] ?? null;
-    const flankingPrimersForMSA = (activeFwd?.interval || activeRev?.interval) ? {
-        fwd: activeFwd?.interval ? { start: activeFwd.interval[0], end: activeFwd.interval[1] } : null,
-        rev: activeRev?.interval ? { start: activeRev.interval[0], end: activeRev.interval[1] } : null,
+    const flankingPrimersForMSA = useMemo(() => {
+        return (activeFwd?.interval || activeRev?.interval) ? {
+            fwd: activeFwd?.interval ? { start: mapToGapped(activeFwd.interval[0]), end: mapToGapped(activeFwd.interval[1]) } : null,
+            rev: activeRev?.interval ? { start: mapToGapped(activeRev.interval[0]), end: mapToGapped(activeRev.interval[1]) } : null,
+        } : null;
+    }, [activeFwd, activeRev, gappedData]);
+
+    useEffect(() => {
+        if (onFlankingPrimersUpdate) {
+            onFlankingPrimersUpdate(flankingPrimersForMSA);
+        }
+    }, [flankingPrimersForMSA, onFlankingPrimersUpdate]);
+
+    const gappedOligoPrimers = oligoPrimers ? {
+        p1: { start: mapToGapped(oligoPrimers.p1.start), end: mapToGapped(oligoPrimers.p1.end) },
+        p2: { start: mapToGapped(oligoPrimers.p2.start), end: mapToGapped(oligoPrimers.p2.end) }
     } : null;
 
     const renderStaticSeq = () => {
@@ -502,7 +546,8 @@ export default function FlankingPrimersPanel({
                         </button>
                     </div>
                 </div>
-                <div className="grid grid-cols-4 gap-2 text-[10px] text-slate-500 dark:text-slate-400">
+                <div className="grid grid-cols-5 gap-2 text-[10px] text-slate-500 dark:text-slate-400">
+                    <div><span className="font-bold text-slate-600 dark:text-slate-300">Len</span><br />{p.length} bp</div>
                     <div className="flex gap-2 items-center">
                         <div><span className="font-bold text-slate-600 dark:text-slate-300">P3 Tm</span><br />{p.tm ?? p.primer3?.tm ?? '—'}°C</div>
                         {indivResult?.stats && (
@@ -512,8 +557,8 @@ export default function FlankingPrimersPanel({
                         )}
                     </div>
                     <div><span className="font-bold text-slate-600 dark:text-slate-300">GC</span><br />{p.gc_percent ?? p.primer3?.gc_percent ?? '—'}%</div>
-                    <div><span className="font-bold text-slate-600 dark:text-slate-300">Hairpin Tm</span><br /><span className={p.hairpin.structure_found ? 'text-amber-500' : 'text-emerald-500'}>{p.hairpin.structure_found ? `${p.primer3.hairpin_th ?? '—'}°C` : 'None'}</span></div>
-                    <div><span className="font-bold text-slate-600 dark:text-slate-300">Self-dimer</span><br /><span className={statusDg(p.homodimer.dg)}>{p.homodimer.dg !== null ? `${p.homodimer.dg} kcal` : 'OK'}</span></div>
+                    <div><span className="font-bold text-slate-600 dark:text-slate-300">Hairpin Tm</span><br /><span className={p.hairpin.structure_found ? 'text-amber-500' : 'text-emerald-500'}>{p.hairpin.structure_found ? `${p.primer3?.hairpin_th ?? '—'}°C` : 'None'}</span></div>
+                    <div><span className="font-bold text-slate-600 dark:text-slate-300">Self-dimer</span><br /><span className={statusDg(p.homodimer?.dg)}>{p.homodimer?.dg !== null ? `${p.homodimer.dg} kcal` : 'OK'}</span></div>
                 </div>
 
                 {isSelected && (
@@ -556,7 +601,7 @@ export default function FlankingPrimersPanel({
             {alignment && (
                 <MSAViewer
                     alignment={alignment}
-                    primers={oligoPrimers}
+                    primers={gappedOligoPrimers}
                     flankingPrimers={flankingPrimersForMSA}
                     isDarkMode={isDarkMode}
                     navigateTarget={navigateTarget}
@@ -591,12 +636,23 @@ export default function FlankingPrimersPanel({
                                 )}
                             </div>
                         )}
+                        <div className="flex items-center gap-2 flex-shrink-0">
+                            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider whitespace-nowrap">Flank (bp)</label>
+                            <input
+                                type="number"
+                                value={flankWindow}
+                                min={0}
+                                step={50}
+                                onChange={e => setFlankWindow(Math.max(0, parseInt(e.target.value) || 0))}
+                                className="w-20 text-xs font-mono bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded px-2 py-0.5 focus:outline-none focus:ring-1 focus:ring-emerald-400"
+                            />
+                        </div>
                     </div>
                     
                     <div 
                         ref={containerRef} 
                         onMouseUp={handleMouseUp}
-                        className="p-4 max-h-52 overflow-y-auto overflow-x-hidden bg-white dark:bg-slate-800 relative"
+                        className="p-4 overflow-y-auto overflow-x-hidden bg-white dark:bg-slate-800 relative"
                     >
                         {renderStaticSeq()}
                     </div>
@@ -613,7 +669,6 @@ export default function FlankingPrimersPanel({
                     </div>
                     <div className="p-4 space-y-4 bg-white dark:bg-slate-800">
                         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                            {numInput('Flank Window (bp)', flankWindow, setFlankWindow, 50, 50, 1000)}
                             {numInput('Opt Tm (°C)', optTm, setOptTm, 0.5)}
                             {numInput('Tm Min (°C)', minTm, setMinTm, 0.5)}
                             {numInput('Tm Max (°C)', maxTm, setMaxTm, 0.5)}

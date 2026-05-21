@@ -44,6 +44,7 @@ function App() {
 
   const [jobName, setJobName] = useState(() => localStorage.getItem('job_name') || 'Query');
   const [selectedPrimers, setSelectedPrimers] = useState<{ p1: { start: number, end: number }, p2: { start: number, end: number } } | null>(null);
+  const [selectedFlankingPrimers, setSelectedFlankingPrimers] = useState<{ fwd: { start: number; end: number } | null; rev: { start: number; end: number } | null } | null>(null);
   const [showSecrets, setShowSecrets] = useState(false);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [navigateTarget, setNavigateTarget] = useState<{ colStart: number; colEnd: number; ts: number } | null>(null);
@@ -145,6 +146,7 @@ function App() {
     setAlignment('');
     setSelectedSequence(null);
     setElapsedSeconds(0);
+    setSelectedFlankingPrimers(null);
 
     const timerId = setInterval(() => {
       setElapsedSeconds(prev => prev + 1);
@@ -216,6 +218,7 @@ function App() {
     setSelectedSequence(null);
     setError('');
     setInput('');
+    setSelectedFlankingPrimers(null);
   };
 
   const isStepActive = (s: Step) => stepOrder.indexOf(s) <= stepOrder.indexOf(step);
@@ -609,9 +612,9 @@ function App() {
 
           {/* Loading states (Foreshadowing Blueprint) */}
           {(step === 'blasting' || step === 'aligning') && (
-            <div className="space-y-6 animate-pulse duration-1000 mt-8">
+            <div className="space-y-6 mt-8">
               {/* Status Indicator */}
-              <div className="flex flex-col items-center justify-center gap-2 mb-8">
+              <div className="flex flex-col items-center justify-center gap-2 mb-8 animate-pulse duration-1000">
                 <div className="flex items-center gap-3 text-slate-500 dark:text-slate-400 font-mono text-sm">
                   <div className={`w-5 h-5 border-2 ${step === 'blasting' ? 'border-indigo-500' : 'border-purple-500'} border-t-transparent rounded-full animate-spin`}></div>
                   {step === 'blasting' ? 'Running BLAST search and collecting homologs...' : 'Finalizing MAFFT alignment...'}
@@ -622,10 +625,10 @@ function App() {
                 <p className="text-xs text-slate-400 dark:text-slate-500">This may take 1-2 minutes depending on sequence count. Preparing environment...</p>
               </div>
 
-              <div className="[animation:none]"><RabbitGame /></div>
+              <div><RabbitGame /></div>
 
               {/* MSA Viewer Blueprint */}
-              <div className="border border-slate-200 dark:border-slate-700/50 rounded-xl overflow-hidden shadow-sm bg-white dark:bg-slate-800 opacity-60 pointer-events-none">
+              <div className="border border-slate-200 dark:border-slate-700/50 rounded-xl overflow-hidden shadow-sm bg-white dark:bg-slate-800 opacity-60 pointer-events-none animate-pulse duration-1000">
                 <div className="h-14 bg-slate-50 dark:bg-slate-900/40 border-b border-slate-200 dark:border-slate-700/50 flex items-center px-4 gap-4">
                   <div className="h-4 w-32 bg-slate-200 dark:bg-slate-700 rounded"></div>
                   <div className="h-4 w-24 bg-slate-200 dark:bg-slate-700 rounded"></div>
@@ -720,6 +723,7 @@ function App() {
                 onVisibleQueryChange={setSelectedSequence}
                 jobName={jobName}
                 primers={selectedPrimers}
+                flankingPrimers={selectedFlankingPrimers}
                 isDarkMode={isDarkMode}
                 navigateTarget={navigateTarget}
                 onOligoRegionSelect={(startCol, endCol) => setOligoRegion({ startCol, endCol })}
@@ -729,6 +733,7 @@ function App() {
                   data={selectedSequence}
                   jobName={jobName}
                   onPrimersUpdate={setSelectedPrimers}
+                  onFlankingPrimersUpdate={setSelectedFlankingPrimers}
                   onNavigateTo={(colStart, colEnd) => setNavigateTarget({ colStart, colEnd, ts: Date.now() })}
                   oligoRegion={oligoRegion}
                   idtCredentials={{

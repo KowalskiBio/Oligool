@@ -27,7 +27,7 @@ export interface ParsedSequence {
 
 interface MSAViewerProps {
     alignment: string;
-    onVisibleQueryChange?: (data: { id: string; seq: string; start: number; end: number }) => void;
+    onVisibleQueryChange?: (data: { id: string; seq: string; start: number; end: number; fullSeq: string; ungappedOffset: number }) => void;
     jobName?: string;
     primers?: { p1: { start: number, end: number }, p2: { start: number, end: number } } | null;
     /** Flanking primers designed in the lower panel — drawn as distinct bars in the minimap */
@@ -276,11 +276,19 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
             const start = Math.max(0, startCol);
             const end = Math.min(query.seq.length - 1, endCol);
             const slice = query.seq.slice(start, end + 1);
+            // Compute full ungapped sequence and ungapped offset of this window
+            const fullSeq = query.seq.replace(/-/g, '');
+            let ungappedOffset = 0;
+            for (let i = 0; i < start; i++) {
+                if (query.seq[i] !== '-') ungappedOffset++;
+            }
             onVisibleQueryChange({
                 id: query.id,
                 seq: slice,
                 start: start,
-                end: end
+                end: end,
+                fullSeq,
+                ungappedOffset,
             });
         }
     }, [sequences, startCol, endCol, onVisibleQueryChange]);

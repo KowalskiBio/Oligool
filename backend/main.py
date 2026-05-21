@@ -814,8 +814,8 @@ class FlankingPrimerParams(BaseModel):
     flank_window: int = 200
     # Basic Primer3 constraints
     opt_size: int = 20
-    min_size: int = 18
-    max_size: int = 25
+    min_size: int = 16
+    max_size: int = 27
     opt_tm: float = 62.0
     min_tm: float = 57.0
     max_tm: float = 67.0
@@ -885,6 +885,12 @@ async def design_flanking_primers(req: FlankingPrimerParams):
         "PRIMER_NUM_RETURN":          req.num_return,
         "PRIMER_EXPLAIN_FLAG":        1,
         "PRIMER_PICK_INTERNAL_OLIGO": 0,
+        "PRIMER_SALT_MONOVALENT":     req.mv_conc,
+        "PRIMER_SALT_DIVALENT":       req.dv_conc,
+        "PRIMER_DNTP_CONC":           req.dntp_conc,
+        "PRIMER_DNA_CONC":            req.dna_conc,
+        "PRIMER_TM_FORMULA":          1,
+        "PRIMER_SALT_CORRECTIONS":    1,
     }
 
     def _round(x, nd=1):

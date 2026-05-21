@@ -5,9 +5,10 @@ import HairpinSVG from './HairpinSVG';
 import DimerSVG from './DimerSVG';
 
 interface QueryViewerProps {
-    data: { id: string; seq: string; start: number; end: number };
+    data: { id: string; seq: string; start: number; end: number; fullSeq?: string; ungappedOffset?: number };
     jobName: string;
     onPrimersUpdate: (primers: { p1: { start: number, end: number }, p2: { start: number, end: number } } | null) => void;
+    onFlankingPrimersUpdate?: (primers: { fwd: { start: number, end: number } | null, rev: { start: number, end: number } | null } | null) => void;
     onNavigateTo?: (colStart: number, colEnd: number) => void;
     /** Gapped column range selected by the user in MSAViewer for constrained oligo search */
     oligoRegion?: { startCol: number; endCol: number } | null;
@@ -65,7 +66,7 @@ interface SavedPosition {
     moligo1Len: number; moligo2Len: number;
 }
 
-export default function QueryViewer({ data, jobName, onPrimersUpdate, onNavigateTo, oligoRegion, idtCredentials, alignment, navigateTarget, isDarkMode }: QueryViewerProps) {
+export default function QueryViewer({ data, jobName, onPrimersUpdate, onFlankingPrimersUpdate, onNavigateTo, oligoRegion, idtCredentials, alignment, navigateTarget, isDarkMode }: QueryViewerProps) {
     const [copyFeedback, setCopyFeedback] = useState('');
 
     // IDT Analysis State
@@ -87,6 +88,21 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, onNavigate
     const [dragState, setDragState] = useState<{ id: 'p1' | 'p2', type: 'move' | 'left' | 'right', startX: number, deltaChars: number, initShift1: number, initShift2: number, initLen: number } | null>(null);
     const containerRef = useRef<HTMLDivElement>(null);
     const charWidthRef = useRef<number>(7); // Approximation of monospace char width in px
+    const [seqLineLength, setSeqLineLength] = useState(120);
+
+    useEffect(() => {
+        const el = containerRef.current;
+        if (!el) return;
+        const ro = new ResizeObserver(entries => {
+            for (const entry of entries) {
+                // ~72px for the position column + padding; ~7.2px per char for text-xs mono
+                const chars = Math.floor((entry.contentRect.width - 72) / 7.2);
+                setSeqLineLength(Math.max(40, Math.min(300, chars)));
+            }
+        });
+        ro.observe(el);
+        return () => ro.disconnect();
+    }, []);
 
     const [primers, setPrimers] = useState<OligizeResponse | null>(null);
     const [loading, setLoading] = useState(false);
@@ -153,6 +169,7 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, onNavigate
     const [pinPulse, setPinPulse] = useState(false);
     const [isSavedPosOpen, setIsSavedPosOpen] = useState(true);
     const [showFlankingPrimers, setShowFlankingPrimers] = useState(false);
+    const [interactiveFlankWindow, setInteractiveFlankWindow] = useState(200);
 
 
     // Fix Position toggle — when set, fetchPrimers is bypassed and oligos stick to global absolute coordinates
@@ -666,90 +683,85 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, onNavigate
         }
     }, [dragState]);
 
+    // Compute live coordinates (including during drag)
+    const offset = data.ungappedOffset ?? 0;
+    const fullSeq = data.fullSeq ?? rawSeq;
+
+    let liveP1Start = primers ? primers.p1.start + offset : -1;
+    let liveP1End   = primers ? primers.p1.end   + offset : -1;
+    let liveP2Start = primers ? primers.p2.start + offset : -1;
+    let liveP2End   = primers ? primers.p2.end   + offset : -1;
+
+    if (primers && dragState) {
+        const D = dragState.deltaChars;
+        if (dragState.type === 'move') {
+            liveP1Start += D; liveP1End += D;
+            liveP2Start += D; liveP2End += D;
+        } else if (dragState.id === 'p1') {
+            if (dragState.type === 'left') { liveP1Start += D; }
+            else if (dragState.type === 'right') { liveP1End += D; }
+            if (liveP1End - liveP1Start < 10) { if (dragState.type === 'left') liveP1Start = liveP1End - 10; else liveP1End = liveP1Start + 10; }
+            if (liveP1End - liveP1Start > 60) { if (dragState.type === 'left') liveP1Start = liveP1End - 60; else liveP1End = liveP1Start + 60; }
+        } else {
+            if (dragState.type === 'left') { liveP2Start += D; }
+            else if (dragState.type === 'right') { liveP2End += D; }
+            if (liveP2End - liveP2Start < 10) { if (dragState.type === 'left') liveP2Start = liveP2End - 10; else liveP2End = liveP2Start + 10; }
+            if (liveP2End - liveP2Start > 60) { if (dragState.type === 'left') liveP2Start = liveP2End - 60; else liveP2End = liveP2Start + 60; }
+        }
+    }
+
     const renderSequence = () => {
-        if (!primers) return rawSeq;
+        const minStart = primers ? Math.min(liveP1Start, liveP2Start) : offset;
+        const maxEnd   = primers ? Math.max(liveP1End, liveP2End)     : offset + rawSeq.length;
 
-        let p1Start = primers.p1.start;
-        let p1End = primers.p1.end;
-        let p2Start = primers.p2.start;
-        let p2End = primers.p2.end;
+        const viewStart = Math.max(0, minStart - interactiveFlankWindow);
+        const viewEnd   = Math.min(fullSeq.length, maxEnd + interactiveFlankWindow);
 
-        if (dragState) {
-            const D = dragState.deltaChars;
-            if (dragState.type === 'move') {
-                p1Start += D; p1End += D;
-                p2Start += D; p2End += D;
-            } else if (dragState.id === 'p1') {
-                if (dragState.type === 'left') { p1Start += D; }
-                else if (dragState.type === 'right') { p1End += D; }
-
-                if (p1End - p1Start < 10) {
-                    if (dragState.type === 'left') p1Start = p1End - 10;
-                    else p1End = p1Start + 10;
-                }
-                if (p1End - p1Start > 60) {
-                    if (dragState.type === 'left') p1Start = p1End - 60;
-                    else p1End = p1Start + 60;
-                }
-            } else {
-                if (dragState.type === 'left') { p2Start += D; }
-                else if (dragState.type === 'right') { p2End += D; }
-
-                if (p2End - p2Start < 10) {
-                    if (dragState.type === 'left') p2Start = p2End - 10;
-                    else p2End = p2Start + 10;
-                }
-                if (p2End - p2Start > 60) {
-                    if (dragState.type === 'left') p2Start = p2End - 60;
-                    else p2End = p2Start + 60;
-                }
-            }
+        // Split into fixed-length lines for numbered display
+        const slice = fullSeq.substring(viewStart, viewEnd);
+        const lines: string[] = [];
+        for (let i = 0; i < slice.length; i += seqLineLength) {
+            lines.push(slice.slice(i, i + seqLineLength));
         }
 
-        // Find the bounding box of both oligos + 50bp padding
-        const minStart = Math.min(p1Start, p2Start);
-        const maxEnd = Math.max(p1End, p2End);
-
-        let viewStart = Math.max(0, minStart - 50);
-        let viewEnd = Math.min(rawSeq.length, maxEnd + 50);
-
-        const chars = rawSeq.substring(viewStart, viewEnd).split('');
-
         return (
-            <div ref={containerRef} className="break-all whitespace-pre-wrap select-none relative" style={{ cursor: dragState ? 'grabbing' : 'auto' }}>
-                {chars.map((char, indexWithinSlice) => {
-                    const i = viewStart + indexWithinSlice; // The absolute index in rawSeq
-                    let className = '';
-                    let handlers = {};
+            <div ref={containerRef} className="font-mono text-xs leading-relaxed select-none space-y-1" style={{ cursor: dragState ? 'grabbing' : 'auto' }}>
+                {lines.map((lineStr, lineIdx) => {
+                    const lineAbsStart = viewStart + lineIdx * seqLineLength;
+                    const posStr = String(lineAbsStart + 1).padStart(6, ' '); // 1-indexed
+                    return (
+                        <div key={lineIdx} className="flex">
+                            <span className="text-slate-400 dark:text-slate-500 mr-3 select-none whitespace-pre flex-shrink-0">{posStr}</span>
+                            <span className="whitespace-pre">
+                                {lineStr.split('').map((char, charIdx) => {
+                                    const i = lineAbsStart + charIdx;
+                                    let className = 'text-slate-600 dark:text-slate-400';
+                                    let handlers: any = {};
 
-                    const isP1 = i >= p1Start && i < p1End;
-                    const isP2 = i >= p2Start && i < p2End;
-                    const isP1Start = i === p1Start;
-                    const isP1End = i === p1End - 1;
-                    const isP2Start = i === p2Start;
-                    const isP2End = i === p2End - 1;
+                                    const isP1 = primers && i >= liveP1Start && i < liveP1End;
+                                    const isP2 = primers && i >= liveP2Start && i < liveP2End;
+                                    const isP1Start = i === liveP1Start;
+                                    const isP1End   = i === liveP1End - 1;
+                                    const isP2Start = i === liveP2Start;
+                                    const isP2End   = i === liveP2End - 1;
 
-                    if (isP1) {
-                        className = `bg-green-200 dark:bg-green-900/40 text-green-900 dark:text-green-300 font-bold hover:bg-green-300 dark:hover:bg-green-800/60 ${isP1Start || isP1End ? 'cursor-ew-resize' : 'cursor-grab active:cursor-grabbing'}`;
-                        if (isP1Start) {
-                            handlers = { onMouseDown: (e: React.MouseEvent) => handleSeqMouseDown(e, 'p1', 'left') };
-                        } else if (isP1End) {
-                            handlers = { onMouseDown: (e: React.MouseEvent) => handleSeqMouseDown(e, 'p1', 'right') };
-                        } else {
-                            handlers = { onMouseDown: (e: React.MouseEvent) => handleSeqMouseDown(e, 'p1', 'move') };
-                        }
-                    }
-                    else if (isP2) {
-                        className = `bg-amber-200 dark:bg-amber-900/40 text-amber-900 dark:text-amber-300 font-bold hover:bg-amber-300 dark:hover:bg-amber-800/60 ${isP2Start || isP2End ? 'cursor-ew-resize' : 'cursor-grab active:cursor-grabbing'}`;
-                        if (isP2Start) {
-                            handlers = { onMouseDown: (e: React.MouseEvent) => handleSeqMouseDown(e, 'p2', 'left') };
-                        } else if (isP2End) {
-                            handlers = { onMouseDown: (e: React.MouseEvent) => handleSeqMouseDown(e, 'p2', 'right') };
-                        } else {
-                            handlers = { onMouseDown: (e: React.MouseEvent) => handleSeqMouseDown(e, 'p2', 'move') };
-                        }
-                    }
-                    return <span key={i} className={className + " transition-colors duration-75"} {...handlers}>{char}</span>;
+                                    if (isP1) {
+                                        className = `bg-green-200 dark:bg-green-900/40 text-green-900 dark:text-green-300 font-bold hover:bg-green-300 dark:hover:bg-green-800/60 ${isP1Start || isP1End ? 'cursor-ew-resize' : 'cursor-grab active:cursor-grabbing'}`;
+                                        if (isP1Start) handlers = { onMouseDown: (e: React.MouseEvent) => handleSeqMouseDown(e, 'p1', 'left') };
+                                        else if (isP1End) handlers = { onMouseDown: (e: React.MouseEvent) => handleSeqMouseDown(e, 'p1', 'right') };
+                                        else handlers = { onMouseDown: (e: React.MouseEvent) => handleSeqMouseDown(e, 'p1', 'move') };
+                                    } else if (isP2) {
+                                        className = `bg-amber-200 dark:bg-amber-900/40 text-amber-900 dark:text-amber-300 font-bold hover:bg-amber-300 dark:hover:bg-amber-800/60 ${isP2Start || isP2End ? 'cursor-ew-resize' : 'cursor-grab active:cursor-grabbing'}`;
+                                        if (isP2Start) handlers = { onMouseDown: (e: React.MouseEvent) => handleSeqMouseDown(e, 'p2', 'left') };
+                                        else if (isP2End) handlers = { onMouseDown: (e: React.MouseEvent) => handleSeqMouseDown(e, 'p2', 'right') };
+                                        else handlers = { onMouseDown: (e: React.MouseEvent) => handleSeqMouseDown(e, 'p2', 'move') };
+                                    }
+
+                                    return <span key={i} className={className + ' transition-colors duration-75'} {...handlers}>{char}</span>;
+                                })}
+                            </span>
+                        </div>
+                    );
                 })}
             </div>
         );
@@ -1394,9 +1406,21 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, onNavigate
                     )}
 
                     <div className="mt-4 p-5 bg-slate-50/50 dark:bg-slate-900/50 rounded-lg border border-slate-200 dark:border-slate-700">
+                        <div className="flex justify-between items-center mb-2">
+                            <span className="text-xs font-bold text-slate-500 uppercase">Context Viewer</span>
+                            <div className="flex items-center gap-2">
+                                <label className="text-[10px] font-bold text-slate-400 uppercase">Flank Window (bp)</label>
+                                <input
+                                    type="number"
+                                    value={interactiveFlankWindow}
+                                    onChange={e => setInteractiveFlankWindow(Math.max(0, parseInt(e.target.value) || 0))}
+                                    className="w-20 px-2 py-1 text-xs border border-slate-200 dark:border-slate-700 rounded bg-white dark:bg-slate-800"
+                                />
+                            </div>
+                        </div>
                         <div
                             ref={containerRef}
-                            className="font-mono text-xs text-slate-600 dark:text-slate-400 leading-relaxed max-h-60 overflow-y-auto p-4 bg-white dark:bg-slate-800 rounded-lg shadow-inner"
+                            className="font-mono text-xs text-slate-600 dark:text-slate-400 leading-relaxed overflow-y-auto p-4 bg-white dark:bg-slate-800 rounded-lg shadow-inner"
                         >
                             {renderSequence()}
                         </div>
@@ -1651,6 +1675,9 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, onNavigate
                             onFwdChange={setFwdPrimer}
                             onRevChange={setRevPrimer}
                             onProceed={() => {
+                                if (!fixedAbsCoords) {
+                                    toggleFixPosition();
+                                }
                                 setShowFlankingPrimers(true);
                                 setTimeout(() => {
                                     document.getElementById('flanking-primers-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -1685,19 +1712,24 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, onNavigate
                 </div>
 
                 <FlankingPrimersPanel
-                    rawSeq={rawSeq}
-                    oligoStart={Math.min(primers.p1.start, primers.p2.start)}
-                    oligoEnd={Math.max(primers.p1.end, primers.p2.end)}
-                    p1Start={primers.p1.start}
-                    p1End={primers.p1.end}
-                    p2Start={primers.p2.start}
-                    p2End={primers.p2.end}
+                    rawSeq={data.fullSeq ?? rawSeq}
+                    oligoStart={Math.min(liveP1Start, liveP2Start)}
+                    oligoEnd={Math.max(liveP1End, liveP2End)}
+                    p1Start={liveP1Start}
+                    p1End={liveP1End}
+                    p2Start={liveP2Start}
+                    p2End={liveP2End}
                     alignment={alignment}
-                    oligoPrimers={primers}
+                    oligoPrimers={primers ? {
+                        p1: { start: liveP1Start, end: liveP1End },
+                        p2: { start: liveP2Start, end: liveP2End }
+                    } : null}
+                    gappedData={data}
                     navigateTarget={navigateTarget}
                     isDarkMode={isDarkMode}
                     idtCredentials={idtCredentials}
                     idtAdvancedParams={idtAdvancedParams}
+                    onFlankingPrimersUpdate={onFlankingPrimersUpdate}
                 />
                 <div className="px-5 py-4 bg-slate-50 dark:bg-slate-900/60 border-t border-slate-200 dark:border-slate-700 flex justify-end mt-4">
                     <button
