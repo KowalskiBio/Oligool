@@ -5,4 +5,4 @@ pydantic
 primer3-py
 pywebview>=4.0.0
 requests>=2.25.0
-ViennaRNA
+strider-dna

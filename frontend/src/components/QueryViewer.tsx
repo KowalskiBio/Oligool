@@ -881,7 +881,7 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, onFlanking
         let raw = data.raw;
 
         // Render individual items (hairpins, dimers, etc.)
-        const renderItem = (item: any, seq: string | undefined, idx: number, itemDg?: number, itemViennaDg?: number, itemIdtTmVal?: number, itemLocalTmVal?: number) => {
+        const renderItem = (item: any, seq: string | undefined, idx: number, itemDg?: number, itemLocalDg?: number, itemIdtTmVal?: number, itemLocalTmVal?: number) => {
             let asciiStructure: string | undefined = undefined;
             let hairpinDotBracket: string | undefined = undefined;
             let hairpinSeq: string | undefined = undefined;
@@ -904,7 +904,7 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, onFlanking
                     hairpinDotBracket = item.DotBracket;
                     hairpinSeq = fullSeq;
                 } else if (!isDimer && item.Bonds && seq) {
-                    // Dimers use ASCII rendering via Bonds only if not a Vienna-dot-bracket dimer
+                    // Dimers use ASCII rendering via Bonds only if not a strider-dot-bracket dimer
                     asciiStructure = buildDimerAscii(item, seq, seq2);
                 }
             }
@@ -918,8 +918,8 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, onFlanking
                                 {itemDg !== undefined && itemDg !== null && (
                                     <span>IDT ΔG: <span className={getIdtStatusColor(itemDg)}>{itemDg.toFixed(2)}</span></span>
                                 )}
-                                {itemViennaDg !== undefined && itemViennaDg !== null && (
-                                    <span>Vienna ΔG: <span className="text-slate-500 dark:text-slate-400 font-medium">{itemViennaDg.toFixed(2)}</span></span>
+                                {itemLocalDg !== undefined && itemLocalDg !== null && (
+                                    <span>Local ΔG: <span className="text-slate-500 dark:text-slate-400 font-medium">{itemLocalDg.toFixed(2)}</span></span>
                                 )}
                             </div>
                         </div>
@@ -928,7 +928,7 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, onFlanking
                                 <span>IDT Tm: <span className="text-slate-500 dark:text-slate-400 font-medium">{Number(itemIdtTmVal).toFixed(1)}°C</span></span>
                             )}
                             {itemLocalTmVal !== undefined && itemLocalTmVal !== null && (
-                                <span>Vienna Tm: <span className="text-slate-500 dark:text-slate-400 font-medium">{Number(itemLocalTmVal).toFixed(1)}°C</span></span>
+                                <span>Local Tm: <span className="text-slate-500 dark:text-slate-400 font-medium">{Number(itemLocalTmVal).toFixed(1)}°C</span></span>
                             )}
                         </div>
                     </div>
@@ -962,11 +962,11 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, onFlanking
         const items: React.ReactNode[] = [];
         if (Array.isArray(raw) && raw.length > 0) {
             const allDgs = data.all_DeltaG || [];
-            const allViennaDgs = data.all_ViennaRNA_DeltaG || [];
+            const allLocalDgs = data.all_Local_DeltaG || [];
             const allIdtTms = data.all_IDT_Tm || [];
             const allLocalTms = data.all_Local_Tm || [];
             raw.forEach((item: any, idx: number) => {
-                items.push(renderItem(item, seq1, idx, allDgs[idx], allViennaDgs[idx], allIdtTms[idx], allLocalTms[idx]));
+                items.push(renderItem(item, seq1, idx, allDgs[idx], allLocalDgs[idx], allIdtTms[idx], allLocalTms[idx]));
             });
         } else if (raw) {
             items.push(renderItem(raw, seq1, 0));
