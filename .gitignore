@@ -48,3 +48,33 @@ test_*.js
 
 # Downloaded Archives
 *.zip
+
+# OpenCode / OhMyOpenCode
+.omo/
+.opencode/
+
+# Environment files (may contain API keys)
+.env
+.env.local
+.env.*.local
+*.env
+
+# IDE / Editor
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Temporary
+tmp/
+temp/
+.tmp/
