@@ -548,7 +548,7 @@ async def analyze_idt_oligos(request: IdtAnalyzeRequest):
 
         if endpoint == "Hairpin":
             payload["Sequence"] = seq1
-            payload["FoldingTemp"] = 34.0 # Use target Tm as folding temp
+            payload["FoldingTemp"] = request.temp if hasattr(request, "temp") and request.temp is not None else 37.0
         elif endpoint == "SelfDimer" or endpoint == "HeteroDimer":
             # Pass sequences precisely as 'primary' and 'secondary' query params for proper IDT binding
             params = {"primary": seq1}
@@ -586,133 +586,111 @@ async def analyze_idt_oligos(request: IdtAnalyzeRequest):
     except Exception as e:
         return {"error": f"Parallel execution failed: {str(e)}"}
 
-    # Use ViennaRNA to add dot-bracket structure AND local ΔG to hairpins
+    # Use strider-dna for Mg2+-aware dot-bracket structure, local ΔG, and Tm
     try:
-        import RNA
-        import math
-        
-        # Load DNA parameters (Mathews 2004)
-        RNA.params_load_DNA_Mathews2004()
-        
-        def add_vienna_analysis(seq1, hp_data, seq2=None):
-            """Generic ViennaRNA analysis for either single hairpin (seq2=None) 
-            or dimers (seq2 provided). Returns enriched hp_data."""
-            if isinstance(hp_data, list) or (isinstance(hp_data, dict) and not hp_data.get("error")):
-                # Normalize hp_data to list for uniform processing if it's a singleton dict
-                is_list = isinstance(hp_data, list)
-                data_list = hp_data if is_list else [hp_data]
-                
-                # Configure for DNA at user specified temperature
-                md = RNA.md()
-                base_temp = request.temp if hasattr(request, "temp") and request.temp is not None else 34.0
-                md.temperature = base_temp
-                md.noGU = 1
-                md.dangles = 2
-                
-                # Pre-calculate salt correction factors
-                mv_m, dv_m, dntp_m = request.mv_conc/1000.0, request.mg_conc/1000.0, request.dntp_conc/1000.0
-                na_eq = mv_m + 120.0 * math.sqrt(max(0, dv_m - dntp_m))
-                
-                # Compose sequences for ViennaRNA
-                if seq2:
-                    comp_seq = seq1 + "&" + seq2
-                else:
-                    comp_seq = seq1
-                
-                # 1. Get ALL suboptimal structures from ViennaRNA
-                fc = RNA.fold_compound(comp_seq, md)
-                subs = fc.subopt(500) # within 5.0 kcal/mol of MFE
-                mfe_struct, mfe_energy = fc.mfe()
-                
-                # 2. Helper: derive Tm for a SPECIFIC structure via binary search
-                def vienna_tm_for_structure(structure):
-                    if '(' not in structure:
-                        return None
-                    lo, hi = 0.0, 100.0
-                    md_t = RNA.md()
-                    md_t.noGU = 1
-                    md_t.dangles = 2
-                    for _ in range(40):
-                        mid = (lo + hi) / 2.0
-                        md_t.temperature = mid
-                        fc_t = RNA.fold_compound(comp_seq, md_t)
-                        dg_t = fc_t.eval_structure(structure)
-                        if dg_t < 0: lo = mid
-                        else: hi = mid
-                    return round(lo, 1) if lo > 1.0 else None
-                
-                # 3. Helper: compute salt-corrected ViennaRNA ΔG for a structure
-                def vienna_dg_for_structure(structure, energy=None):
-                    if energy is None:
-                        if '(' not in structure: return 0.0
-                        energy = fc.eval_structure(structure)
-                    num_pairs = structure.count("(")
-                    if na_eq > 0 and num_pairs > 0:
-                        salt_bonus = 0.1 * num_pairs * math.log(na_eq)
-                        return round(float(energy) - salt_bonus, 2)
-                    return round(float(energy), 2)
+        from strider import ThermoEngine
 
-                # 4. Build the final list
-                final_results = []
-                seen_structures = set()
-                
-                mfe_dg = vienna_dg_for_structure(mfe_struct, mfe_energy)
-                mfe_tm = vienna_tm_for_structure(mfe_struct)
-                
-                # Process IDT data: keep only the best IDT item (they all share the same MFE
-                # structure, so keeping duplicates just repeats the same visual)
-                best_item = None
-                best_idt_dg = None
-                for item in data_list:
-                    idt_tm = item.get("thermo") or item.get("MeltingTemperature") or item.get("Tm") or item.get("tm") or item.get("MeltTemp")
-                    item["IDT_Tm"] = idt_tm
-                    item["Sequence"] = comp_seq
-                    item["DotBracket"] = mfe_struct
-                    item["ViennaRNA_DeltaG"] = mfe_dg
-                    item["Local_Tm"] = mfe_tm
+        base_temp = request.temp if hasattr(request, "temp") and request.temp is not None else 34.0
+        mv_m = request.mv_conc / 1000.0
+        effective_mg = max(0.0, request.mg_conc - request.dntp_conc) / 1000.0
+        oligo_conc_m = getattr(request, "oligo_conc", 0.25) / 1e6
+
+        eng = ThermoEngine(material='dna', celsius=base_temp, sodium=mv_m, magnesium=effective_mg)
+
+        def add_strider_analysis(seq1, hp_data, seq2=None):
+            """Strider-dna enrichment for hairpin (seq2=None) or dimer (seq2 provided)."""
+            if not (isinstance(hp_data, list) or (isinstance(hp_data, dict) and not hp_data.get("error"))):
+                return hp_data
+
+            is_list = isinstance(hp_data, list)
+            data_list = hp_data if is_list else [hp_data]
+
+            if seq2:
+                mfe_result = eng.mfe(seq1, seq2)
+                raw_mfe = mfe_result.structure
+                fold_seq = seq1 + seq2
+                display_seq = seq1 + '&' + seq2
+                def _with_div(s): return s[:len(seq1)] + '&' + s[len(seq1):]
+            else:
+                mfe_result = eng.mfe(seq1)
+                raw_mfe = mfe_result.structure
+                fold_seq = seq1
+                display_seq = seq1
+                def _with_div(s): return s
+
+            # If MFE is flat (no base pairs), find the best paired suboptimal structure
+            def _valid_paired(s):
+                return '(' in s and s.count('(') == s.count(')')
+
+            if _valid_paired(raw_mfe):
+                viz_struct_raw = raw_mfe
+                viz_dg = round(float(mfe_result.energy), 2)
+            else:
+                viz_struct_raw = None
+                viz_dg = None
+                for s, e, _ in eng.subopt(fold_seq, gap=15.0, max_structures=200):
+                    if _valid_paired(s):
+                        viz_struct_raw = s
+                        viz_dg = round(float(e), 2)
+                        break
+
+            viz_struct = _with_div(viz_struct_raw) if viz_struct_raw else None
+
+            mfe_tm_raw = eng.melting_temperature(fold_seq, strand_conc_M=oligo_conc_m)
+            mfe_tm = round(mfe_tm_raw, 1) if mfe_tm_raw and mfe_tm_raw > 1.0 else None
+
+            best_item = None
+            best_idt_dg = None
+            for item in data_list:
+                idt_tm = item.get("thermo") or item.get("MeltingTemperature") or item.get("Tm") or item.get("tm") or item.get("MeltTemp")
+                item["IDT_Tm"] = idt_tm
+                item["Sequence"] = display_seq
+                item["Local_DeltaG"] = viz_dg
+                item["Local_Tm"] = mfe_tm
+                if viz_struct:
+                    item["DotBracket"] = viz_struct
                     for k in ["AsciiStructure", "VisualPrint", "asciiStructure", "visualPrint"]:
                         item.pop(k, None)
-                    idt_dg = _extract_idt_delta_g(item)
-                    if best_item is None or (idt_dg is not None and (best_idt_dg is None or idt_dg < best_idt_dg)):
-                        best_item = item
-                        best_idt_dg = idt_dg
+                idt_dg = _extract_idt_delta_g(item)
+                if best_item is None or (idt_dg is not None and (best_idt_dg is None or idt_dg < best_idt_dg)):
+                    best_item = item
+                    best_idt_dg = idt_dg
 
-                if best_item is not None:
-                    final_results.append(best_item)
+            final_results = []
+            if best_item is not None:
+                final_results.append(best_item)
 
-                seen_structures.add(mfe_struct)
+            seen = {raw_mfe}
+            if viz_struct_raw:
+                seen.add(viz_struct_raw)
+            subs = eng.subopt(fold_seq, gap=5.0, max_structures=500)
+            added = 0
+            for sub_struct, sub_energy, _ in subs:
+                if added >= 4: break
+                if sub_struct in seen: continue
+                if not _valid_paired(sub_struct): continue
+                seen.add(sub_struct)
+                sub_tm_raw = eng.melting_temperature(fold_seq, strand_conc_M=oligo_conc_m)
+                sub_tm = round(sub_tm_raw, 1) if sub_tm_raw and sub_tm_raw > 1.0 else None
+                final_results.append({
+                    "DotBracket": _with_div(sub_struct),
+                    "Sequence": display_seq,
+                    "Local_DeltaG": round(float(sub_energy), 2),
+                    "Local_Tm": sub_tm,
+                    "DeltaG": None,
+                    "IDT_Tm": None
+                })
+                added += 1
 
-                # Append ViennaRNA suboptimal structures (unique)
-                added = 0
-                max_subs = 4
-                for sub in subs:
-                    if added >= max_subs: break
-                    if sub.structure in seen_structures: continue
-                    if '(' not in sub.structure: continue
-                    
-                    seen_structures.add(sub.structure)
-                    sub_dg = vienna_dg_for_structure(sub.structure, sub.energy)
-                    new_item = {
-                        "DotBracket": sub.structure,
-                        "Sequence": comp_seq,
-                        "ViennaRNA_DeltaG": sub_dg,
-                        "Local_Tm": vienna_tm_for_structure(sub.structure),
-                        "DeltaG": None,
-                        "IDT_Tm": None
-                    }
-                    final_results.append(new_item)
-                    added += 1
+            return final_results if is_list else final_results[0]
 
-                return final_results if is_list else final_results[0]
-            return hp_data
-            
-        m1_hairpin = add_vienna_analysis(request.p1_seq, m1_hairpin)
-        m1_selfdimer = add_vienna_analysis(request.p1_seq, m1_selfdimer, seq2=request.p1_seq)
-        m2_hairpin = add_vienna_analysis(request.p2_seq, m2_hairpin)
-        m2_selfdimer = add_vienna_analysis(request.p2_seq, m2_selfdimer, seq2=request.p2_seq)
-        hetero = add_vienna_analysis(request.p1_seq, hetero, seq2=request.p2_seq)
+        m1_hairpin = add_strider_analysis(request.p1_seq, m1_hairpin)
+        m1_selfdimer = add_strider_analysis(request.p1_seq, m1_selfdimer, seq2=request.p1_seq)
+        m2_hairpin = add_strider_analysis(request.p2_seq, m2_hairpin)
+        m2_selfdimer = add_strider_analysis(request.p2_seq, m2_selfdimer, seq2=request.p2_seq)
+        hetero = add_strider_analysis(request.p1_seq, hetero, seq2=request.p2_seq)
     except Exception as e:
-        print(f"ViennaRNA optimization error: {e}")
+        print(f"strider-dna optimization error: {e}")
 
     # DEBUG: Log raw responses to understand structure
     import json as _json
@@ -752,14 +730,14 @@ async def analyze_idt_oligos(request: IdtAnalyzeRequest):
             scored_items.sort(key=lambda x: x[0])
             top_items = [x[1] for x in scored_items[:5]]
             top_idt_dgs = [x[0] if x[0] != 999.0 else None for x in scored_items[:5]]
-            top_vienna_dgs = [x[1].get("ViennaRNA_DeltaG") for x in scored_items[:5]]
+            top_local_dgs = [x[1].get("Local_DeltaG") for x in scored_items[:5]]
             top_idt_tms = [x[1].get("IDT_Tm") for x in scored_items[:5]]
             top_local_tms = [x[1].get("Local_Tm") for x in scored_items[:5]]
-            
+
             return {
                 "DeltaG": top_idt_dgs[0] if top_idt_dgs else None,
                 "all_DeltaG": top_idt_dgs,
-                "all_ViennaRNA_DeltaG": top_vienna_dgs,
+                "all_Local_DeltaG": top_local_dgs,
                 "all_IDT_Tm": top_idt_tms,
                 "all_Local_Tm": top_local_tms,
                 "raw": top_items

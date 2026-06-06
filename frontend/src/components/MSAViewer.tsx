@@ -37,6 +37,8 @@ interface MSAViewerProps {
     navigateTarget?: { colStart: number; colEnd: number; ts: number } | null;
     /** Called when user drag-selects a region in the GC%/MSA header for oligo placement */
     onOligoRegionSelect?: (startCol: number, endCol: number) => void;
+    /** Called when user clicks on a flanking primer bar in the minimap — zoom to that primer */
+    onFlankingPrimerClick?: (colStart: number, colEnd: number) => void;
 }
 
 /* ── constants ────────────────────────────────────────── */
@@ -56,7 +58,7 @@ const MINIMAP_HEIGHT = MINIMAP_GC_H + MINIMAP_RULER_H + 50 + MINIMAP_HANDLE_H;
 const MAIN_GC_TRACK_H = 40;
 const MAIN_MSA_TRACK_H = 30;
 
-const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, primers, flankingPrimers, isDarkMode, navigateTarget, onOligoRegionSelect }) => {
+const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, primers, flankingPrimers, isDarkMode, navigateTarget, onOligoRegionSelect, onFlankingPrimerClick }) => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const hoverOverlayRef = useRef<HTMLCanvasElement>(null);
     const minimapRef = useRef<HTMLCanvasElement>(null);
@@ -349,7 +351,11 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
     useEffect(() => {
         if (!navigateTarget || seqLen === 0) return;
         const { colStart, colEnd } = navigateTarget;
-        const PADDING = 150; // extra columns of context on each side
+        // For small targets (primers ~20bp): use tiny padding so visibleBases < 85
+        // and the viewer auto-switches to letter/sequence mode.
+        // For large targets (regions): use generous padding for context.
+        const span = colEnd - colStart + 1;
+        const PADDING = span < 100 ? 20 : 150;
         const visStart = Math.max(0, colStart - PADDING);
         const visEnd = Math.min(seqLen - 1, colEnd + PADDING);
         const spanCols = visEnd - visStart + 1;
@@ -360,7 +366,11 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
         newSL = Math.max(0, Math.min(newTotalVW - seqAreaW, newSL));
         setViewFraction(newVF);
         setScrollLeft(newSL);
-        if (scrollRef.current) scrollRef.current.scrollLeft = newSL;
+        // Use deferred scroll: the no-dep useEffect below applies this AFTER the render
+        // has resized the scrollRef div to fit the new viewFraction.
+        // Setting scrollRef.current.scrollLeft directly here would be clamped by the browser
+        // because the div isn't wide enough yet at the old viewFraction.
+        targetScrollRef.current = newSL;
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [navigateTarget]); // intentionally only react to the navigate command
 
@@ -665,81 +675,6 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
     /* ══════════════════════════════════════════════════════
        MINIMAP DRAG
        ══════════════════════════════════════════════════════ */
-    const handleMinimapMouseDown = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
-        const canvas = minimapRef.current;
-        if (!canvas) return;
-        const rect = canvas.getBoundingClientRect();
-        const mmSeqW = rect.width - MINIMAP_LABEL_W - RIGHT_PADDING;
-        const mouseXFrac = Math.max(0, Math.min(1, (e.clientX - rect.left - MINIMAP_LABEL_W) / mmSeqW));
-
-        // Capture current viewport
-        const curSeqAreaW = availableWidth - labelWidth - RIGHT_PADDING;
-        const curStart = scrollLeft / (curSeqAreaW / viewFraction);
-        const curEnd = curStart + viewFraction;
-        const handleZone = 10 / mmSeqW; // 10px side handle zone
-
-        let dragType: 'select' | 'left' | 'right';
-
-        // Check for handles ONLY if blue box is visible
-        const blueBoxVisible = viewFraction < 0.99;
-
-        if (blueBoxVisible) {
-            if (Math.abs(mouseXFrac - curStart) < handleZone && mouseXFrac < curEnd) {
-                dragType = 'left';
-            } else if (Math.abs(mouseXFrac - curEnd) < handleZone && mouseXFrac > curStart) {
-                dragType = 'right';
-            } else {
-                dragType = 'select';
-            }
-        } else {
-            dragType = 'select';
-        }
-
-        if (dragType === 'select') {
-            // Init selection
-            setSelectionRange({ start: mouseXFrac, end: mouseXFrac });
-            // No need to set scroll/view yet
-        }
-
-        const startClientX = e.clientX;
-        const onMove = makeMoveHandler(dragType, startClientX, curStart, curEnd, curSeqAreaW, mmSeqW, mouseXFrac);
-
-        const onUp = () => {
-            isDragging.current = false;
-            document.removeEventListener('mousemove', onMove);
-            document.removeEventListener('mouseup', onUp);
-
-            // Finalize selection logic
-            if (dragType === 'select') {
-                setSelectionRange((prev) => {
-                    if (!prev) return null;
-                    const s = Math.min(prev.start, prev.end);
-                    const e = Math.max(prev.start, prev.end);
-                    // If selection is tiny (click), maybe just ignore or zoom in a bit?
-                    // Let's enforce a minimum 0.5% width to avoid accidental clicks
-                    if (e - s < 0.005) {
-                        return null; // Cancel
-                    }
-
-                    // Apply zoom
-                    const newVF = e - s;
-                    const newTotalW = curSeqAreaW / newVF;
-                    const newSL = s * newTotalW;
-
-                    setViewFraction(newVF);
-                    setScrollLeft(newSL);
-                    targetScrollRef.current = newSL;
-
-                    return null; // Clear selection rectangle
-                });
-            }
-        };
-        isDragging.current = true;
-        document.addEventListener('mousemove', onMove);
-        document.addEventListener('mouseup', onUp);
-        e.preventDefault();
-    }, [availableWidth, viewFraction, scrollLeft, seqAreaW]);
-
     const makeMoveHandler = useCallback((
         dragType: 'select' | 'left' | 'right',
         startClientX: number,
@@ -751,32 +686,80 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
     ) => {
         return (ev: MouseEvent) => {
             const deltaFrac = (ev.clientX - startClientX) / mmSeqW;
-
             if (dragType === 'select') {
                 const currentMouseFrac = Math.max(0, Math.min(1, origMouseFrac + deltaFrac));
                 setSelectionRange({ start: origMouseFrac, end: currentMouseFrac });
                 return;
             }
-
-            // Standard Resize Logic
             let newStart = origStart;
             let newEnd = origEnd;
-
             if (dragType === 'left') {
                 newStart = Math.max(0, Math.min(origEnd - 0.005, origStart + deltaFrac));
             } else {
                 newEnd = Math.min(1, Math.max(origStart + 0.005, origEnd + deltaFrac));
             }
-
             const newVF = Math.max(0.005, newEnd - newStart);
             const newTotalW = curSeqAreaW / newVF;
             const newSL = newStart * newTotalW;
-
             setViewFraction(newVF);
             setScrollLeft(newSL);
             targetScrollRef.current = newSL;
         };
     }, []);
+
+    // ── Minimap: original zoom-only behaviour — no changes here ──────────────
+    const handleMinimapMouseDown = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+        const canvas = minimapRef.current;
+        if (!canvas) return;
+        const rect = canvas.getBoundingClientRect();
+        const mmSeqW = rect.width - MINIMAP_LABEL_W - RIGHT_PADDING;
+        const mouseXFrac = Math.max(0, Math.min(1, (e.clientX - rect.left - MINIMAP_LABEL_W) / mmSeqW));
+
+        const curSeqAreaW = availableWidth - labelWidth - RIGHT_PADDING;
+        const curStart = scrollLeft / (curSeqAreaW / viewFraction);
+        const curEnd = curStart + viewFraction;
+        const handleZone = 10 / mmSeqW;
+        const blueBoxVisible = viewFraction < 0.99;
+
+        let dragType: 'select' | 'left' | 'right';
+        if (blueBoxVisible) {
+            if (Math.abs(mouseXFrac - curStart) < handleZone && mouseXFrac < curEnd) dragType = 'left';
+            else if (Math.abs(mouseXFrac - curEnd) < handleZone && mouseXFrac > curStart) dragType = 'right';
+            else dragType = 'select';
+        } else {
+            dragType = 'select';
+        }
+
+        if (dragType === 'select') setSelectionRange({ start: mouseXFrac, end: mouseXFrac });
+
+        const startClientX = e.clientX;
+        const onMove = makeMoveHandler(dragType, startClientX, curStart, curEnd, curSeqAreaW, mmSeqW, mouseXFrac);
+
+        const onUp = () => {
+            isDragging.current = false;
+            document.removeEventListener('mousemove', onMove);
+            document.removeEventListener('mouseup', onUp);
+            if (dragType === 'select') {
+                setSelectionRange(prev => {
+                    if (!prev) return null;
+                    const s = Math.min(prev.start, prev.end);
+                    const e = Math.max(prev.start, prev.end);
+                    if (e - s < 0.005) return null;
+                    const newVF = e - s;
+                    const newTotalW = curSeqAreaW / newVF;
+                    const newSL = s * newTotalW;
+                    setViewFraction(newVF);
+                    setScrollLeft(newSL);
+                    targetScrollRef.current = newSL;
+                    return null;
+                });
+            }
+        };
+        isDragging.current = true;
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('mouseup', onUp);
+        e.preventDefault();
+    }, [availableWidth, viewFraction, scrollLeft, seqAreaW, labelWidth, makeMoveHandler]);
 
     /* ── minimap cursor style + hover column ───────────────── */
     const handleMinimapMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
@@ -1377,43 +1360,85 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
         hoverRafRef.current = requestAnimationFrame(() => redrawRef.current());
     }, []);
 
-    /* ── main canvas mouse down → oligo region selection everywhere ── */
+    /* ── main canvas mouse down ─────────────────────────────────────────────
+       Left-drag  → oligo region selection (+ primer click on tiny drag)
+       Right-drag → zoom viewport to the dragged column range               */
     const handleCanvasMouseDown = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+        if (e.button !== 0 && e.button !== 2) return;
         const cvs = canvasRef.current;
         if (!cvs) return;
         const rect = cvs.getBoundingClientRect();
         const mouseXCanvas = e.clientX - rect.left;
-        if (mouseXCanvas < labelWidth) return; // ignore clicks on label column
+        if (mouseXCanvas < labelWidth) return;
 
+        const startClientX = e.clientX;
         const mouseX = mouseXCanvas - labelWidth;
         const startC = Math.max(0, Math.min(seqLen - 1, Math.floor((scrollLeft + mouseX) / cellW)));
         setOligoSelection({ startCol: startC, endCol: startC });
 
-        const onMove = (ev: MouseEvent) => {
-            const newX = ev.clientX - rect.left - labelWidth;
-            const endC = Math.max(0, Math.min(seqLen - 1, Math.floor((scrollLeft + newX) / cellW)));
-            setOligoSelection({ startCol: startC, endCol: endC });
-        };
+        const colAt = (clientX: number) =>
+            Math.max(0, Math.min(seqLen - 1, Math.floor((scrollLeft + clientX - rect.left - labelWidth) / cellW)));
 
-        const onUp = () => {
+        // ── RIGHT BUTTON: zoom to dragged column range ───────────────────
+        if (e.button === 2) {
+            const onMove = (ev: MouseEvent) => setOligoSelection({ startCol: startC, endCol: colAt(ev.clientX) });
+            const onUp = (ev: MouseEvent) => {
+                document.removeEventListener('mousemove', onMove);
+                document.removeEventListener('mouseup', onUp);
+                setOligoSelection(null);
+                const endC = colAt(ev.clientX);
+                const s = Math.min(startC, endC);
+                const e2 = Math.max(startC, endC);
+                if (e2 - s >= 5) {
+                    const seqAreaWLocal = availableWidth - labelWidth - RIGHT_PADDING;
+                    const newVF = Math.max(0.005, (e2 - s + 1) / seqLen);
+                    const newTotalW = seqAreaWLocal / newVF;
+                    const newSL = (s / seqLen) * newTotalW;
+                    setViewFraction(newVF);
+                    setScrollLeft(newSL);
+                    if (scrollRef.current) scrollRef.current.scrollLeft = newSL;
+                }
+            };
+            document.addEventListener('mousemove', onMove);
+            document.addEventListener('mouseup', onUp);
+            e.preventDefault();
+            return;
+        }
+
+        // ── LEFT BUTTON: primer click or oligo region selection ──────────
+        const onMove = (ev: MouseEvent) => setOligoSelection({ startCol: startC, endCol: colAt(ev.clientX) });
+        const onUp = (ev: MouseEvent) => {
             document.removeEventListener('mousemove', onMove);
             document.removeEventListener('mouseup', onUp);
+
+            const dragPx = Math.abs(ev.clientX - startClientX);
+
+            // Tiny drag = click → check for flanking primer hit
+            if (dragPx < 6 && onFlankingPrimerClick && flankingPrimers) {
+                if (flankingPrimers.fwd && startC >= flankingPrimers.fwd.start && startC < flankingPrimers.fwd.end) {
+                    setOligoSelection(null);
+                    onFlankingPrimerClick(flankingPrimers.fwd.start, flankingPrimers.fwd.end);
+                    return;
+                }
+                if (flankingPrimers.rev && startC >= flankingPrimers.rev.start && startC < flankingPrimers.rev.end) {
+                    setOligoSelection(null);
+                    onFlankingPrimerClick(flankingPrimers.rev.start, flankingPrimers.rev.end);
+                    return;
+                }
+            }
+
             setOligoSelection(prev => {
                 if (!prev) return null;
                 const s = Math.min(prev.startCol, prev.endCol);
                 const e2 = Math.max(prev.startCol, prev.endCol);
-                // Require at least 5 columns to avoid accidental click-as-selection
-                if (e2 - s >= 5 && onOligoRegionSelect) {
-                    onOligoRegionSelect(s, e2);
-                }
-                return prev;
+                if (e2 - s >= 5 && onOligoRegionSelect) onOligoRegionSelect(s, e2);
+                return null; // clear rectangle after committing
             });
         };
-
         document.addEventListener('mousemove', onMove);
         document.addEventListener('mouseup', onUp);
         e.preventDefault();
-    }, [labelWidth, seqLen, scrollLeft, cellW, onOligoRegionSelect]);
+    }, [labelWidth, seqLen, scrollLeft, cellW, availableWidth, onOligoRegionSelect, flankingPrimers, onFlankingPrimerClick]);
 
     /* ── canvas click → copy sequence OR select ─────────────────── */
     const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
@@ -1581,7 +1606,7 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
                     Insertion / Deletion
                 </span>
                 <span className="ml-auto italic text-slate-400">
-                    {viewMode === 'letters' ? 'Click a row to copy' : 'Drag minimap to zoom/select · Ctrl/⌘ + scroll to zoom'}
+                    {viewMode === 'letters' ? 'Click a row to copy' : 'Drag overview to zoom · Ctrl/⌘ + scroll to zoom'}
                 </span>
             </div>
 
@@ -1637,6 +1662,7 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
                         onMouseDown={handleCanvasMouseDown}
                         onMouseMove={handleCanvasMouseMove}
                         onMouseLeave={handleCanvasMouseLeave}
+                        onContextMenu={e => e.preventDefault()}
                     />
                     <canvas
                         ref={hoverOverlayRef}

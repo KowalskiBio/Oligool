@@ -612,9 +612,11 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, onFlanking
         e.stopPropagation();
 
         if (containerRef.current) {
-            const span = containerRef.current.querySelector('span');
-            if (span) {
-                charWidthRef.current = span.getBoundingClientRect().width;
+            // Use a single sequence character span for accurate per-char width.
+            // querySelector('span') would grab the position-label span (~6 chars wide).
+            const charSpan = containerRef.current.querySelector('span[data-seq]');
+            if (charSpan) {
+                charWidthRef.current = charSpan.getBoundingClientRect().width || 7.2;
             }
         }
 
@@ -638,35 +640,42 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, onFlanking
             if (dragState) {
                 const D = dragState.deltaChars;
                 if (D !== 0) {
-                    const id = dragState.id;
-                    const type = dragState.type;
-
-                    if (type === 'move') {
-                        setMoligo1Shift(dragState.initShift1 + D);
-                        setMoligo2Shift(dragState.initShift2 + D);
-                    } else {
-                        let newLen = dragState.initLen;
-                        if (id === 'p1') {
-                            let newShift = dragState.initShift1;
-                            if (type === 'left') { newShift += D; newLen -= D; }
-                            else if (type === 'right') { newLen += D; }
-
-                            if (newLen < 10) { const diff = 10 - newLen; newLen = 10; if (type === 'left') newShift -= diff; }
-                            if (newLen > 60) { const diff = newLen - 60; newLen = 60; if (type === 'left') newShift += diff; }
-
-                            setMoligo1Shift(newShift);
-                            setMoligo1Len(newLen);
+                    const p = primersRef.current;
+                    const off = offsetRef.current;
+                    const fs = fullSeqRef.current;
+                    if (p && fs) {
+                        // Recompute final live positions (mirrors the render-time logic)
+                        let p1S = p.p1.start + off, p1E = p.p1.end + off;
+                        let p2S = p.p2.start + off, p2E = p.p2.end + off;
+                        const { id, type } = dragState;
+                        if (type === 'move') { p1S += D; p1E += D; p2S += D; p2E += D; }
+                        else if (id === 'p1') {
+                            if (type === 'left') p1S += D; else p1E += D;
+                            if (p1E - p1S < 10) { if (type === 'left') p1S = p1E - 10; else p1E = p1S + 10; }
+                            if (p1E - p1S > 60) { if (type === 'left') p1S = p1E - 60; else p1E = p1S + 60; }
                         } else {
-                            let newShift = dragState.initShift2;
-                            if (type === 'left') { newLen -= D; }
-                            else if (type === 'right') { newShift += D; newLen += D; }
-
-                            if (newLen < 10) { const diff = 10 - newLen; newLen = 10; if (type === 'right') newShift -= diff; }
-                            if (newLen > 60) { const diff = newLen - 60; newLen = 60; if (type === 'right') newShift += diff; }
-
-                            setMoligo2Shift(newShift);
-                            setMoligo2Len(newLen);
+                            if (type === 'left') p2S += D; else p2E += D;
+                            if (p2E - p2S < 10) { if (type === 'left') p2S = p2E - 10; else p2E = p2S + 10; }
+                            if (p2E - p2S > 60) { if (type === 'left') p2S = p2E - 60; else p2E = p2S + 60; }
                         }
+                        p1S = Math.max(0, p1S); p1E = Math.min(fs.length, p1E);
+                        p2S = Math.max(0, p2S); p2E = Math.min(fs.length, p2E);
+
+                        const p1Seq = fs.substring(p1S, p1E);
+                        const p2Seq = fs.substring(p2S, p2E);
+                        const calcGcF = (s: string) => ((s.match(/[GCgc]/g) || []).length / s.length) * 100;
+                        const calcTmF = (s: string) => {
+                            const gc = (s.match(/[GCgc]/g) || []).length;
+                            return s.length < 14 ? (s.length - gc) * 2 + gc * 4 : 64.9 + 41 * (gc - 16.4) / s.length;
+                        };
+                        const d = data;
+                        setFixedAbsCoords({
+                            p1AbsStart: d.start + p1S + 1, p1AbsEnd: d.start + p1E + 1,
+                            p2AbsStart: d.start + p2S + 1, p2AbsEnd: d.start + p2E + 1,
+                            p1Seq, p2Seq,
+                            p1Tm: calcTmF(p1Seq), p2Tm: calcTmF(p2Seq),
+                            p1Gc: calcGcF(p1Seq), p2Gc: calcGcF(p2Seq),
+                        });
                     }
                 }
             }
@@ -682,6 +691,16 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, onFlanking
             };
         }
     }, [dragState]);
+
+    // Stable refs so drag-commit closure always sees current values
+    const primersRef = useRef(primers);
+    useEffect(() => { primersRef.current = primers; }, [primers]);
+    const offsetRef = useRef(data.ungappedOffset ?? 0);
+    const fullSeqRef = useRef(data.fullSeq ?? rawSeq);
+    useEffect(() => {
+        offsetRef.current = data.ungappedOffset ?? 0;
+        fullSeqRef.current = data.fullSeq ?? rawSeq;
+    }, [data]);
 
     // Compute live coordinates (including during drag)
     const offset = data.ungappedOffset ?? 0;
@@ -757,7 +776,7 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, onFlanking
                                         else handlers = { onMouseDown: (e: React.MouseEvent) => handleSeqMouseDown(e, 'p2', 'move') };
                                     }
 
-                                    return <span key={i} className={className + ' transition-colors duration-75'} {...handlers}>{char}</span>;
+                                    return <span key={i} data-seq className={className} {...handlers}>{char}</span>;
                                 })}
                             </span>
                         </div>
@@ -919,7 +938,7 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, onFlanking
                                     <span>IDT ΔG: <span className={getIdtStatusColor(itemDg)}>{itemDg.toFixed(2)}</span></span>
                                 )}
                                 {itemLocalDg !== undefined && itemLocalDg !== null && (
-                                    <span>Local ΔG: <span className="text-slate-500 dark:text-slate-400 font-medium">{itemLocalDg.toFixed(2)}</span></span>
+                                    <span>Strider ΔG: <span className={itemLocalDg <= 0 ? "text-amber-500 dark:text-amber-400 font-medium" : "text-slate-400 dark:text-slate-500 font-medium"}>{itemLocalDg > 0 ? '+' : ''}{itemLocalDg.toFixed(2)}</span></span>
                                 )}
                             </div>
                         </div>
@@ -969,7 +988,7 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, onFlanking
                 items.push(renderItem(item, seq1, idx, allDgs[idx], allLocalDgs[idx], allIdtTms[idx], allLocalTms[idx]));
             });
         } else if (raw) {
-            items.push(renderItem(raw, seq1, 0));
+            items.push(renderItem(raw, seq1, 0, data.DeltaG, raw.Local_DeltaG, raw.IDT_Tm, raw.Local_Tm));
         }
 
         return (

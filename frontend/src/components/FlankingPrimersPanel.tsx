@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import MSAViewer from './MSAViewer';
 import DimerSVG from './DimerSVG';
 import HairpinSVG from './HairpinSVG';
@@ -250,6 +250,70 @@ export default function FlankingPrimersPanel({
         }
     };
 
+    // Nav target set when user clicks a flanking primer bar in the minimap
+    const [primerNavTarget, setPrimerNavTarget] = useState<{ colStart: number; colEnd: number; ts: number } | null>(null);
+    const handleFlankingPrimerClick = useCallback((colStart: number, colEnd: number) => {
+        setPrimerNavTarget({ colStart, colEnd, ts: Date.now() });
+    }, []);
+
+    // Parse the full gapped query sequence from the alignment string once.
+    // This is always correct regardless of the current viewport/zoom level.
+    const fullQueryGapped = useMemo((): string => {
+        if (!alignment) return '';
+        const lines = alignment.split('\n');
+        let seq = '';
+        let recording = false;
+        for (const line of lines) {
+            if (line.startsWith('>')) {
+                if (recording) break; // stop after first sequence
+                recording = true;
+            } else if (recording) {
+                seq += line.trim();
+            }
+        }
+        return seq;
+    }, [alignment]);
+
+    // ungapped rawSeq position → absolute gapped alignment column (using full alignment)
+    const mapRawToFullGapped = useCallback((ungapped: number): number => {
+        if (!fullQueryGapped) return ungapped;
+        let count = 0;
+        for (let i = 0; i < fullQueryGapped.length; i++) {
+            if (fullQueryGapped[i] !== '-') {
+                if (count === ungapped) return i;
+                count++;
+            }
+        }
+        return fullQueryGapped.length;
+    }, [fullQueryGapped]);
+
+    // absolute gapped alignment column → ungapped rawSeq position (using full alignment)
+    const mapFullGappedToRaw = useCallback((col: number): number => {
+        if (!fullQueryGapped) return col;
+        let count = 0;
+        for (let i = 0; i < Math.min(col, fullQueryGapped.length); i++) {
+            if (fullQueryGapped[i] !== '-') count++;
+        }
+        return count;
+    }, [fullQueryGapped]);
+
+    // Called when user drags a region in the lower bar of the main canvas.
+    // Inlines the left/right oligo boundary check directly so p1Start/p2Start etc.
+    // are always current (avoids stale-closure bug from calling handleRegionSelect).
+    const handleMSARegionSelect = useCallback((startCol: number, endCol: number) => {
+        const startRaw = mapFullGappedToRaw(startCol);
+        const endRaw   = mapFullGappedToRaw(endCol);
+        const mStart = Math.min(p1Start, p2Start);
+        const mEnd   = Math.max(p1End,   p2End);
+        if (endRaw <= mStart) {
+            setManualLeftStart(startRaw);
+            setManualLeftEnd(endRaw);
+        } else if (startRaw >= mEnd) {
+            setManualRightStart(startRaw);
+            setManualRightEnd(endRaw);
+        }
+    }, [mapFullGappedToRaw, p1Start, p1End, p2Start, p2End]);
+
     const [isAnalyzing, setIsAnalyzing] = useState(false);
     const [idtResults, setIdtResults] = useState<any>(null);
     const [analysisError, setAnalysisError] = useState<string | null>(null);
@@ -386,8 +450,8 @@ export default function FlankingPrimersPanel({
                                 </div>
                             )}
                             <div className="flex justify-between items-center text-[9px] text-slate-400 font-medium px-1">
-                                <span>Vienna ΔG: <b className="text-slate-500">{item.ViennaRNA_DeltaG?.toFixed(2) || 'N/A'}</b></span>
-                                <span>Vienna Tm: <b className="text-slate-500">{item.Local_Tm?.toFixed(1) || 'N/A'}°C</b></span>
+                                <span>Strider ΔG: <b className={item.Local_DeltaG != null ? (item.Local_DeltaG <= 0 ? "text-amber-500" : "text-slate-400") : "text-slate-500"}>{item.Local_DeltaG != null ? `${item.Local_DeltaG > 0 ? '+' : ''}${item.Local_DeltaG.toFixed(2)}` : 'N/A'}</b></span>
+                                <span>Strider Tm: <b className="text-slate-500">{item.Local_Tm?.toFixed(1) || 'N/A'}°C</b></span>
                             </div>
                         </div>
                     ))}
@@ -396,7 +460,7 @@ export default function FlankingPrimersPanel({
         );
     };
 
-    // ── Static sequence view ─────────────────────────────────────────────────
+    // ── Static sequence view refs/state (hoisted so drag code can use them) ──
     const containerRef = React.useRef<HTMLDivElement>(null);
     const [lineLength, setLineLength] = useState(150);
 
@@ -405,8 +469,6 @@ export default function FlankingPrimersPanel({
         const resizeObserver = new ResizeObserver(entries => {
             for (let entry of entries) {
                 const width = entry.contentRect.width;
-                // Subtract ~80px for the coordinate column and padding
-                // Divide by ~7.2px per character for text-xs font-mono
                 const chars = Math.floor((width - 80) / 7.2);
                 setLineLength(Math.max(40, Math.min(200, chars)));
             }
@@ -415,15 +477,145 @@ export default function FlankingPrimersPanel({
         return () => resizeObserver.disconnect();
     }, []);
 
+    // ── Drag state for interactive flanking primer editing ───────────────────
+    const [flankDragState, setFlankDragState] = useState<{
+        id: 'fwd' | 'rev';
+        type: 'move' | 'left' | 'right';
+        startX: number;
+        deltaChars: number;
+        initStart: number;
+        initEnd: number;
+    } | null>(null);
+    const flankCharWidthRef = useRef<number>(7.2);
+
+    const revComp = useCallback((s: string) => {
+        const map: Record<string, string> = { A: 'T', T: 'A', C: 'G', G: 'C', a: 't', t: 'a', c: 'g', g: 'c' };
+        return s.split('').reverse().map(c => map[c] || c).join('');
+    }, []);
+
+    const calcGCLocal = (seq: string) => {
+        if (!seq) return 0;
+        return Number(((seq.match(/[GCgc]/g)?.length || 0) / seq.length * 100).toFixed(1));
+    };
+
+    const calcTmLocal = (seq: string) => {
+        if (!seq) return 0;
+        const gc = seq.match(/[GCgc]/g)?.length || 0;
+        const at = seq.length - gc;
+        const tm = seq.length < 14 ? at * 2 + gc * 4 : 64.9 + 41 * (gc - 16.4) / seq.length;
+        return Number(tm.toFixed(1));
+    };
+
+    // These must be above liveFwdInterval/liveRevInterval which reference them
+    const fwdInterval = selFwd?.interval as [number, number] | undefined;
+    const revInterval = selRev?.interval as [number, number] | undefined;
+
+    const handleFlankMouseDown = (e: React.MouseEvent, id: 'fwd' | 'rev', type: 'move' | 'left' | 'right') => {
+        e.preventDefault();
+        e.stopPropagation();
+        const interval = id === 'fwd' ? fwdInterval : revInterval;
+        if (!interval) return;
+        // Measure actual char width from a rendered span in the container
+        if (containerRef.current) {
+            const span = containerRef.current.querySelector('span[data-idx]');
+            if (span) flankCharWidthRef.current = span.getBoundingClientRect().width || 7.2;
+        }
+        setFlankDragState({ id, type, startX: e.clientX, deltaChars: 0, initStart: interval[0], initEnd: interval[1] });
+    };
+
+    useEffect(() => {
+        if (!flankDragState) return;
+
+        const onMove = (e: MouseEvent) => {
+            const delta = Math.round((e.clientX - flankDragState.startX) / flankCharWidthRef.current);
+            setFlankDragState(prev => prev ? { ...prev, deltaChars: delta } : null);
+        };
+
+        const onUp = () => {
+            if (!flankDragState) return;
+            const D = flankDragState.deltaChars;
+            if (D !== 0) {
+                const { id, type, initStart, initEnd } = flankDragState;
+                let newStart = initStart;
+                let newEnd = initEnd;
+
+                if (type === 'move') { newStart += D; newEnd += D; }
+                else if (type === 'left') { newStart += D; }
+                else if (type === 'right') { newEnd += D; }
+
+                // Clamp to valid range
+                const minLen = 10;
+                if (newEnd - newStart < minLen) {
+                    if (type === 'left') newStart = newEnd - minLen;
+                    else newEnd = newStart + minLen;
+                }
+                newStart = Math.max(0, newStart);
+                newEnd = Math.min(rawSeq.length, newEnd);
+
+                const newInterval: [number, number] = [newStart, newEnd];
+                const fwdStrandSeq = rawSeq.substring(newStart, newEnd);
+                const seq = id === 'fwd' ? fwdStrandSeq : revComp(fwdStrandSeq);
+                const gc = calcGCLocal(seq);
+                const tm = calcTmLocal(seq);
+                const updated: DesignedPrimer = {
+                    sequence: seq, length: seq.length, interval: newInterval,
+                    gc_percent: gc, tm,
+                    primer3: { tm, gc_percent: gc, self_any: null, self_end: null, hairpin_th: null },
+                    hairpin: { structure_found: false, tm: null, dg: null },
+                    homodimer: { structure_found: false, tm: null, dg: null },
+                };
+
+                if (id === 'fwd') {
+                    setSelFwd(updated);
+                    setManualLeftStart(newStart);
+                    setManualLeftEnd(newEnd);
+                } else {
+                    setSelRev(updated);
+                    setManualRightStart(newStart);
+                    setManualRightEnd(newEnd);
+                }
+            }
+            setFlankDragState(null);
+        };
+
+        window.addEventListener('mousemove', onMove);
+        window.addEventListener('mouseup', onUp);
+        return () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); };
+    }, [flankDragState, rawSeq, revComp]);
+
+    // Compute live intervals during drag
+    const liveFwdInterval: [number, number] | undefined = (() => {
+        if (!fwdInterval) return undefined;
+        if (!flankDragState || flankDragState.id !== 'fwd') return fwdInterval;
+        const D = flankDragState.deltaChars;
+        const { type, initStart, initEnd } = flankDragState;
+        let s = initStart, e = initEnd;
+        if (type === 'move') { s += D; e += D; }
+        else if (type === 'left') s += D;
+        else if (type === 'right') e += D;
+        return [Math.max(0, s), Math.min(rawSeq.length, e)];
+    })();
+
+    const liveRevInterval: [number, number] | undefined = (() => {
+        if (!revInterval) return undefined;
+        if (!flankDragState || flankDragState.id !== 'rev') return revInterval;
+        const D = flankDragState.deltaChars;
+        const { type, initStart, initEnd } = flankDragState;
+        let s = initStart, e = initEnd;
+        if (type === 'move') { s += D; e += D; }
+        else if (type === 'left') s += D;
+        else if (type === 'right') e += D;
+        return [Math.max(0, s), Math.min(rawSeq.length, e)];
+    })();
+
+    // ── Static sequence view ─────────────────────────────────────────────────
+
     const actualOligoStart = Math.min(p1Start, p2Start);
     const actualOligoEnd = Math.max(p1End, p2End);
 
     let viewStart = Math.max(0, actualOligoStart - flankWindow);
 
     const viewEnd = Math.min(rawSeq.length, actualOligoEnd + flankWindow);
-
-    const fwdInterval = selFwd?.interval;
-    const revInterval = selRev?.interval;
 
     const mapToGapped = (u: number) => {
         if (!gappedData) return u;
@@ -447,15 +639,18 @@ export default function FlankingPrimersPanel({
         return start + seq.length + (targetRelative - count);
     };
 
-    // flankingPrimers for MSAViewer — show "Used" primer if selected, otherwise show top candidate
-    const activeFwd = selFwd ?? result?.forward.primers[0] ?? null;
-    const activeRev = selRev ?? result?.reverse.primers[0] ?? null;
+    // flankingPrimers for MSAViewer — only show primers the user explicitly selected with "Use".
+    // Use mapRawToFullGapped (derived from the full alignment) so coordinates are stable
+    // regardless of the current viewport/zoom level. Never use the slice-based mapToGapped here.
+    const activeFwd = selFwd;
+    const activeRev = selRev;
     const flankingPrimersForMSA = useMemo(() => {
-        return (activeFwd?.interval || activeRev?.interval) ? {
-            fwd: activeFwd?.interval ? { start: mapToGapped(activeFwd.interval[0]), end: mapToGapped(activeFwd.interval[1]) } : null,
-            rev: activeRev?.interval ? { start: mapToGapped(activeRev.interval[0]), end: mapToGapped(activeRev.interval[1]) } : null,
-        } : null;
-    }, [activeFwd, activeRev, gappedData]);
+        if (!activeFwd?.interval && !activeRev?.interval) return null;
+        return {
+            fwd: activeFwd?.interval ? { start: mapRawToFullGapped(activeFwd.interval[0]), end: mapRawToFullGapped(activeFwd.interval[1]) } : null,
+            rev: activeRev?.interval ? { start: mapRawToFullGapped(activeRev.interval[0]), end: mapRawToFullGapped(activeRev.interval[1]) } : null,
+        };
+    }, [activeFwd, activeRev, mapRawToFullGapped]);
 
     useEffect(() => {
         if (onFlankingPrimersUpdate) {
@@ -475,8 +670,10 @@ export default function FlankingPrimersPanel({
             lines.push(chars.slice(i, i + lineLength));
         }
 
+        const isDragging = !!flankDragState;
+
         return (
-            <div className="font-mono text-xs leading-relaxed select-text space-y-1">
+            <div className="font-mono text-xs leading-relaxed space-y-1" style={{ cursor: isDragging ? 'grabbing' : 'auto', userSelect: isDragging ? 'none' : 'text' }}>
                 {lines.map((lineChars, lineIdx) => {
                     const lineStartPos = viewStart + lineIdx * lineLength + 1; // 1-indexed
                     const posStr = String(lineStartPos).padStart(6, ' ');
@@ -488,14 +685,30 @@ export default function FlankingPrimersPanel({
                                     const i = viewStart + lineIdx * lineLength + charIdx;
                                     const isP1 = i >= p1Start && i < p1End;
                                     const isP2 = i >= p2Start && i < p2End;
-                                    const isFwd = fwdInterval && i >= fwdInterval[0] && i < fwdInterval[1];
-                                    const isRev = revInterval && i >= revInterval[0] && i < revInterval[1];
+                                    const isFwd = liveFwdInterval && i >= liveFwdInterval[0] && i < liveFwdInterval[1];
+                                    const isRev = liveRevInterval && i >= liveRevInterval[0] && i < liveRevInterval[1];
+
                                     let cn = 'text-slate-500 dark:text-slate-400';
+                                    let handlers: React.HTMLAttributes<HTMLSpanElement> = {};
+
                                     if (isP1) cn = 'bg-green-200 dark:bg-green-900/40 text-green-900 dark:text-green-300 font-bold';
                                     if (isP2) cn = 'bg-amber-200 dark:bg-amber-900/40 text-amber-900 dark:text-amber-300 font-bold';
-                                    if (isFwd) cn = 'bg-emerald-300 dark:bg-emerald-700/60 text-emerald-900 dark:text-emerald-200 font-bold underline';
-                                    if (isRev) cn = 'bg-teal-300 dark:bg-teal-700/60 text-teal-900 dark:text-teal-200 font-bold underline';
-                                    return <span key={i} data-idx={i} className={cn}>{char}</span>;
+
+                                    if (isFwd && liveFwdInterval) {
+                                        const isEdge = i === liveFwdInterval[0] || i === liveFwdInterval[1] - 1;
+                                        cn = `bg-emerald-300 dark:bg-emerald-700/60 text-emerald-900 dark:text-emerald-200 font-bold underline ${isEdge ? 'cursor-ew-resize' : 'cursor-grab active:cursor-grabbing'}`;
+                                        if (i === liveFwdInterval[0]) handlers = { onMouseDown: (e) => handleFlankMouseDown(e, 'fwd', 'left') };
+                                        else if (i === liveFwdInterval[1] - 1) handlers = { onMouseDown: (e) => handleFlankMouseDown(e, 'fwd', 'right') };
+                                        else handlers = { onMouseDown: (e) => handleFlankMouseDown(e, 'fwd', 'move') };
+                                    } else if (isRev && liveRevInterval) {
+                                        const isEdge = i === liveRevInterval[0] || i === liveRevInterval[1] - 1;
+                                        cn = `bg-teal-300 dark:bg-teal-700/60 text-teal-900 dark:text-teal-200 font-bold underline ${isEdge ? 'cursor-ew-resize' : 'cursor-grab active:cursor-grabbing'}`;
+                                        if (i === liveRevInterval[0]) handlers = { onMouseDown: (e) => handleFlankMouseDown(e, 'rev', 'left') };
+                                        else if (i === liveRevInterval[1] - 1) handlers = { onMouseDown: (e) => handleFlankMouseDown(e, 'rev', 'right') };
+                                        else handlers = { onMouseDown: (e) => handleFlankMouseDown(e, 'rev', 'move') };
+                                    }
+
+                                    return <span key={i} data-idx={i} className={cn} {...handlers}>{char}</span>;
                                 })}
                             </span>
                         </div>
@@ -604,7 +817,9 @@ export default function FlankingPrimersPanel({
                     primers={gappedOligoPrimers}
                     flankingPrimers={flankingPrimersForMSA}
                     isDarkMode={isDarkMode}
-                    navigateTarget={navigateTarget}
+                    navigateTarget={primerNavTarget ?? navigateTarget}
+                    onFlankingPrimerClick={handleFlankingPrimerClick}
+                    onOligoRegionSelect={handleMSARegionSelect}
                 />
             )}
 
@@ -714,23 +929,37 @@ export default function FlankingPrimersPanel({
                 </div>
 
                 {/* ── Results ── */}
-                {result && (
+                {(result || selFwd || selRev) && (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-5 animate-in fade-in slide-in-from-bottom-2 duration-300">
                         <div>
                             <div className="text-xs font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider mb-2 px-1">
-                                Left (Forward) Primers — {result.forward.num_returned} found
+                                Left (Forward) Primers{result ? ` — ${result.forward.num_returned} found` : ''}
                             </div>
-                            {result.forward.primers.length === 0
+                            {/* Custom dragged primer card shown above results when it no longer matches any candidate */}
+                            {selFwd && !result?.forward.primers.some(p => p.sequence === selFwd.sequence) && (
+                                <div className="mb-2">
+                                    <div className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold uppercase tracking-widest px-1 mb-1">✏ Custom (edited)</div>
+                                    {renderCard(selFwd, 'fwd', -1)}
+                                </div>
+                            )}
+                            {result && (result.forward.primers.length === 0
                                 ? <p className="text-xs text-slate-400 px-1">{result.forward.explain || 'No primers found in upstream region.'}</p>
-                                : <div className="space-y-2">{result.forward.primers.map((p, i) => renderCard(p, 'fwd', i))}</div>}
+                                : <div className="space-y-2">{result.forward.primers.map((p, i) => renderCard(p, 'fwd', i))}</div>)}
                         </div>
                         <div>
                             <div className="text-xs font-bold text-teal-600 dark:text-teal-400 uppercase tracking-wider mb-2 px-1">
-                                Right (Reverse) Primers — {result.reverse.num_returned} found
+                                Right (Reverse) Primers{result ? ` — ${result.reverse.num_returned} found` : ''}
                             </div>
-                            {result.reverse.primers.length === 0
+                            {/* Custom dragged primer card shown above results when it no longer matches any candidate */}
+                            {selRev && !result?.reverse.primers.some(p => p.sequence === selRev.sequence) && (
+                                <div className="mb-2">
+                                    <div className="text-[10px] text-teal-600 dark:text-teal-400 font-bold uppercase tracking-widest px-1 mb-1">✏ Custom (edited)</div>
+                                    {renderCard(selRev, 'rev', -1)}
+                                </div>
+                            )}
+                            {result && (result.reverse.primers.length === 0
                                 ? <p className="text-xs text-slate-400 px-1">{result.reverse.explain || 'No primers found in downstream region.'}</p>
-                                : <div className="space-y-2">{result.reverse.primers.map((p, i) => renderCard(p, 'rev', i))}</div>}
+                                : <div className="space-y-2">{result.reverse.primers.map((p, i) => renderCard(p, 'rev', i))}</div>)}
                         </div>
                         {selFwd && selRev && (
                             <div className="col-span-full rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden bg-slate-50 dark:bg-slate-900/50 shadow-sm mt-4 transition-all">
