@@ -18,6 +18,8 @@ function App() {
   const [input, setInput] = useState('');
   const [step, setStep] = useState<Step>('input');
   const [blastHits, setBlastHits] = useState<BlastHit[]>([]);
+  const [filteredHits, setFilteredHits] = useState<BlastHit[]>([]);
+  const [showMatches, setShowMatches] = useState(false);
   const [blastMeta, setBlastMeta] = useState<{ rid: string; rtoe: number; query_len: number } | null>(null);
   const [alignment, setAlignment] = useState('');
   const [selectedSequence, setSelectedSequence] = useState<{ id: string; seq: string; start: number; end: number } | null>(null);
@@ -195,6 +197,8 @@ function App() {
       }
 
       setBlastHits(data.blast_hits);
+      setFilteredHits(data.filtered_hits || []);
+      setShowMatches(false);
       setBlastMeta(data.blast_meta);
       setStep('aligning');
 
@@ -213,6 +217,8 @@ function App() {
   const handleReset = () => {
     setStep('input');
     setBlastHits([]);
+    setFilteredHits([]);
+    setShowMatches(false);
     setBlastMeta(null);
     setAlignment('');
     setSelectedSequence(null);
@@ -223,6 +229,17 @@ function App() {
 
   const isStepActive = (s: Step) => stepOrder.indexOf(s) <= stepOrder.indexOf(step);
   const isStepCurrent = (s: Step) => s === step;
+
+  // When showMatches is off, strip 100%-match sequences from the FASTA alignment
+  const visibleAlignment = (() => {
+    if (showMatches || filteredHits.length === 0 || !alignment) return alignment;
+    const filteredAccessions = new Set(filteredHits.map(h => h.accession));
+    const blocks = alignment.split(/(?=>)/);
+    return blocks.filter(block => {
+      const header = block.match(/^>([^\n]+)/)?.[1] ?? '';
+      return !filteredAccessions.has(header.trim().split(/\s/)[0]);
+    }).join('');
+  })();
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-indigo-50/30 dark:from-slate-900 dark:to-slate-950 py-8 px-4 sm:px-6 lg:px-8 transition-colors duration-200">
@@ -713,13 +730,20 @@ function App() {
           )}
 
           {/* BLAST Results Table */}
-          {blastHits.length > 0 && <BlastResults hits={blastHits} />}
+          {blastHits.length > 0 && (
+            <BlastResults
+              hits={blastHits}
+              filteredHits={filteredHits}
+              showMatches={showMatches}
+              onToggleShowMatches={() => setShowMatches(v => !v)}
+            />
+          )}
 
           {/* MSA Viewer */}
-          {alignment && (
+          {visibleAlignment && (
             <>
               <MSAViewer
-                alignment={alignment}
+                alignment={visibleAlignment}
                 onVisibleQueryChange={setSelectedSequence}
                 jobName={jobName}
                 primers={selectedPrimers}

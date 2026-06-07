@@ -140,17 +140,19 @@ def run_blast(
         print(f"[BLAST] Filtering by % identity >= {perc_identity}")
         hits = [h for h in hits if h["identity"] >= perc_identity]
 
+    filtered_hits = []
     if filter_matches:
         print(f"[BLAST] Filtering out 100% exact matches")
+        filtered_hits = [h for h in hits if h["identity"] >= 100.0]
         hits = [h for h in hits if h["identity"] < 100.0]
 
-    print(f"[BLAST] Returning {len(hits)} hits")
+    print(f"[BLAST] Returning {len(hits)} hits ({len(filtered_hits)} filtered)")
     metadata = {
         "rid": rid,
         "rtoe": rtoe,
         "query_len": query_len
     }
-    return hits, metadata
+    return hits, metadata, filtered_hits
 
 
 def _parse_blast_xml(xml_text: str) -> Tuple[List[Dict], int]:

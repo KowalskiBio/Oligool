@@ -95,7 +95,7 @@ async def search_and_align(request: SearchRequest):
     def run_heavy_pipeline():
         try:
             # Step 1: Run BLAST
-            blast_hits, blast_meta = run_blast(
+            blast_hits, blast_meta, filtered_hits = run_blast(
                 request.sequence,
                 max_hits=request.max_hits,
                 api_key=request.api_key,
@@ -105,10 +105,10 @@ async def search_and_align(request: SearchRequest):
                 filter_matches=request.filter_matches,
             )
 
-            if not blast_hits:
+            if not blast_hits and not filtered_hits:
                 return {"error": True, "detail": "No BLAST hits found."}
 
-            # Step 2: Prepare sequences for MSA (query + hits)
+            # Step 2: Prepare sequences for MSA (query + non-filtered hits + filtered hits)
             lines = request.sequence.strip().split("\n")
             if lines[0].startswith(">"):
                 query_id = lines[0][1:].strip()
@@ -118,8 +118,11 @@ async def search_and_align(request: SearchRequest):
                 query_seq = request.sequence.strip().replace(" ", "").replace("\n", "")
 
             msa_input = [{"id": query_id, "seq": query_seq}]
+            # 100% matches go immediately after the query so they appear first in the MSA
+            for hit in filtered_hits:
+                full_id = f"{hit['accession']} {hit['description']}"
+                msa_input.append({"id": full_id, "seq": hit["sequence"]})
             for hit in blast_hits:
-                # Include description in ID so MSA preserves it in headers
                 full_id = f"{hit['accession']} {hit['description']}"
                 msa_input.append({"id": full_id, "seq": hit["sequence"]})
 
@@ -138,8 +141,20 @@ async def search_and_align(request: SearchRequest):
                 for h in blast_hits
             ]
 
+            filtered_summary = [
+                {
+                    "accession": h["accession"],
+                    "description": h["description"],
+                    "evalue": h["evalue"],
+                    "identity": h["identity"],
+                    "query_cover": h["query_cover"],
+                }
+                for h in filtered_hits
+            ]
+
             return {
                 "blast_hits": hit_summary,
+                "filtered_hits": filtered_summary,
                 "blast_meta": blast_meta,
                 "alignment": alignment,
                 "num_hits": len(blast_hits),
