@@ -5,4 +5,6 @@ pydantic
 primer3-py
 pywebview>=4.0.0
 requests>=2.25.0
-strider-dna
+# Hairpin Tm uses strider.thermo.hairpin.hairpin_thermo (bulge-aware, added in
+# 0.3.2 via the merged loop-ΔH tables). Pinned for reproducible deploys.
+strider-dna==0.3.2

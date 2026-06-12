@@ -563,7 +563,9 @@ async def analyze_idt_oligos(request: IdtAnalyzeRequest):
 
         if endpoint == "Hairpin":
             payload["Sequence"] = seq1
-            payload["FoldingTemp"] = request.temp if hasattr(request, "temp") and request.temp is not None else 37.0
+            # IDT's web OligoAnalyzer defaults the hairpin folding temperature to
+            # 25 °C. Match it so our ΔG/Tm correspond to the website's values.
+            payload["FoldingTemp"] = request.temp if hasattr(request, "temp") and request.temp is not None else 25.0
         elif endpoint == "SelfDimer" or endpoint == "HeteroDimer":
             # Pass sequences precisely as 'primary' and 'secondary' query params for proper IDT binding
             params = {"primary": seq1}
@@ -604,14 +606,20 @@ async def analyze_idt_oligos(request: IdtAnalyzeRequest):
     # Use strider-dna for Mg2+-aware dot-bracket structure, local ΔG, and Tm
     try:
         from strider import ThermoEngine
+        from strider.thermo.hairpin import hairpin_thermo  # strider >= 0.3.2
 
-        base_temp = request.temp if hasattr(request, "temp") and request.temp is not None else 34.0
+        base_temp = request.temp if hasattr(request, "temp") and request.temp is not None else 25.0
         mv_m = request.mv_conc / 1000.0
         effective_mg = max(0.0, request.mg_conc - request.dntp_conc) / 1000.0
         oligo_conc_m = getattr(request, "oligo_conc", 0.25) / 1e6
 
         eng = ThermoEngine(material='dna', celsius=base_temp, sodium=mv_m, magnesium=effective_mg)
 
+        # Hairpin Tm uses strider.thermo.hairpin.hairpin_thermo (>= 0.3.2), the
+        # UNImolecular two-state model (Tm = ΔH/ΔS, concentration-independent)
+        # with full SantaLucia loop ΔH + per-base-pair Owczarzy salt — bulge-aware
+        # and evaluated on the same strider structure we draw. strider's own
+        # melting_temperature is BImolecular and only correct for dimers.
         def add_strider_analysis(seq1, hp_data, seq2=None):
             """Strider-dna enrichment for hairpin (seq2=None) or dimer (seq2 provided)."""
             if not (isinstance(hp_data, list) or (isinstance(hp_data, dict) and not hp_data.get("error"))):
@@ -633,26 +641,44 @@ async def analyze_idt_oligos(request: IdtAnalyzeRequest):
                 display_seq = seq1
                 def _with_div(s): return s
 
-            # If MFE is flat (no base pairs), find the best paired suboptimal structure
             def _valid_paired(s):
                 return '(' in s and s.count('(') == s.count(')')
 
+            # Only draw the MFE structure when it actually has base pairs. When the
+            # MFE is flat (all dots, ΔG = 0) there is no stable structure — by
+            # definition no suboptimal structure can have ΔG < 0, so we must NOT
+            # fall back to a positive-ΔG fold that doesn't physically form.
             if _valid_paired(raw_mfe):
                 viz_struct_raw = raw_mfe
                 viz_dg = round(float(mfe_result.energy), 2)
             else:
                 viz_struct_raw = None
                 viz_dg = None
-                for s, e, _ in eng.subopt(fold_seq, gap=15.0, max_structures=200):
-                    if _valid_paired(s):
-                        viz_struct_raw = s
-                        viz_dg = round(float(e), 2)
-                        break
 
             viz_struct = _with_div(viz_struct_raw) if viz_struct_raw else None
 
-            mfe_tm_raw = eng.melting_temperature(fold_seq, strand_conc_M=oligo_conc_m)
-            mfe_tm = round(mfe_tm_raw, 1) if mfe_tm_raw and mfe_tm_raw > 1.0 else None
+            # Tm: unimolecular two-state for hairpins (seq2 is None).
+            # For dimers we deliberately return None: a heterodimer melts
+            # BImolecularly (two strands associating), and strider has no proper
+            # two-strand Tm yet — eng.melting_temperature(seq1+seq2) just melts the
+            # concatenation as one strand, which is physically meaningless. A
+            # correct bimolecular dimer Tm is coming as strider PR3
+            # (structure_thermo dimer support); until then dimers show ΔG only,
+            # with IDT/primer3 providing the dimer Tm.
+            def _struct_tm(structure, energy):
+                if seq2:
+                    return None
+                try:
+                    # strider >= 0.3.2: returns a HairpinThermo object; raises
+                    # ValueError for multiloops / no base pairs.
+                    res = hairpin_thermo(fold_seq, sodium_M=mv_m,
+                                         magnesium_M=effective_mg, structure=structure)
+                    t = res.tm_celsius
+                except Exception:
+                    t = None
+                return round(t, 1) if t and t > 1.0 else None
+
+            mfe_tm = _struct_tm(viz_struct_raw, viz_dg)
 
             best_item = None
             best_idt_dg = None
@@ -684,14 +710,14 @@ async def analyze_idt_oligos(request: IdtAnalyzeRequest):
                 if added >= 4: break
                 if sub_struct in seen: continue
                 if not _valid_paired(sub_struct): continue
+                if float(sub_energy) >= 0: continue  # skip non-forming (ΔG ≥ 0) folds
                 seen.add(sub_struct)
-                sub_tm_raw = eng.melting_temperature(fold_seq, strand_conc_M=oligo_conc_m)
-                sub_tm = round(sub_tm_raw, 1) if sub_tm_raw and sub_tm_raw > 1.0 else None
+                sub_dg = round(float(sub_energy), 2)
                 final_results.append({
                     "DotBracket": _with_div(sub_struct),
                     "Sequence": display_seq,
-                    "Local_DeltaG": round(float(sub_energy), 2),
-                    "Local_Tm": sub_tm,
+                    "Local_DeltaG": sub_dg,
+                    "Local_Tm": _struct_tm(sub_struct, sub_dg),
                     "DeltaG": None,
                     "IDT_Tm": None
                 })
