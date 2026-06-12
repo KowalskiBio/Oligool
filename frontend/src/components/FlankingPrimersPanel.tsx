@@ -449,9 +449,16 @@ export default function FlankingPrimersPanel({
                                     )}
                                 </div>
                             )}
-                            <div className="flex justify-between items-center text-[9px] text-slate-400 font-medium px-1">
-                                <span>Strider ΔG: <b className={item.Local_DeltaG != null ? (item.Local_DeltaG <= 0 ? "text-amber-500" : "text-slate-400") : "text-slate-500"}>{item.Local_DeltaG != null ? `${item.Local_DeltaG > 0 ? '+' : ''}${item.Local_DeltaG.toFixed(2)}` : 'N/A'}</b></span>
-                                <span>Strider Tm: <b className="text-slate-500">{item.Local_Tm?.toFixed(1) || 'N/A'}°C</b></span>
+                            {/* Provenance: IDT vs Strider, ΔG + Tm (mirrors the oligo card). */}
+                            <div className="flex flex-col gap-0.5 text-[9px] text-slate-400 font-medium px-1">
+                                <div className="flex justify-between items-center">
+                                    <span>IDT ΔG: <b className={getIdtStatusColor(topDg)}>{topDg != null ? `${topDg > 0 ? '+' : ''}${topDg.toFixed(2)}` : 'N/A'}</b></span>
+                                    <span>Strider ΔG: <b className={item.Local_DeltaG != null ? (item.Local_DeltaG <= 0 ? "text-amber-500" : "text-slate-400") : "text-slate-500"}>{item.Local_DeltaG != null ? `${item.Local_DeltaG > 0 ? '+' : ''}${item.Local_DeltaG.toFixed(2)}` : 'N/A'}</b></span>
+                                </div>
+                                <div className="flex justify-between items-center">
+                                    <span>IDT Tm: <b className="text-slate-500">{item.IDT_Tm != null ? `${Number(item.IDT_Tm).toFixed(1)}°C` : 'N/A'}</b></span>
+                                    <span>Strider Tm: <b className="text-slate-500">{item.Local_Tm != null ? `${item.Local_Tm.toFixed(1)}°C` : 'N/A'}</b></span>
+                                </div>
                             </div>
                         </div>
                     ))}
@@ -652,7 +659,17 @@ export default function FlankingPrimersPanel({
         };
     }, [activeFwd, activeRev, mapRawToFullGapped]);
 
+    // Propagate the selection up to App (for the MSA highlight + session save).
+    // Guard the FIRST emission: this panel remounts fresh on session load (its
+    // parent QueryViewer is keyed by the import nonce), so without this guard the
+    // initial empty render would fire `onFlankingPrimersUpdate(null)` and wipe the
+    // primer selection App just restored from the session.
+    const didEmitFlanking = useRef(false);
     useEffect(() => {
+        if (!didEmitFlanking.current) {
+            didEmitFlanking.current = true;
+            if (!flankingPrimersForMSA) return; // don't clobber a restored selection
+        }
         if (onFlankingPrimersUpdate) {
             onFlankingPrimersUpdate(flankingPrimersForMSA);
         }

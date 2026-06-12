@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import MSAViewer from './components/MSAViewer';
-import QueryViewer from './components/QueryViewer';
+import QueryViewer, { type QueryViewerHandle, type ImportedSession } from './components/QueryViewer';
 import BlastResults from './components/BlastResults';
 import RabbitGame from './components/RabbitGame';
+import { downloadSession, parseSessionText, OLIGOOL_SESSION_APP, OLIGOOL_SESSION_VERSION, type OligoolSession } from './utils/session';
 
 type Step = 'input' | 'blasting' | 'aligning' | 'done';
 
@@ -51,6 +52,13 @@ function App() {
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [navigateTarget, setNavigateTarget] = useState<{ colStart: number; colEnd: number; ts: number } | null>(null);
   const [oligoRegion, setOligoRegion] = useState<{ startCol: number; endCol: number } | null>(null);
+
+  // Session save / load
+  const queryViewerRef = useRef<QueryViewerHandle>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const importNonceRef = useRef(0);
+  const [importedSession, setImportedSession] = useState<ImportedSession | null>(null);
+  const [sessionMsg, setSessionMsg] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
 
   useEffect(() => {
     if (isDarkMode) {
@@ -149,6 +157,7 @@ function App() {
     setSelectedSequence(null);
     setElapsedSeconds(0);
     setSelectedFlankingPrimers(null);
+    setImportedSession(null); // a fresh search must not re-apply a previously loaded session
 
     const timerId = setInterval(() => {
       setElapsedSeconds(prev => prev + 1);
@@ -225,6 +234,92 @@ function App() {
     setError('');
     setInput('');
     setSelectedFlankingPrimers(null);
+    setImportedSession(null);
+  };
+
+  const flashSessionMsg = (type: 'ok' | 'err', text: string, ms = 3000) => {
+    setSessionMsg({ type, text });
+    setTimeout(() => setSessionMsg(null), ms);
+  };
+
+  // ── Save the whole working session to a downloadable file ──────────────
+  const handleSaveSession = () => {
+    if (!alignment) {
+      flashSessionMsg('err', 'Nothing to save yet — run a search first.');
+      return;
+    }
+    const session: OligoolSession = {
+      app: OLIGOOL_SESSION_APP,
+      version: OLIGOOL_SESSION_VERSION,
+      savedAt: new Date().toISOString(),
+      jobName,
+      search: { input, organism, eValue, percIdentity, filterMatches, maxHitsPreset, customHits },
+      results: { blastHits, filteredHits, blastMeta, showMatches, alignment },
+      oligo: queryViewerRef.current?.getSnapshot() ?? null,
+      flankingPrimers: selectedFlankingPrimers ?? null,
+    };
+    try {
+      downloadSession(session);
+      flashSessionMsg('ok', 'Session saved');
+    } catch (e: any) {
+      flashSessionMsg('err', e?.message || 'Failed to save session');
+    }
+  };
+
+  // ── Restore a previously saved session, skipping the BLAST/MSA pipeline ──
+  const applySession = (session: OligoolSession) => {
+    // Search inputs
+    setJobName(session.jobName || 'Query');
+    setInput(session.search?.input ?? '');
+    setOrganism(session.search?.organism ?? '');
+    setEValue(session.search?.eValue ?? '0.05');
+    setPercIdentity(session.search?.percIdentity ?? '0');
+    setFilterMatches(!!session.search?.filterMatches);
+    setMaxHitsPreset(session.search?.maxHitsPreset ?? '50');
+    setCustomHits(session.search?.customHits ?? '');
+
+    // Results
+    setBlastHits(session.results.blastHits || []);
+    setFilteredHits(session.results.filteredHits || []);
+    setBlastMeta(session.results.blastMeta || null);
+    setShowMatches(!!session.results.showMatches);
+
+    // Reset transient view state. We intentionally do NOT null selectedSequence:
+    // the importNonce `key` forces a clean QueryViewer remount, and keeping the
+    // sequence avoids depending on an MSA re-broadcast (which never fires when the
+    // restored alignment is byte-identical to the one already loaded).
+    setSelectedPrimers(null);
+    setOligoRegion(null);
+    setSelectedFlankingPrimers(session.flankingPrimers || null);
+    setError('');
+
+    // Load the alignment last and jump straight to results
+    setAlignment(session.results.alignment);
+    setStep('done');
+
+    // Arm the oligo/pinned-position restore for QueryViewer (applied once it remounts)
+    if (session.oligo) {
+      importNonceRef.current += 1;
+      setImportedSession({ nonce: importNonceRef.current, oligo: session.oligo });
+      const co = session.oligo.currentOligo;
+      if (co) {
+        // Navigate the MSA to the restored oligo (1-indexed gapped cols → 0-indexed)
+        setNavigateTarget({ colStart: co.p2AbsStart - 1, colEnd: co.p1AbsEnd - 1, ts: Date.now() });
+      }
+    } else {
+      setImportedSession(null);
+    }
+  };
+
+  const handleLoadSessionFile = async (file: File) => {
+    try {
+      const text = await file.text();
+      const session = parseSessionText(text);
+      applySession(session);
+      flashSessionMsg('ok', `Loaded "${session.jobName || 'session'}"`);
+    } catch (e: any) {
+      flashSessionMsg('err', e?.message || 'Failed to load session', 5000);
+    }
   };
 
   const isStepActive = (s: Step) => stepOrder.indexOf(s) <= stepOrder.indexOf(step);
@@ -253,6 +348,56 @@ function App() {
             <p className="mt-1 text-slate-500 dark:text-slate-400">BLAST Search → Multiple Sequence Alignment</p>
           </div>
           <div className="flex items-center gap-4">
+            {/* Session Save / Load */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".json,application/json"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) handleLoadSessionFile(file);
+                e.target.value = ''; // allow re-loading the same file
+              }}
+            />
+            <div className="flex items-center gap-2">
+              <span
+                title="Session save/load is still being finalized — the moligo selection and used primers may not fully restore yet."
+                className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800 whitespace-nowrap"
+              >
+                under development
+              </span>
+              {sessionMsg && (
+                <span
+                  className={`text-xs font-medium animate-in fade-in ${sessionMsg.type === 'ok' ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}
+                >
+                  {sessionMsg.text}
+                </span>
+              )}
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                title="Load a saved Oligool session (.oligool.json)"
+                className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:border-indigo-300 dark:hover:border-indigo-700 transition-colors text-xs font-medium"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                </svg>
+                Load
+              </button>
+              {step === 'done' && alignment && (
+                <button
+                  onClick={handleSaveSession}
+                  title="Save this session (oligos, pinned positions, primers & alignment) to a file"
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-indigo-200 dark:border-indigo-800 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 hover:border-indigo-300 dark:hover:border-indigo-700 transition-colors text-xs font-medium"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 16v1a3 3 0 01-3 3H7a3 3 0 01-3-3v-1m4-4l4 4m0 0l4-4m-4 4V4" />
+                  </svg>
+                  Save
+                </button>
+              )}
+            </div>
+
             {/* Theme Toggle Button (Primerool style) */}
             <button
               onClick={() => setIsDarkMode(!isDarkMode)}
@@ -754,6 +899,9 @@ function App() {
               />
               {step === 'done' && selectedSequence && (
                 <QueryViewer
+                  key={`qv-${importNonceRef.current}`}
+                  ref={queryViewerRef}
+                  importedSession={importedSession}
                   data={selectedSequence}
                   jobName={jobName}
                   onPrimersUpdate={setSelectedPrimers}

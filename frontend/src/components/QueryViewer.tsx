@@ -1,8 +1,20 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, forwardRef, useImperativeHandle } from 'react';
 import MOLigoPanel from './MOLigoPanel';
 import FlankingPrimersPanel from './FlankingPrimersPanel';
 import HairpinSVG from './HairpinSVG';
 import DimerSVG from './DimerSVG';
+import type { OligoSnapshot, SavedPosition, FixedAbsCoords } from '../utils/session';
+
+/** Imperative handle App uses to pull QueryViewer's state when saving a session. */
+export interface QueryViewerHandle {
+    getSnapshot: () => OligoSnapshot;
+}
+
+/** A pending session import, tagged with a nonce so it is applied exactly once. */
+export interface ImportedSession {
+    nonce: number;
+    oligo: OligoSnapshot;
+}
 
 interface QueryViewerProps {
     data: { id: string; seq: string; start: number; end: number; fullSeq?: string; ungappedOffset?: number };
@@ -23,6 +35,8 @@ interface QueryViewerProps {
     alignment?: string;
     navigateTarget?: { colStart: number; colEnd: number; ts: number } | null;
     isDarkMode?: boolean;
+    /** A session to restore into this viewer; applied once per nonce. */
+    importedSession?: ImportedSession | null;
 }
 
 interface IdtData {
@@ -52,21 +66,7 @@ interface OligizeResponse {
     param_warnings?: string[];
 }
 
-interface SavedPosition {
-    id: string;
-    label: string;
-    createdAt: number;
-    p1: { start: number; end: number; seq: string; gc: number; tm: number };
-    p2: { start: number; end: number; seq: string; gc: number; tm: number };
-    // 1-indexed absolute genomic coords (bare numeric range, no chr prefix)
-    p1AbsStart: number; p1AbsEnd: number;
-    p2AbsStart: number; p2AbsEnd: number;
-    // Shift / length state so restoring snaps sliders back exactly
-    moligo1Shift: number; moligo2Shift: number;
-    moligo1Len: number; moligo2Len: number;
-}
-
-export default function QueryViewer({ data, jobName, onPrimersUpdate, onFlankingPrimersUpdate, onNavigateTo, oligoRegion, idtCredentials, alignment, navigateTarget, isDarkMode }: QueryViewerProps) {
+const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function QueryViewer({ data, jobName, onPrimersUpdate, onFlankingPrimersUpdate, onNavigateTo, oligoRegion, idtCredentials, alignment, navigateTarget, isDarkMode, importedSession }, ref) {
     const [copyFeedback, setCopyFeedback] = useState('');
 
     // IDT Analysis State
@@ -168,15 +168,15 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, onFlanking
     const [editingLabelText, setEditingLabelText] = useState('');
     const [pinPulse, setPinPulse] = useState(false);
     const [isSavedPosOpen, setIsSavedPosOpen] = useState(true);
+    const [searchOligo1Seq, setSearchOligo1Seq] = useState('');
+    const [searchOligo2Seq, setSearchOligo2Seq] = useState('');
+    const [searchOligoError, setSearchOligoError] = useState<string | null>(null);
     const [showFlankingPrimers, setShowFlankingPrimers] = useState(false);
     const [interactiveFlankWindow, setInteractiveFlankWindow] = useState(200);
 
 
     // Fix Position toggle — when set, fetchPrimers is bypassed and oligos stick to global absolute coordinates
-    const [fixedAbsCoords, setFixedAbsCoords] = useState<{
-        p1AbsStart: number; p1AbsEnd: number; p2AbsStart: number; p2AbsEnd: number;
-        p1Seq: string; p2Seq: string; p1Tm: number; p2Tm: number; p1Gc: number; p2Gc: number;
-    } | null>(null);
+    const [fixedAbsCoords, setFixedAbsCoords] = useState<FixedAbsCoords | null>(null);
 
     const toggleFixPosition = () => {
         setFixedAbsCoords(prev => {
@@ -197,6 +197,72 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, onFlanking
                 p1Tm: primers.p1.tm, p2Tm: primers.p2.tm,
                 p1Gc: primers.p1.gc, p2Gc: primers.p2.gc
             };
+        });
+    };
+
+    const handleSearchOligos = () => {
+        setSearchOligoError(null);
+        const o1 = searchOligo1Seq.trim().toUpperCase().replace(/[^ATGC]/g, '');
+        const o2 = searchOligo2Seq.trim().toUpperCase().replace(/[^ATGC]/g, '');
+
+        if (!o1 && !o2) return;
+        if ((o1 && o1.length < 5) || (o2 && o2.length < 5)) {
+            setSearchOligoError('Each oligo must be at least 5 nt');
+            return;
+        }
+
+        const target = fullSeq.toUpperCase();
+        let foundP1 = -1, foundP2 = -1;
+        if (o1) {
+            foundP1 = target.indexOf(o1);
+            if (foundP1 === -1) { setSearchOligoError('Oligo 1 not found in context'); return; }
+        }
+        if (o2) {
+            foundP2 = target.indexOf(o2);
+            if (foundP2 === -1) { setSearchOligoError('Oligo 2 not found in context'); return; }
+        }
+
+        const buildPrimer = (foundPos: number, seq: string, ungappedOff: number): Primer => {
+            const s = foundPos - data.start;
+            const gcCount = (seq.match(/[GC]/g) || []).length;
+            const gcPct = (gcCount / seq.length) * 100;
+            const tm = seq.length < 14
+                ? (seq.length - gcCount) * 2 + gcCount * 4
+                : 64.9 + 41 * (gcCount - 16.4) / seq.length;
+            return { start: s - ungappedOff, end: s - ungappedOff + seq.length, seq, len: seq.length, tm, gc: gcPct };
+        };
+
+        const ungappedOff = data.ungappedOffset ?? 0;
+        const p1 = o1 ? buildPrimer(foundP1, o1, ungappedOff) : { start: 0, end: 0, seq: '', len: 0, tm: 0, gc: 0 };
+        const p2 = o2 ? buildPrimer(foundP2, o2, ungappedOff) : { start: 0, end: 0, seq: '', len: 0, tm: 0, gc: 0 };
+        const splitIdx = o1 ? p1.start : p2.start;
+
+        const fauxResponse: OligizeResponse = {
+            p1, p2, split_idx: splitIdx,
+            tm_diff_ok: Math.abs(p1.tm - p2.tm) <= Number(searchParams.tm_diff || 5),
+            params_not_met: false,
+        };
+        setPrimers(fauxResponse);
+        setParamsNotMet(false);
+        setIsAutoSearchNeeded(false);
+
+        setFixedAbsCoords({
+            p1AbsStart: o1 ? foundP1 + 1 : 1,
+            p1AbsEnd: o1 ? foundP1 + o1.length + 1 : 1,
+            p2AbsStart: o2 ? foundP2 + 1 : 1,
+            p2AbsEnd: o2 ? foundP2 + o2.length + 1 : 1,
+            p1Seq: o1 || '', p2Seq: o2 || '',
+            p1Tm: p1.tm, p2Tm: p2.tm,
+            p1Gc: p1.gc, p2Gc: p2.gc,
+        });
+
+        const p1GStart = mapUngappedToGapped(p1.start, data.seq);
+        const p1GEnd = mapUngappedToGapped(p1.end, data.seq);
+        const p2GStart = mapUngappedToGapped(p2.start, data.seq);
+        const p2GEnd = mapUngappedToGapped(p2.end, data.seq);
+        onPrimersUpdate({
+            p1: { start: data.start + p1GStart, end: data.start + p1GEnd },
+            p2: { start: data.start + p2GStart, end: data.start + p2GEnd },
         });
     };
 
@@ -297,8 +363,14 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, onFlanking
         setEditingLabelId(null);
     };
 
+    // Tracks which session import we've already applied, so a pending import is
+    // applied exactly once and the reset effects below don't wipe it.
+    const appliedImportNonceRef = useRef<number | null>(null);
+    const importPending = !!importedSession && importedSession.nonce !== appliedImportNonceRef.current;
+
     // 1. Clear saved positions only when a totally new BLAST search comes in
     useEffect(() => {
+        if (importPending) return; // an incoming session is being restored — don't wipe it
         if (data?.id) {
             setSavedPositions([]);
             setEditingLabelId(null);
@@ -309,6 +381,7 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, onFlanking
     // 2. Restart search when the active window changes (pan/zoom), UNLESS we are locked.
     // This allows the engine to find the 'best' oligo anywhere in the new frame instead of sitting in the center.
     useEffect(() => {
+        if (importPending) return; // an incoming session is being restored — don't reset shifts
         if (data && !fixedAbsCoords) {
             setIdtResults(null);
             setIdtError(null);
@@ -322,6 +395,42 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, onFlanking
         }
     }, [data?.id, data?.seq]); // intentionally NOT fixedAbsCoords to prevent recursion when locking
 
+    // 3. Apply a pending session import once `data` (the visible window) is available.
+    // Declared after the reset effects so, in the commit where both `data` and the
+    // import arrive, this runs last and wins. Locking to absolute coords means the
+    // restored oligos render without a backend round-trip.
+    useEffect(() => {
+        if (!importedSession || !data) return;
+        if (appliedImportNonceRef.current === importedSession.nonce) return;
+        const s = importedSession.oligo;
+        if (!s) { appliedImportNonceRef.current = importedSession.nonce; return; }
+        appliedImportNonceRef.current = importedSession.nonce;
+
+        setMoligo1Shift(s.moligo1Shift);
+        setMoligo2Shift(s.moligo2Shift);
+        setMoligo1Len(s.moligo1Len);
+        setMoligo2Len(s.moligo2Len);
+        setOligo1Name(s.oligo1Name);
+        setOligo2Name(s.oligo2Name);
+        if (s.searchParams) setSearchParams(s.searchParams);
+        if (s.advancedParams) setAdvancedParams(s.advancedParams);
+        if (s.idtAdvancedParams) setIdtAdvancedParams(s.idtAdvancedParams);
+        setTagSeq(s.tagSeq);
+        setFwdPrimer(s.fwdPrimer);
+        setRevPrimer(s.revPrimer);
+        setSavedPositions(s.savedPositions || []);
+        setInteractiveFlankWindow(s.interactiveFlankWindow);
+        setShowFlankingPrimers(s.showFlankingPrimers);
+        lastShiftsApplied.current = { s1: s.moligo1Shift, s2: s.moligo2Shift };
+        if (s.currentOligo) {
+            setFixedAbsCoords(s.currentOligo);
+            setIsAutoSearchNeeded(false);
+        } else {
+            setFixedAbsCoords(null);
+            setIsAutoSearchNeeded(true);
+        }
+    }, [importedSession, data]);
+
     // Coordinate Mapping Helper: Ungapped Index -> Gapped Index (Relative to slice)
     const mapUngappedToGapped = (ungappedIdx: number, gappedSeq: string): number => {
         let u = 0;
@@ -333,6 +442,35 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, onFlanking
         }
         return gappedSeq.length;
     };
+
+    // Snapshot of the current absolute oligo pair (for save). Mirrors pinPosition's mapping.
+    const computeCurrentOligo = (): FixedAbsCoords | null => {
+        if (fixedAbsCoords) return fixedAbsCoords;
+        if (!primers || !data) return null;
+        return {
+            p1AbsStart: data.start + mapUngappedToGapped(primers.p1.start, data.seq) + 1,
+            p1AbsEnd: data.start + mapUngappedToGapped(primers.p1.end, data.seq) + 1,
+            p2AbsStart: data.start + mapUngappedToGapped(primers.p2.start, data.seq) + 1,
+            p2AbsEnd: data.start + mapUngappedToGapped(primers.p2.end, data.seq) + 1,
+            p1Seq: primers.p1.seq, p2Seq: primers.p2.seq,
+            p1Tm: primers.p1.tm, p2Tm: primers.p2.tm,
+            p1Gc: primers.p1.gc, p2Gc: primers.p2.gc,
+        };
+    };
+
+    // Expose a pull-based snapshot so App can serialize this viewer when saving a session.
+    useImperativeHandle(ref, () => ({
+        getSnapshot: (): OligoSnapshot => ({
+            moligo1Shift, moligo2Shift, moligo1Len, moligo2Len,
+            oligo1Name, oligo2Name,
+            searchParams, advancedParams, idtAdvancedParams,
+            tagSeq, fwdPrimer, revPrimer,
+            savedPositions,
+            interactiveFlankWindow,
+            showFlankingPrimers,
+            currentOligo: computeCurrentOligo(),
+        }),
+    }));
 
     /* ── Region-constrained oligo search ────────────────────────── */
     const handleRegionAnalysis = async () => {
@@ -744,7 +882,7 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, onFlanking
         }
 
         return (
-            <div ref={containerRef} className="font-mono text-xs leading-relaxed select-none space-y-1" style={{ cursor: dragState ? 'grabbing' : 'auto' }}>
+            <div ref={containerRef} className="font-mono text-xs leading-relaxed space-y-1" style={{ cursor: dragState ? 'grabbing' : 'auto' }}>
                 {lines.map((lineStr, lineIdx) => {
                     const lineAbsStart = viewStart + lineIdx * seqLineLength;
                     const posStr = String(lineAbsStart + 1).padStart(6, ' '); // 1-indexed
@@ -765,12 +903,12 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, onFlanking
                                     const isP2End   = i === liveP2End - 1;
 
                                     if (isP1) {
-                                        className = `bg-green-200 dark:bg-green-900/40 text-green-900 dark:text-green-300 font-bold hover:bg-green-300 dark:hover:bg-green-800/60 ${isP1Start || isP1End ? 'cursor-ew-resize' : 'cursor-grab active:cursor-grabbing'}`;
+                                        className = `bg-green-200 dark:bg-green-900/40 text-green-900 dark:text-green-300 font-bold hover:bg-green-300 dark:hover:bg-green-800/60 select-none ${isP1Start || isP1End ? 'cursor-ew-resize' : 'cursor-grab active:cursor-grabbing'}`;
                                         if (isP1Start) handlers = { onMouseDown: (e: React.MouseEvent) => handleSeqMouseDown(e, 'p1', 'left') };
                                         else if (isP1End) handlers = { onMouseDown: (e: React.MouseEvent) => handleSeqMouseDown(e, 'p1', 'right') };
                                         else handlers = { onMouseDown: (e: React.MouseEvent) => handleSeqMouseDown(e, 'p1', 'move') };
                                     } else if (isP2) {
-                                        className = `bg-amber-200 dark:bg-amber-900/40 text-amber-900 dark:text-amber-300 font-bold hover:bg-amber-300 dark:hover:bg-amber-800/60 ${isP2Start || isP2End ? 'cursor-ew-resize' : 'cursor-grab active:cursor-grabbing'}`;
+                                        className = `bg-amber-200 dark:bg-amber-900/40 text-amber-900 dark:text-amber-300 font-bold hover:bg-amber-300 dark:hover:bg-amber-800/60 select-none ${isP2Start || isP2End ? 'cursor-ew-resize' : 'cursor-grab active:cursor-grabbing'}`;
                                         if (isP2Start) handlers = { onMouseDown: (e: React.MouseEvent) => handleSeqMouseDown(e, 'p2', 'left') };
                                         else if (isP2End) handlers = { onMouseDown: (e: React.MouseEvent) => handleSeqMouseDown(e, 'p2', 'right') };
                                         else handlers = { onMouseDown: (e: React.MouseEvent) => handleSeqMouseDown(e, 'p2', 'move') };
@@ -1425,9 +1563,39 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, onFlanking
                     )}
 
                     <div className="mt-4 p-5 bg-slate-50/50 dark:bg-slate-900/50 rounded-lg border border-slate-200 dark:border-slate-700">
-                        <div className="flex justify-between items-center mb-2">
-                            <span className="text-xs font-bold text-slate-500 uppercase">Context Viewer</span>
-                            <div className="flex items-center gap-2">
+                        <div className="flex justify-between items-center mb-2 gap-4">
+                            <div className="flex items-center gap-3 flex-wrap">
+                                <span className="text-xs font-bold text-slate-500 uppercase">Context Viewer</span>
+                                <div className="flex items-center gap-1">
+                                    <input
+                                        type="text"
+                                        value={searchOligo1Seq}
+                                        onChange={e => { setSearchOligo1Seq(e.target.value); setSearchOligoError(null); }}
+                                        onKeyDown={e => { if (e.key === 'Enter') handleSearchOligos(); }}
+                                        placeholder="Oligo 1…"
+                                        className="w-56 px-2 py-1 text-xs border border-slate-200 dark:border-slate-600 rounded bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-indigo-400"
+                                    />
+                                    <input
+                                        type="text"
+                                        value={searchOligo2Seq}
+                                        onChange={e => { setSearchOligo2Seq(e.target.value); setSearchOligoError(null); }}
+                                        onKeyDown={e => { if (e.key === 'Enter') handleSearchOligos(); }}
+                                        placeholder="Oligo 2…"
+                                        className="w-56 px-2 py-1 text-xs border border-slate-200 dark:border-slate-600 rounded bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-indigo-400"
+                                    />
+                                    <button
+                                        onClick={handleSearchOligos}
+                                        className="px-2 py-1 text-xs font-bold rounded border bg-white dark:bg-slate-700 text-indigo-500 dark:text-indigo-400 border-indigo-200 dark:border-indigo-800 hover:bg-indigo-50 dark:hover:bg-indigo-900/20"
+                                        title="Search and lock both oligos"
+                                    >
+                                        🔍
+                                    </button>
+                                </div>
+                                {searchOligoError && (
+                                    <span className="text-[10px] text-red-500 font-medium">{searchOligoError}</span>
+                                )}
+                            </div>
+                            <div className="flex items-center gap-2 shrink-0">
                                 <label className="text-[10px] font-bold text-slate-400 uppercase">Flank Window (bp)</label>
                                 <input
                                     type="number"
@@ -1765,6 +1933,7 @@ export default function QueryViewer({ data, jobName, onPrimersUpdate, onFlanking
         )}
         </>
     );
-}
+});
 
+export default QueryViewer;
 
