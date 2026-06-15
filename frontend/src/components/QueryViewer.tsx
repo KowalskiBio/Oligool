@@ -145,6 +145,7 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
     const [_paramsNotMet, setParamsNotMet] = useState(false); // kept for future warning UI
     const [isAutoSearchNeeded, setIsAutoSearchNeeded] = useState(true);
     const lastShiftsApplied = useRef({ s1: 0, s2: 0 });
+    const prevDataRef = useRef(data);
     // When region analysis is active, fetchPrimers uses this subsequence so sliders stay within the region
     const regionSeqContextRef = useRef<{ rawSub: string; ungappedOffset: number } | null>(null);
     const [regionAnalysisActive, setRegionAnalysisActive] = useState(false);
@@ -383,17 +384,32 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
     useEffect(() => {
         if (importPending) return; // an incoming session is being restored — don't reset shifts
         if (data && !fixedAbsCoords) {
-            setIdtResults(null);
-            setIdtError(null);
-            onPrimersUpdate(null);
-            regionSeqContextRef.current = null;
-            setRegionAnalysisActive(false);
-            setMoligo1Shift(0);
-            setMoligo2Shift(0);
-            lastShiftsApplied.current = { s1: 0, s2: 0 };
-            setIsAutoSearchNeeded(true);
+            const prev = prevDataRef.current;
+            if (prev && prev.id === data.id && prev.seq !== data.seq && primers) {
+                setFixedAbsCoords({
+                    p1AbsStart: prev.start + mapUngappedToGapped(primers.p1.start, prev.seq) + 1,
+                    p1AbsEnd:   prev.start + mapUngappedToGapped(primers.p1.end,   prev.seq) + 1,
+                    p2AbsStart: prev.start + mapUngappedToGapped(primers.p2.start, prev.seq) + 1,
+                    p2AbsEnd:   prev.start + mapUngappedToGapped(primers.p2.end,   prev.seq) + 1,
+                    p1Seq: primers.p1.seq, p2Seq: primers.p2.seq,
+                    p1Tm: primers.p1.tm, p2Tm: primers.p2.tm,
+                    p1Gc: primers.p1.gc, p2Gc: primers.p2.gc,
+                });
+            } else {
+                setIdtResults(null);
+                setIdtError(null);
+                onPrimersUpdate(null);
+                regionSeqContextRef.current = null;
+                setRegionAnalysisActive(false);
+                setMoligo1Shift(0);
+                setMoligo2Shift(0);
+                lastShiftsApplied.current = { s1: 0, s2: 0 };
+                setIsAutoSearchNeeded(true);
+            }
         }
-    }, [data?.id, data?.seq]); // intentionally NOT fixedAbsCoords to prevent recursion when locking
+        prevDataRef.current = data;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [data?.id, data?.seq]);
 
     // 3. Apply a pending session import once `data` (the visible window) is available.
     // Declared after the reset effects so, in the commit where both `data` and the
@@ -1057,11 +1073,10 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                 
                 isDimer = fullSeq.includes('&') || db.includes('&');
 
-                if (item.DotBracket) {
+                if (item.DotBracket && !isDimer) {
                     hairpinDotBracket = item.DotBracket;
                     hairpinSeq = fullSeq;
-                } else if (!isDimer && item.Bonds && seq) {
-                    // Dimers use ASCII rendering via Bonds only if not a strider-dot-bracket dimer
+                } else if (isDimer && item.Bonds && seq) {
                     asciiStructure = buildDimerAscii(item, seq, seq2);
                 }
             }

@@ -603,6 +603,20 @@ async def analyze_idt_oligos(request: IdtAnalyzeRequest):
     except Exception as e:
         return {"error": f"Parallel execution failed: {str(e)}"}
 
+    def _extract_idt_delta_g(obj):
+        """Extract IDT DeltaG from a dict (ignoring ViennaRNA_DeltaG)."""
+        if not isinstance(obj, dict):
+            return None
+        for k in ["DeltaG", "deltaG", "deltag", "delta_g", "dG", "Energy", "energy"]:
+            if k in obj:
+                try:
+                    val = obj[k]
+                    if val is not None:
+                        return float(val)
+                except (ValueError, TypeError):
+                    pass
+        return None
+
     # Use strider-dna for Mg2+-aware dot-bracket structure, local ΔG, and Tm
     try:
         from strider import ThermoEngine
@@ -617,14 +631,17 @@ async def analyze_idt_oligos(request: IdtAnalyzeRequest):
 
         # Hairpin Tm uses strider.thermo.hairpin.hairpin_thermo (>= 0.3.2), the
         # UNImolecular two-state model (Tm = ΔH/ΔS, concentration-independent)
-        # with full SantaLucia loop ΔH + per-base-pair Owczarzy salt — bulge-aware
-        # and evaluated on the same strider structure we draw. strider's own
-        # melting_temperature is BImolecular and only correct for dimers.
+        # with full SantaLucia loop ΔH + salt correction. For strider-dna >= 0.3.3
+        # the salt term is the Tan-Chen (2007) TBI whole-helix model for stems
+        # >= 6 bp (Mg2+-aware); shorter stems keep the per-base-pair correction.
+        # It is bulge-aware and evaluated on the same strider structure we draw.
+        # strider's own melting_temperature is BImolecular and only correct for dimers.
         def add_strider_analysis(seq1, hp_data, seq2=None):
             """Strider-dna enrichment for hairpin (seq2=None) or dimer (seq2 provided)."""
             if not (isinstance(hp_data, list) or (isinstance(hp_data, dict) and not hp_data.get("error"))):
                 return hp_data
 
+            is_dimer = seq2 is not None
             is_list = isinstance(hp_data, list)
             data_list = hp_data if is_list else [hp_data]
 
@@ -688,7 +705,7 @@ async def analyze_idt_oligos(request: IdtAnalyzeRequest):
                 item["Sequence"] = display_seq
                 item["Local_DeltaG"] = viz_dg
                 item["Local_Tm"] = mfe_tm
-                if viz_struct:
+                if viz_struct and not is_dimer:
                     item["DotBracket"] = viz_struct
                     for k in ["AsciiStructure", "VisualPrint", "asciiStructure", "visualPrint"]:
                         item.pop(k, None)
@@ -701,27 +718,28 @@ async def analyze_idt_oligos(request: IdtAnalyzeRequest):
             if best_item is not None:
                 final_results.append(best_item)
 
-            seen = {raw_mfe}
-            if viz_struct_raw:
-                seen.add(viz_struct_raw)
-            subs = eng.subopt(fold_seq, gap=5.0, max_structures=500)
-            added = 0
-            for sub_struct, sub_energy, _ in subs:
-                if added >= 4: break
-                if sub_struct in seen: continue
-                if not _valid_paired(sub_struct): continue
-                if float(sub_energy) >= 0: continue  # skip non-forming (ΔG ≥ 0) folds
-                seen.add(sub_struct)
-                sub_dg = round(float(sub_energy), 2)
-                final_results.append({
-                    "DotBracket": _with_div(sub_struct),
-                    "Sequence": display_seq,
-                    "Local_DeltaG": sub_dg,
-                    "Local_Tm": _struct_tm(sub_struct, sub_dg),
-                    "DeltaG": None,
-                    "IDT_Tm": None
-                })
-                added += 1
+            if not is_dimer:
+                seen = {raw_mfe}
+                if viz_struct_raw:
+                    seen.add(viz_struct_raw)
+                subs = eng.subopt(fold_seq, gap=5.0, max_structures=500)
+                added = 0
+                for sub_struct, sub_energy, _ in subs:
+                    if added >= 4: break
+                    if sub_struct in seen: continue
+                    if not _valid_paired(sub_struct): continue
+                    if float(sub_energy) >= 0: continue
+                    seen.add(sub_struct)
+                    sub_dg = round(float(sub_energy), 2)
+                    final_results.append({
+                        "DotBracket": _with_div(sub_struct),
+                        "Sequence": display_seq,
+                        "Local_DeltaG": sub_dg,
+                        "Local_Tm": _struct_tm(sub_struct, sub_dg),
+                        "DeltaG": None,
+                        "IDT_Tm": None
+                    })
+                    added += 1
 
             return final_results if is_list else final_results[0]
 
@@ -790,20 +808,6 @@ async def analyze_idt_oligos(request: IdtAnalyzeRequest):
             return {"DeltaG": dg, "raw": data}
         
         return {"DeltaG": None, "raw": None}
-    
-    def _extract_idt_delta_g(obj):
-        """Extract IDT DeltaG from a dict (ignoring ViennaRNA_DeltaG)."""
-        if not isinstance(obj, dict):
-            return None
-        for k in ["DeltaG", "deltaG", "deltag", "delta_g", "dG", "Energy", "energy"]:
-            if k in obj:
-                try:
-                    val = obj[k]
-                    if val is not None:
-                        return float(val)
-                except (ValueError, TypeError):
-                    pass
-        return None
 
     return {
         "m1": {
