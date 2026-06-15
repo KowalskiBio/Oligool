@@ -923,6 +923,26 @@ function App() {
             </>
           )}
         </main>
+
+        <footer className="mt-10 pt-6 border-t border-slate-200 dark:border-slate-700 text-center text-xs text-slate-500 dark:text-slate-400 space-y-1">
+          <p>
+            Oligool is developed by{' '}
+            <strong className="text-slate-700 dark:text-slate-300">Mgr. Vojtěch Rejtar</strong>.
+          </p>
+          <p>
+            Contact:{' '}
+            <a href="mailto:rejtarv@gmail.com" className="text-indigo-500 hover:underline">rejtarv@gmail.com</a>
+            {' | '}
+            <a href="mailto:rejtarv@sci.muni.cz" className="text-indigo-500 hover:underline">rejtarv@sci.muni.cz</a>
+          </p>
+          <p>In case of bugs or errors, please contact the author.</p>
+          <p className="pt-1">
+            Licensed under the{' '}
+            <a href="https://www.gnu.org/licenses/gpl-3.0.html" target="_blank" rel="noopener noreferrer" className="text-indigo-500 hover:underline">
+              GNU General Public License v3.0
+            </a>.
+          </p>
+        </footer>
       </div>
     </div>
   );
