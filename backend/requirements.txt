@@ -7,5 +7,8 @@ pywebview>=4.0.0
 requests>=2.25.0
 # Hairpin Tm uses strider.thermo.hairpin.hairpin_thermo (bulge-aware, added in
 # 0.3.2 via the merged loop-ΔH tables). 0.3.3+ adds Tan-Chen TBI salt correction
-# for stems ≥6 bp and lazy-loaded torch in 0.3.4. Pinned for reproducible deploys.
-strider-dna==0.3.4
+# for stems ≥6 bp and lazy-loaded torch in 0.3.4.
+#
+# Dimer Tm is implemented in the KowalskiBio fork (feat/dimer-tm); re-pin to a
+# released PyPI version once upstream PR #3 lands.
+strider-dna @ git+https://github.com/KowalskiBio/strider.git@feat/dimer-tm

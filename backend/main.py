@@ -621,6 +621,7 @@ async def analyze_idt_oligos(request: IdtAnalyzeRequest):
     try:
         from strider import ThermoEngine
         from strider.thermo.hairpin import hairpin_thermo  # strider >= 0.3.2
+        from strider.thermo.dimer_thermo import dimer_thermo  # strider >= 0.3.5 / fork
 
         base_temp = request.temp if hasattr(request, "temp") and request.temp is not None else 25.0
         mv_m = request.mv_conc / 1000.0
@@ -645,12 +646,39 @@ async def analyze_idt_oligos(request: IdtAnalyzeRequest):
             is_list = isinstance(hp_data, list)
             data_list = hp_data if is_list else [hp_data]
 
+            def _valid_paired(s):
+                return '(' in s and s.count('(') == s.count(')')
+
             if seq2:
-                mfe_result = eng.mfe(seq1, seq2)
-                raw_mfe = mfe_result.structure
+                # Use strider's dedicated bimolecular dimer MFE (not the pseudo-
+                # hairpin cofold), which finds real inter-strand helices including
+                # small interior loops and bulges.
                 fold_seq = seq1 + seq2
                 display_seq = seq1 + '&' + seq2
                 def _with_div(s): return s[:len(seq1)] + '&' + s[len(seq1):]
+                try:
+                    res = dimer_thermo(
+                        seq1, seq2,
+                        sodium_M=mv_m,
+                        magnesium_M=effective_mg,
+                        material='dna',
+                        structure=None,
+                        strand_conc_M=oligo_conc_m,
+                        salt_model='auto',
+                    )
+                    raw_mfe = res.structure
+                    if _valid_paired(raw_mfe):
+                        viz_struct_raw = raw_mfe
+                        viz_dg = round(float(res.dG37), 2)
+                        mfe_tm = round(res.tm_celsius, 1) if res.tm_celsius and res.tm_celsius > 1.0 else None
+                    else:
+                        viz_struct_raw = None
+                        viz_dg = None
+                        mfe_tm = None
+                except Exception:
+                    viz_struct_raw = None
+                    viz_dg = None
+                    mfe_tm = None
             else:
                 mfe_result = eng.mfe(seq1)
                 raw_mfe = mfe_result.structure
@@ -658,44 +686,30 @@ async def analyze_idt_oligos(request: IdtAnalyzeRequest):
                 display_seq = seq1
                 def _with_div(s): return s
 
-            def _valid_paired(s):
-                return '(' in s and s.count('(') == s.count(')')
+                # Only draw the MFE structure when it actually has base pairs. When the
+                # MFE is flat (all dots, ΔG = 0) there is no stable structure — by
+                # definition no suboptimal structure can have ΔG < 0, so we must NOT
+                # fall back to a positive-ΔG fold that doesn't physically form.
+                if _valid_paired(raw_mfe):
+                    viz_struct_raw = raw_mfe
+                    viz_dg = round(float(mfe_result.energy), 2)
+                else:
+                    viz_struct_raw = None
+                    viz_dg = None
 
-            # Only draw the MFE structure when it actually has base pairs. When the
-            # MFE is flat (all dots, ΔG = 0) there is no stable structure — by
-            # definition no suboptimal structure can have ΔG < 0, so we must NOT
-            # fall back to a positive-ΔG fold that doesn't physically form.
-            if _valid_paired(raw_mfe):
-                viz_struct_raw = raw_mfe
-                viz_dg = round(float(mfe_result.energy), 2)
-            else:
-                viz_struct_raw = None
-                viz_dg = None
+                # Tm: unimolecular two-state for hairpins via hairpin_thermo.
+                def _struct_tm(structure, energy):
+                    try:
+                        res = hairpin_thermo(fold_seq, sodium_M=mv_m,
+                                             magnesium_M=effective_mg, structure=structure)
+                        t = res.tm_celsius
+                    except Exception:
+                        t = None
+                    return round(t, 1) if t and t > 1.0 else None
+
+                mfe_tm = _struct_tm(viz_struct_raw, viz_dg)
 
             viz_struct = _with_div(viz_struct_raw) if viz_struct_raw else None
-
-            # Tm: unimolecular two-state for hairpins (seq2 is None).
-            # For dimers we deliberately return None: a heterodimer melts
-            # BImolecularly (two strands associating), and strider has no proper
-            # two-strand Tm yet — eng.melting_temperature(seq1+seq2) just melts the
-            # concatenation as one strand, which is physically meaningless. A
-            # correct bimolecular dimer Tm is coming as strider PR3
-            # (structure_thermo dimer support); until then dimers show ΔG only,
-            # with IDT/primer3 providing the dimer Tm.
-            def _struct_tm(structure, energy):
-                if seq2:
-                    return None
-                try:
-                    # strider >= 0.3.2: returns a HairpinThermo object; raises
-                    # ValueError for multiloops / no base pairs.
-                    res = hairpin_thermo(fold_seq, sodium_M=mv_m,
-                                         magnesium_M=effective_mg, structure=structure)
-                    t = res.tm_celsius
-                except Exception:
-                    t = None
-                return round(t, 1) if t and t > 1.0 else None
-
-            mfe_tm = _struct_tm(viz_struct_raw, viz_dg)
 
             best_item = None
             best_idt_dg = None
@@ -705,7 +719,7 @@ async def analyze_idt_oligos(request: IdtAnalyzeRequest):
                 item["Sequence"] = display_seq
                 item["Local_DeltaG"] = viz_dg
                 item["Local_Tm"] = mfe_tm
-                if viz_struct and not is_dimer:
+                if viz_struct:
                     item["DotBracket"] = viz_struct
                     for k in ["AsciiStructure", "VisualPrint", "asciiStructure", "visualPrint"]:
                         item.pop(k, None)
