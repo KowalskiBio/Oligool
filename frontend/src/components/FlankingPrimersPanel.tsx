@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import MSAViewer from './MSAViewer';
-import DimerSVG from './DimerSVG';
+import DimerAscii from './DimerAscii';
 import HairpinSVG from './HairpinSVG';
 
 interface DesignedPrimer {
@@ -442,10 +442,10 @@ export default function FlankingPrimersPanel({
                         <div key={i} className="flex flex-col gap-2">
                             {item.DotBracket && (
                                 <div className="bg-slate-50 dark:bg-slate-800/50 rounded p-2">
-                                    {item.Sequence.includes('&') ? (
-                                        <DimerSVG seq={item.Sequence} dotBracket={item.DotBracket} />
+                                    {item.Sequence && item.Sequence.includes('&') ? (
+                                        <DimerAscii seq={item.Sequence} dotBracket={item.DotBracket} raw={item} />
                                     ) : (
-                                        <HairpinSVG seq={item.Sequence} dotBracket={item.DotBracket} />
+                                        <HairpinSVG seq={item.Sequence || item.dot_bracket || ''} dotBracket={item.DotBracket} />
                                     )}
                                 </div>
                             )}
@@ -794,7 +794,7 @@ export default function FlankingPrimersPanel({
                 {isSelected && (
                     <div className="mt-3 pt-3 border-t border-emerald-200 dark:border-emerald-800/30">
                         <div className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-widest mb-2 flex items-center gap-2">
-                            <span>IDT Structural Analysis</span>
+                            <span>Structural Analysis (IDT + Strider)</span>
                             {isAnal && <div className="w-3 h-3 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />}
                         </div>
                         {!idtCredentials ? (
@@ -989,7 +989,7 @@ export default function FlankingPrimersPanel({
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
                                         </svg>
                                         <span className="text-sm font-bold text-slate-700 dark:text-slate-200 uppercase tracking-widest">
-                                            Primer Pair Advanced QC (IDT)
+                                            Primer Pair Advanced QC
                                         </span>
                                     </div>
                                     <div className="flex items-center gap-3 text-slate-400">
