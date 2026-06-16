@@ -15,6 +15,7 @@ import json
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, StreamingResponse
 import asyncio
+import logging
 
 
 app = FastAPI()
@@ -208,7 +209,7 @@ async def align_sequences(request: AlignmentRequest):
 
 
 
-from typing import Optional, Dict
+from typing import Dict
 
 class MoligizeRequest(BaseModel):
     sequence: str
@@ -522,7 +523,7 @@ async def get_idt_token(request: IdtAuthRequest):
             try:
                 err_data = response.json()
                 detail = err_data.get("error_description") or err_data.get("error") or response.text
-            except:
+            except Exception:
                 detail = response.text
             raise HTTPException(status_code=response.status_code, detail=f"IDT Auth Error: {detail}")
 
@@ -655,7 +656,11 @@ async def analyze_idt_oligos(request: IdtAnalyzeRequest):
                 # small interior loops and bulges.
                 fold_seq = seq1 + seq2
                 display_seq = seq1 + '&' + seq2
-                def _with_div(s): return s[:len(seq1)] + '&' + s[len(seq1):]
+                def _with_div(s):
+                    # Idempotent: skip if '&' already at boundary (eng.mfe includes it; dimer_thermo doesn't).
+                    if len(s) > len(seq1) and s[len(seq1)] == '&':
+                        return s
+                    return s[:len(seq1)] + '&' + s[len(seq1):]
                 try:
                     res = dimer_thermo(
                         seq1, seq2,
@@ -762,20 +767,8 @@ async def analyze_idt_oligos(request: IdtAnalyzeRequest):
         m2_hairpin = add_strider_analysis(request.p2_seq, m2_hairpin)
         m2_selfdimer = add_strider_analysis(request.p2_seq, m2_selfdimer, seq2=request.p2_seq)
         hetero = add_strider_analysis(request.p1_seq, hetero, seq2=request.p2_seq)
-    except Exception as e:
-        print(f"strider-dna optimization error: {e}")
-
-    # DEBUG: Log raw responses to understand structure
-    import json as _json
-    print("=== IDT RAW RESPONSES ===")
-    print(f"M1 Hairpin: {_json.dumps(m1_hairpin, indent=2, default=str)}")
-    print(f"M1 SelfDimer: {_json.dumps(m1_selfdimer, indent=2, default=str)}")
-    print(f"M1 Analyze: {_json.dumps(m1_analyze, indent=2, default=str)}")
-    print(f"M2 Hairpin: {_json.dumps(m2_hairpin, indent=2, default=str)}")
-    print(f"M2 SelfDimer: {_json.dumps(m2_selfdimer, indent=2, default=str)}")
-    print(f"M2 Analyze: {_json.dumps(m2_analyze, indent=2, default=str)}")
-    print(f"HeteroDimer: {_json.dumps(hetero, indent=2, default=str)}")
-    print("=== END IDT RAW RESPONSES ===")
+    except Exception:
+        logging.exception("strider-dna optimization error")
 
     # Each specific endpoint (Hairpin, SelfDimer, HeteroDimer) should return
     # DeltaG directly in its response. We use find_dg to robustly extract it
@@ -933,7 +926,7 @@ async def design_flanking_primers(req: FlankingPrimerParams):
     def _round(x, nd=1):
         if x is None: return None
         try: return round(float(x), nd)
-        except: return None
+        except (ValueError, TypeError): return None
 
     def _gc(s):
         s = (s or "").upper()
