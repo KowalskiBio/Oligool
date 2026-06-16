@@ -225,11 +225,11 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
         }
 
         const buildPrimer = (foundPos: number, seq: string, ungappedOff: number): Primer => {
-            const s = foundPos - data.start;
+            const s = foundPos - ungappedOff;
             const gcCount = (seq.match(/[GC]/g) || []).length;
             const gcPct = (gcCount / seq.length) * 100;
             const tm = calcTm(seq);
-            return { start: s - ungappedOff, end: s - ungappedOff + seq.length, seq, len: seq.length, tm, gc: gcPct };
+            return { start: s, end: s + seq.length, seq, len: seq.length, tm, gc: gcPct };
         };
 
         const ungappedOff = data.ungappedOffset ?? 0;
@@ -246,11 +246,12 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
         setParamsNotMet(false);
         setIsAutoSearchNeeded(false);
 
+        const toGappedAbs = (u: number) => data.start + mapUngappedToGapped(u - ungappedOff, data.seq) + 1;
         setFixedAbsCoords({
-            p1AbsStart: o1 ? foundP1 + 1 : 1,
-            p1AbsEnd: o1 ? foundP1 + o1.length + 1 : 1,
-            p2AbsStart: o2 ? foundP2 + 1 : 1,
-            p2AbsEnd: o2 ? foundP2 + o2.length + 1 : 1,
+            p1AbsStart: o1 ? toGappedAbs(foundP1) : 1,
+            p1AbsEnd: o1 ? toGappedAbs(foundP1 + o1.length) : 1,
+            p2AbsStart: o2 ? toGappedAbs(foundP2) : 1,
+            p2AbsEnd: o2 ? toGappedAbs(foundP2 + o2.length) : 1,
             p1Seq: o1 || '', p2Seq: o2 || '',
             p1Tm: p1.tm, p2Tm: p2.tm,
             p1Gc: p1.gc, p2Gc: p2.gc,
@@ -324,7 +325,7 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
         } else {
             ungappedStart = Math.max(0, ungappedEnd - targetLen);
         }
-        const newSeq = fullSeq.substring(ungappedStart, ungappedEnd);
+        const newSeq = fullSeq.substring(ungappedStart, ungappedEnd).toUpperCase();
         const newRelStart = mapUngappedToGapped(ungappedStart - offset, data.seq);
         const newRelEnd = mapUngappedToGapped(ungappedEnd - offset, data.seq);
         const newAbsStart = data.start + newRelStart + 1;
@@ -888,13 +889,14 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                         p1S = Math.max(0, p1S); p1E = Math.min(fs.length, p1E);
                         p2S = Math.max(0, p2S); p2E = Math.min(fs.length, p2E);
 
-                        const p1Seq = fs.substring(p1S, p1E);
-                        const p2Seq = fs.substring(p2S, p2E);
+                        const p1Seq = fs.substring(p1S, p1E).toUpperCase();
+                        const p2Seq = fs.substring(p2S, p2E).toUpperCase();
                         const calcGcF = (s: string) => ((s.match(/[GCgc]/g) || []).length / s.length) * 100;
-                        const d = data;
+                        const offset = data.ungappedOffset ?? 0;
+                        const toGappedAbs = (u: number) => data.start + mapUngappedToGapped(u - offset, data.seq) + 1;
                         setFixedAbsCoords({
-                            p1AbsStart: d.start + p1S + 1, p1AbsEnd: d.start + p1E + 1,
-                            p2AbsStart: d.start + p2S + 1, p2AbsEnd: d.start + p2E + 1,
+                            p1AbsStart: toGappedAbs(p1S), p1AbsEnd: toGappedAbs(p1E),
+                            p2AbsStart: toGappedAbs(p2S), p2AbsEnd: toGappedAbs(p2E),
                             p1Seq, p2Seq,
                             p1Tm: calcTm(p1Seq), p2Tm: calcTm(p2Seq),
                             p1Gc: calcGcF(p1Seq), p2Gc: calcGcF(p2Seq),
