@@ -923,12 +923,13 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
                 for (let col = firstCol; col <= lastCol; col++) {
                     const ch = (s.seq[col] || '-').toUpperCase();
                     const qch = (querySeq[col] || '-').toUpperCase();
-                    if (ch === '-') continue;
-
-                    const x = Math.floor(labelWidth + col * cellW - scrollLeft);
 
                     const isInternalDeletion = !isQuery && ch === '-' && col >= sStart && col <= sEnd;
                     const isInsertion = !isQuery && qch === '-' && ch !== '-';
+                    const isIndel = isInternalDeletion || isInsertion;
+                    if (ch === '-' && !isIndel) continue;
+
+                    const x = Math.floor(labelWidth + col * cellW - scrollLeft);
 
                     if (isInternalDeletion || isInsertion) {
                         ctx.fillStyle = '#9333ea';
