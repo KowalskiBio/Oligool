@@ -11,4 +11,4 @@ requests>=2.25.0
 #
 # Dimer Tm is implemented in the KowalskiBio fork (feat/dimer-tm); re-pin to a
 # released PyPI version once upstream PR #3 lands.
-strider-dna @ git+https://github.com/KowalskiBio/strider.git@588031558252e69ea80954255d21eafcb763675a
+strider-dna @ git+https://github.com/KowalskiBio/strider.git@7a871d7cb9f6eef30a9027a8f6640f047cc1e5e9
