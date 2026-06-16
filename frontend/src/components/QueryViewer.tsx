@@ -146,6 +146,7 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
     const [isAutoSearchNeeded, setIsAutoSearchNeeded] = useState(true);
     const lastShiftsApplied = useRef({ s1: 0, s2: 0 });
     const prevDataRef = useRef(data);
+    const fixedRebuildRef = useRef<{ data?: typeof data; fixed?: FixedAbsCoords | null; searchParams?: typeof searchParams }>({});
     // When region analysis is active, fetchPrimers uses this subsequence so sliders stay within the region
     const regionSeqContextRef = useRef<{ rawSub: string; ungappedOffset: number } | null>(null);
     const [regionAnalysisActive, setRegionAnalysisActive] = useState(false);
@@ -227,9 +228,7 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
             const s = foundPos - data.start;
             const gcCount = (seq.match(/[GC]/g) || []).length;
             const gcPct = (gcCount / seq.length) * 100;
-            const tm = seq.length < 14
-                ? (seq.length - gcCount) * 2 + gcCount * 4
-                : 64.9 + 41 * (gcCount - 16.4) / seq.length;
+            const tm = calcTm(seq);
             return { start: s - ungappedOff, end: s - ungappedOff + seq.length, seq, len: seq.length, tm, gc: gcPct };
         };
 
@@ -301,6 +300,43 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
     const calcGc = (seq: string) => {
         if (!seq) return 0;
         return ((seq.match(/[GCgc]/g) || []).length / seq.length) * 100;
+    };
+
+    const resizeFixedOligo = (id: 'p1' | 'p2', delta: number): number | null => {
+        if (!fixedAbsCoords) return null;
+        const absStart = id === 'p1' ? fixedAbsCoords.p1AbsStart : fixedAbsCoords.p2AbsStart;
+        const absEnd = id === 'p1' ? fixedAbsCoords.p1AbsEnd : fixedAbsCoords.p2AbsEnd;
+        const overlaps = absEnd - 1 >= data.start && absStart - 1 <= data.end;
+        if (!overlaps) {
+            setFixedAbsCoords(null);
+            setIsAutoSearchNeeded(true);
+            return null;
+        }
+        const offset = data.ungappedOffset ?? 0;
+        const relStart = mapGappedToUngapped(absStart - 1 - data.start, data.seq);
+        const relEnd = mapGappedToUngapped(absEnd - 1 - data.start, data.seq);
+        let ungappedStart = relStart + offset;
+        let ungappedEnd = relEnd + offset;
+        const currentLen = ungappedEnd - ungappedStart;
+        const targetLen = Math.max(10, Math.min(60, currentLen + delta));
+        if (id === 'p1') {
+            ungappedEnd = Math.min(fullSeq.length, ungappedStart + targetLen);
+        } else {
+            ungappedStart = Math.max(0, ungappedEnd - targetLen);
+        }
+        const newSeq = fullSeq.substring(ungappedStart, ungappedEnd);
+        const newRelStart = mapUngappedToGapped(ungappedStart - offset, data.seq);
+        const newRelEnd = mapUngappedToGapped(ungappedEnd - offset, data.seq);
+        const newAbsStart = data.start + newRelStart + 1;
+        const newAbsEnd = data.start + newRelEnd + 1;
+        const gc = calcGc(newSeq);
+        const tm = calcTm(newSeq);
+        if (id === 'p1') {
+            setFixedAbsCoords({ ...fixedAbsCoords, p1AbsStart: newAbsStart, p1AbsEnd: newAbsEnd, p1Seq: newSeq, p1Tm: tm, p1Gc: gc });
+        } else {
+            setFixedAbsCoords({ ...fixedAbsCoords, p2AbsStart: newAbsStart, p2AbsEnd: newAbsEnd, p2Seq: newSeq, p2Tm: tm, p2Gc: gc });
+        }
+        return newSeq.length;
     };
 
     const relativeTime = (ts: number) => {
@@ -449,6 +485,7 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
 
     // Coordinate Mapping Helper: Ungapped Index -> Gapped Index (Relative to slice)
     const mapUngappedToGapped = (ungappedIdx: number, gappedSeq: string): number => {
+        if (ungappedIdx <= 0) return 0;
         let u = 0;
         for (let i = 0; i < gappedSeq.length; i++) {
             if (gappedSeq[i] !== '-') {
@@ -457,6 +494,25 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
             }
         }
         return gappedSeq.length;
+    };
+
+    const mapGappedToUngapped = (gappedIdx: number, gappedSeq: string): number => {
+        if (gappedIdx <= 0) return 0;
+        let u = 0;
+        const limit = Math.min(gappedIdx, gappedSeq.length);
+        for (let i = 0; i < limit; i++) {
+            if (gappedSeq[i] !== '-') u++;
+        }
+        return u;
+    };
+
+    const calcTm = (seq: string): number => {
+        if (!seq) return 0;
+        const gc = (seq.match(/[GCgc]/g) || []).length;
+        const tm = seq.length < 14
+            ? (seq.length - gc) * 2 + gc * 4
+            : 64.9 + 41 * (gc - 16.4) / seq.length;
+        return Math.round(tm * 10) / 10;
     };
 
     // Snapshot of the current absolute oligo pair (for save). Mirrors pinPosition's mapping.
@@ -587,30 +643,48 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
 
         const fetchPrimers = async () => {
             if (fixedAbsCoords) {
-                // 🔒 Position is fixed to absolute coordinates! (e.g. from Restore or Fix click)
-                // We do NOT hit the backend. We recalculate relative ungapped coordinates 
-                // so the visual sequences are perfectly aligned on the *current* window slice.
-                const mapGappedToUngapped = (gappedIdx: number, gappedSeq: string): number => {
-                    if (gappedIdx <= 0) return 0;
-                    let u = 0;
-                    const limit = Math.min(gappedIdx, gappedSeq.length);
-                    for (let i = 0; i < limit; i++) {
-                        if (gappedSeq[i] !== '-') u++;
-                    }
-                    return u;
-                };
+                const needsRebuild =
+                    fixedRebuildRef.current.data !== data ||
+                    fixedRebuildRef.current.fixed !== fixedAbsCoords ||
+                    fixedRebuildRef.current.searchParams !== searchParams;
+                fixedRebuildRef.current = { data, fixed: fixedAbsCoords, searchParams };
+                if (!needsRebuild) return;
 
-                // Determine coordinates relative to the START of the current viewport slice
-                const p1RelGappedStart = fixedAbsCoords.p1AbsStart - 1 - data.start;
-                const p1RelGappedEnd = fixedAbsCoords.p1AbsEnd - 1 - data.start;
-                const p2RelGappedStart = fixedAbsCoords.p2AbsStart - 1 - data.start;
-                const p2RelGappedEnd = fixedAbsCoords.p2AbsEnd - 1 - data.start;
-                
-                // Map gapped slice coords back to ungapped string length for `renderSequence` DimerSVG injection
-                const p1UngappedStart = mapGappedToUngapped(p1RelGappedStart, data.seq);
-                const p1UngappedEnd = mapGappedToUngapped(p1RelGappedEnd, data.seq);
-                const p2UngappedStart = mapGappedToUngapped(p2RelGappedStart, data.seq);
-                const p2UngappedEnd = mapGappedToUngapped(p2RelGappedEnd, data.seq);
+                const rawSeq = data.seq.replace(/-/g, '');
+                const sliceRel = (abs: number) => abs - 1 - data.start;
+                const inView = (absStart: number, absEnd: number) =>
+                    absEnd - 1 >= data.start && absStart - 1 <= data.end;
+
+                const p1RelStart = sliceRel(fixedAbsCoords.p1AbsStart);
+                const p1RelEnd = sliceRel(fixedAbsCoords.p1AbsEnd);
+                const p2RelStart = sliceRel(fixedAbsCoords.p2AbsStart);
+                const p2RelEnd = sliceRel(fixedAbsCoords.p2AbsEnd);
+
+                let p1UngappedStart: number;
+                let p1UngappedEnd: number;
+                if (inView(fixedAbsCoords.p1AbsStart, fixedAbsCoords.p1AbsEnd)) {
+                    p1UngappedStart = mapGappedToUngapped(p1RelStart, data.seq);
+                    p1UngappedEnd = mapGappedToUngapped(p1RelEnd, data.seq);
+                } else if (fixedAbsCoords.p1AbsEnd - 1 < data.start) {
+                    p1UngappedStart = -fixedAbsCoords.p1Seq.length;
+                    p1UngappedEnd = 0;
+                } else {
+                    p1UngappedStart = rawSeq.length;
+                    p1UngappedEnd = rawSeq.length + fixedAbsCoords.p1Seq.length;
+                }
+
+                let p2UngappedStart: number;
+                let p2UngappedEnd: number;
+                if (inView(fixedAbsCoords.p2AbsStart, fixedAbsCoords.p2AbsEnd)) {
+                    p2UngappedStart = mapGappedToUngapped(p2RelStart, data.seq);
+                    p2UngappedEnd = mapGappedToUngapped(p2RelEnd, data.seq);
+                } else if (fixedAbsCoords.p2AbsEnd - 1 < data.start) {
+                    p2UngappedStart = -fixedAbsCoords.p2Seq.length;
+                    p2UngappedEnd = 0;
+                } else {
+                    p2UngappedStart = rawSeq.length;
+                    p2UngappedEnd = rawSeq.length + fixedAbsCoords.p2Seq.length;
+                }
 
                 const fauxResponse: OligizeResponse = {
                     p1: { start: p1UngappedStart, end: p1UngappedEnd, seq: fixedAbsCoords.p1Seq, len: fixedAbsCoords.p1Seq.length, tm: fixedAbsCoords.p1Tm, gc: fixedAbsCoords.p1Gc },
@@ -624,10 +698,9 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                 setParamsNotMet(false);
                 setLoading(false);
 
-                // Broadcast back up to MSAViewer so the global minimap track remains totally accurate
                 onPrimersUpdate({
-                    p1: { start: data.start + p1RelGappedStart, end: data.start + p1RelGappedEnd },
-                    p2: { start: data.start + p2RelGappedStart, end: data.start + p2RelGappedEnd }
+                    p1: { start: fixedAbsCoords.p1AbsStart - 1, end: fixedAbsCoords.p1AbsEnd - 1 },
+                    p2: { start: fixedAbsCoords.p2AbsStart - 1, end: fixedAbsCoords.p2AbsEnd - 1 }
                 });
                 return;
             }
@@ -818,16 +891,12 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                         const p1Seq = fs.substring(p1S, p1E);
                         const p2Seq = fs.substring(p2S, p2E);
                         const calcGcF = (s: string) => ((s.match(/[GCgc]/g) || []).length / s.length) * 100;
-                        const calcTmF = (s: string) => {
-                            const gc = (s.match(/[GCgc]/g) || []).length;
-                            return s.length < 14 ? (s.length - gc) * 2 + gc * 4 : 64.9 + 41 * (gc - 16.4) / s.length;
-                        };
                         const d = data;
                         setFixedAbsCoords({
                             p1AbsStart: d.start + p1S + 1, p1AbsEnd: d.start + p1E + 1,
                             p2AbsStart: d.start + p2S + 1, p2AbsEnd: d.start + p2E + 1,
                             p1Seq, p2Seq,
-                            p1Tm: calcTmF(p1Seq), p2Tm: calcTmF(p2Seq),
+                            p1Tm: calcTm(p1Seq), p2Tm: calcTm(p2Seq),
                             p1Gc: calcGcF(p1Seq), p2Gc: calcGcF(p2Seq),
                         });
                     }
@@ -1531,8 +1600,16 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                                         </span>
                                     </div>
                                     <div className="flex bg-slate-100 dark:bg-slate-700 rounded border border-slate-200 dark:border-slate-600 overflow-hidden shadow-sm">
-                                        <button onClick={() => { setMoligo2Len(prev => Math.max(10, prev - 1)); }} className="w-8 h-7 flex items-center justify-center hover:bg-white dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition-colors font-bold border-r border-slate-200 dark:border-slate-600">-</button>
-                                        <button onClick={() => { setMoligo2Len(prev => Math.min(60, prev + 1)); }} className="w-8 h-7 flex items-center justify-center hover:bg-white dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition-colors font-bold">+</button>
+                                        <button
+                                            onClick={() => { const actual = resizeFixedOligo('p2', -1); setMoligo2Len(prev => actual ?? Math.max(10, prev - 1)); }}
+                                            title="Decrease length"
+                                            className="w-8 h-7 flex items-center justify-center hover:bg-white dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition-colors font-bold border-r border-slate-200 dark:border-slate-600"
+                                        >-</button>
+                                        <button
+                                            onClick={() => { const actual = resizeFixedOligo('p2', 1); setMoligo2Len(prev => actual ?? Math.min(60, prev + 1)); }}
+                                            title="Increase length"
+                                            className="w-8 h-7 flex items-center justify-center hover:bg-white dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition-colors font-bold"
+                                        >+</button>
                                     </div>
                                 </div>
                             </div>
@@ -1565,8 +1642,16 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                                         </span>
                                     </div>
                                     <div className="flex bg-slate-100 dark:bg-slate-700 rounded border border-slate-200 dark:border-slate-600 overflow-hidden shadow-sm">
-                                        <button onClick={() => { setMoligo1Len(prev => Math.max(10, prev - 1)); }} className="w-8 h-7 flex items-center justify-center hover:bg-white dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition-colors font-bold border-r border-slate-200 dark:border-slate-600">-</button>
-                                        <button onClick={() => { setMoligo1Len(prev => Math.min(60, prev + 1)); }} className="w-8 h-7 flex items-center justify-center hover:bg-white dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition-colors font-bold">+</button>
+                                        <button
+                                            onClick={() => { const actual = resizeFixedOligo('p1', -1); setMoligo1Len(prev => actual ?? Math.max(10, prev - 1)); }}
+                                            title="Decrease length"
+                                            className="w-8 h-7 flex items-center justify-center hover:bg-white dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition-colors font-bold border-r border-slate-200 dark:border-slate-600"
+                                        >-</button>
+                                        <button
+                                            onClick={() => { const actual = resizeFixedOligo('p1', 1); setMoligo1Len(prev => actual ?? Math.min(60, prev + 1)); }}
+                                            title="Increase length"
+                                            className="w-8 h-7 flex items-center justify-center hover:bg-white dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition-colors font-bold"
+                                        >+</button>
                                     </div>
                                 </div>
                             </div>
@@ -1584,18 +1669,18 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                                 <div className="flex items-center gap-1">
                                     <input
                                         type="text"
-                                        value={searchOligo1Seq}
-                                        onChange={e => { setSearchOligo1Seq(e.target.value); setSearchOligoError(null); }}
-                                        onKeyDown={e => { if (e.key === 'Enter') handleSearchOligos(); }}
-                                        placeholder="Oligo 1…"
-                                        className="w-56 px-2 py-1 text-xs border border-slate-200 dark:border-slate-600 rounded bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-indigo-400"
-                                    />
-                                    <input
-                                        type="text"
                                         value={searchOligo2Seq}
                                         onChange={e => { setSearchOligo2Seq(e.target.value); setSearchOligoError(null); }}
                                         onKeyDown={e => { if (e.key === 'Enter') handleSearchOligos(); }}
                                         placeholder="Oligo 2…"
+                                        className="w-56 px-2 py-1 text-xs border border-slate-200 dark:border-slate-600 rounded bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-indigo-400"
+                                    />
+                                    <input
+                                        type="text"
+                                        value={searchOligo1Seq}
+                                        onChange={e => { setSearchOligo1Seq(e.target.value); setSearchOligoError(null); }}
+                                        onKeyDown={e => { if (e.key === 'Enter') handleSearchOligos(); }}
+                                        placeholder="Oligo 1…"
                                         className="w-56 px-2 py-1 text-xs border border-slate-200 dark:border-slate-600 rounded bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-indigo-400"
                                     />
                                     <button
