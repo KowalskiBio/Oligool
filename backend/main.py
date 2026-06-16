@@ -622,7 +622,7 @@ async def analyze_idt_oligos(request: IdtAnalyzeRequest):
     try:
         from strider import ThermoEngine
         from strider.thermo.hairpin import hairpin_thermo  # strider >= 0.3.2
-        from strider.thermo.dimer_thermo import dimer_thermo  # strider >= 0.3.5 / fork
+        from strider.thermo.dimer_thermo import dimer_thermo, dimer_thermo_subopt  # strider >= 0.3.5 / fork
 
         base_temp = request.temp if hasattr(request, "temp") and request.temp is not None else 25.0
         mv_m = request.mv_conc / 1000.0
@@ -684,6 +684,28 @@ async def analyze_idt_oligos(request: IdtAnalyzeRequest):
                     viz_struct_raw = None
                     viz_dg = None
                     mfe_tm = None
+
+                subopt_dimers: list[dict] = []
+                try:
+                    subopt_res = dimer_thermo_subopt(
+                        seq1, seq2,
+                        n=5,
+                        sodium_M=mv_m,
+                        magnesium_M=effective_mg,
+                        material='dna',
+                        strand_conc_M=oligo_conc_m,
+                        salt_model='auto',
+                    )
+                    for r in subopt_res:
+                        subopt_dimers.append({
+                            "Sequence": display_seq,
+                            "DotBracket": _with_div(r.structure),
+                            "DeltaG": round(float(r.dG37), 2),
+                            "Tm": round(r.tm_celsius, 1) if r.tm_celsius and r.tm_celsius > 1.0 else None,
+                            "BasePairs": r.n_pairs,
+                        })
+                except Exception:
+                    logging.exception("suboptimal dimer enumeration failed")
             else:
                 mfe_result = eng.mfe(seq1)
                 raw_mfe = mfe_result.structure
@@ -724,6 +746,7 @@ async def analyze_idt_oligos(request: IdtAnalyzeRequest):
                 item["Sequence"] = display_seq
                 item["Local_DeltaG"] = viz_dg
                 item["Local_Tm"] = mfe_tm
+                item["SuboptDimers"] = subopt_dimers if is_dimer else []
                 if viz_struct:
                     item["DotBracket"] = viz_struct
                     for k in ["AsciiStructure", "VisualPrint", "asciiStructure", "visualPrint"]:
