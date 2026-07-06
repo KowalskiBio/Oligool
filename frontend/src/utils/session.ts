@@ -91,6 +91,7 @@ export interface OligoolSession {
         blastMeta: BlastMeta | null;
         showMatches: boolean;
         alignment: string;
+        autofindSelectedAccessions?: string[];
     };
     oligo: OligoSnapshot | null;
     flankingPrimers: FlankingPrimerSelection | null;

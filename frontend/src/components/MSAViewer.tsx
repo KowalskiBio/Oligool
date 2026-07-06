@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
+import { findCleanRegions, computeMismatchCols, type CleanRegion } from '../utils/msa';
 
 /* ── helpers ────────────────────────────────────────── */
 const getPrettyStep = (minPixels: number, pixelsPerUnit: number) => {
@@ -23,6 +24,7 @@ function seqEnd(seq: string): number {
 export interface ParsedSequence {
     id: string;
     seq: string;
+    accession: string;
 }
 
 interface MSAViewerProps {
@@ -37,8 +39,12 @@ interface MSAViewerProps {
     navigateTarget?: { colStart: number; colEnd: number; ts: number } | null;
     /** Called when user drag-selects a region in the GC%/MSA header for oligo placement */
     onOligoRegionSelect?: (startCol: number, endCol: number) => void;
+    /** Called when user clicks a clean region proposed by autofind — zoom to that region */
+    onAutofindRegionSelect?: (startCol: number, endCol: number) => void;
     /** Called when user clicks on a flanking primer bar in the minimap — zoom to that primer */
     onFlankingPrimerClick?: (colStart: number, colEnd: number) => void;
+    selectedAccessions?: Set<string>;
+    onSelectionChange?: (accessions: Set<string>) => void;
 }
 
 /* ── constants ────────────────────────────────────────── */
@@ -58,7 +64,7 @@ const MINIMAP_HEIGHT = MINIMAP_GC_H + MINIMAP_RULER_H + 50 + MINIMAP_HANDLE_H;
 const MAIN_GC_TRACK_H = 40;
 const MAIN_MSA_TRACK_H = 30;
 
-const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, primers, flankingPrimers, isDarkMode, navigateTarget, onOligoRegionSelect, onFlankingPrimerClick }) => {
+const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, primers, flankingPrimers, isDarkMode, navigateTarget, onOligoRegionSelect, onAutofindRegionSelect, onFlankingPrimerClick, selectedAccessions, onSelectionChange }) => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const hoverOverlayRef = useRef<HTMLCanvasElement>(null);
     const minimapRef = useRef<HTMLCanvasElement>(null);
@@ -100,6 +106,7 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
     const hoverRafRef = useRef<number>(0);
     const redrawRef = useRef<() => void>(() => { });
     const [showOverview, setShowOverview] = useState(true);
+    const [autofindActive, setAutofindActive] = useState(false);
     const scrollPressRef = useRef<ReturnType<typeof setInterval> | null>(null);
     // Live-value refs for use inside setInterval (avoid stale closures)
     const viewFractionRef = useRef(viewFraction);
@@ -174,12 +181,16 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
         const seqs: ParsedSequence[] = [];
         let cur = '';
         let seq = '';
+        let acc = '';
         lines.forEach((l) => {
             if (l.startsWith('>')) {
-                if (cur) seqs.push({ id: cur, seq });
+                if (cur) seqs.push({ id: cur, seq, accession: acc });
                 
                 const header = l.substring(1).trim();
+                const parts = header.split(/\s+/);
+                const accession = parts[0];
                 let displayName = header;
+                acc = accession;
 
                 // Try to find organism info (often in brackets like [organism=Homo sapiens] or [Homo sapiens])
                 const bracketMatch = header.match(/\[([^\]]+)\]/);
@@ -189,7 +200,6 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
                     displayName = orgMatch ? orgMatch[1] : content;
                 } else {
                     // Standard NCBI header format: ">Accession Genus species Description..."
-                    const parts = header.split(/\s+/);
                     if (parts.length >= 2) {
                         // Remove the accession part (first word)
                         const afterAcc = header.substring(parts[0].length).trim();
@@ -219,7 +229,7 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
                 seq += l.trim();
             }
         });
-        if (cur) seqs.push({ id: cur, seq });
+        if (cur) seqs.push({ id: cur, seq, accession: acc });
         return seqs;
     }, [alignment]);
 
@@ -323,17 +333,17 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
         }
     });
 
-    /* ── zoom helpers (anchored to viewport center) ───── */
-    const applyZoom = (factor: number) => {
+    /* ── zoom helpers ──────────────────────────────────── */
+    const applyZoom = (factor: number, anchorPx: number = seqAreaW / 2) => {
         const newVF = Math.max(0.005, Math.min(1, viewFraction * factor));
 
-        // Calculate the current horizontal center (global fraction 0..1)
+        // Keep the anchor point (measured from the left edge of the sequence area)
+        // at the same screen position after zooming.
         const currentTotalVirtualW = seqAreaW / viewFraction;
-        const centerFracGlobal = (scrollLeft + seqAreaW / 2) / currentTotalVirtualW;
+        const anchorFracGlobal = (scrollLeft + anchorPx) / currentTotalVirtualW;
 
-        // Calculate new scrollLeft to keep centerFracGlobal at the new viewport center
         const newTotalVirtualW = seqAreaW / newVF;
-        let newSL = centerFracGlobal * newTotalVirtualW - seqAreaW / 2;
+        let newSL = anchorFracGlobal * newTotalVirtualW - anchorPx;
 
         // Clamp scroll
         newSL = Math.max(0, Math.min(newTotalVirtualW - seqAreaW, newSL));
@@ -344,8 +354,10 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
         if (scrollRef.current) scrollRef.current.scrollLeft = newSL;
     };
 
-    const zoomIn = () => applyZoom(0.75);
-    const zoomOut = () => applyZoom(1.33);
+    // The +/- buttons zoom from the left edge of the current viewport so the
+    // user never gets teleported away from the region they are looking at.
+    const zoomIn = () => applyZoom(0.75, 0);
+    const zoomOut = () => applyZoom(1.33, 0);
 
     /* ── navigate to a specific column range ────────────── */
     useEffect(() => {
@@ -381,13 +393,6 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
     };
 
     const isDark = isDarkMode ?? document.documentElement.classList.contains('dark');
-
-    const copySequence = (seq: ParsedSequence) => {
-        const raw = seq.seq.replace(/-/g, '');
-        navigator.clipboard.writeText(raw).then(() => {
-            showCopyFeedback(`Copied ${seq.id} (${raw.length} bp)`);
-        });
-    };
 
     const copyAllFasta = () => {
         const fasta = sequences.map((s) => `>${s.id}\n${s.seq}`).join('\n');
@@ -425,18 +430,31 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
 
     /* ── precompute mismatch columns for O(1) hover lookup ── */
     const mismatchCols = useMemo(() => {
-        const set = new Set<number>();
-        if (sequences.length < 2 || seqLen === 0) return set;
-        for (let col = 0; col < seqLen; col++) {
-            const qch = (sequences[0].seq[col] || '-').toUpperCase();
-            if (qch === '-') continue;
-            for (let row = 1; row < sequences.length; row++) {
-                const ch = (sequences[row].seq[col] || '-').toUpperCase();
-                if (ch !== '-' && ch !== qch) { set.add(col); break; }
-            }
+        return computeMismatchCols(sequences, selectedAccessions);
+    }, [sequences, selectedAccessions]);
+
+    const autofindBoundaryRow = useMemo(() => {
+        if (!selectedAccessions) return sequences.length - 1;
+        let boundary = 0;
+        for (let row = 1; row < sequences.length; row++) {
+            if (selectedAccessions.has(sequences[row].accession)) boundary = row;
         }
-        return set;
-    }, [sequences, seqLen]);
+        return boundary;
+    }, [sequences, selectedAccessions]);
+
+    const setAutofindBoundaryRow = useCallback((row: number) => {
+        const boundary = Math.max(0, Math.min(sequences.length - 1, row));
+        const next = new Set<string>();
+        for (let r = 1; r <= boundary; r++) {
+            if (sequences[r].accession) next.add(sequences[r].accession);
+        }
+        onSelectionChange?.(next);
+    }, [sequences, onSelectionChange]);
+
+    /* ── propose contiguous zero-mismatch regions for autofind ── */
+    const cleanRegions = useMemo<CleanRegion[]>(() => {
+        return findCleanRegions(sequences, mismatchCols);
+    }, [sequences, mismatchCols]);
 
     /* ── selection statistics (visible range) ─────── */
     const selectionStats = useMemo(() => {
@@ -849,9 +867,15 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
             const s = sequences[row];
             const y = MAIN_GC_TRACK_H + MAIN_MSA_TRACK_H + RULER_HEIGHT + row * ROW_HEIGHT;
             const isQuery = row === 0;
+            const isSelectedForAutofind = row > 0 && row <= autofindBoundaryRow;
 
             const sStart = seqStart(s.seq);
             const sEnd = seqEnd(s.seq);
+
+            if (isSelectedForAutofind) {
+                ctx.fillStyle = isDark ? 'rgba(34,197,94,0.12)' : 'rgba(34,197,94,0.10)';
+                ctx.fillRect(labelWidth, y, seqAreaW, ROW_HEIGHT);
+            }
 
             if (viewMode === 'letters') {
                 for (let col = firstCol; col <= lastCol; col++) {
@@ -957,6 +981,18 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
 
             ctx.fillStyle = isDark ? '#1e293b' : '#f1f5f9';
             ctx.fillRect(labelWidth, y + ROW_HEIGHT - 0.5, seqAreaW, 0.5);
+        }
+
+        if (autofindBoundaryRow > 0 && autofindBoundaryRow < sequences.length - 1) {
+            const boundaryY = MAIN_GC_TRACK_H + MAIN_MSA_TRACK_H + RULER_HEIGHT + (autofindBoundaryRow + 1) * ROW_HEIGHT - 1;
+            ctx.strokeStyle = isDark ? '#22c55e' : '#16a34a';
+            ctx.lineWidth = 1;
+            ctx.setLineDash([4, 4]);
+            ctx.beginPath();
+            ctx.moveTo(labelWidth, boundaryY);
+            ctx.lineTo(labelWidth + seqAreaW, boundaryY);
+            ctx.stroke();
+            ctx.setLineDash([]);
         }
 
         /* ══════════════════════════════════════════════════════
@@ -1183,6 +1219,7 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
             const pColor = isQuery
                 ? (isDark ? '#3b82f6' : '#2563eb')
                 : (isDark ? '#94a3b8' : '#64748b');
+            const isSelectedForAutofind = row > 0 && row <= autofindBoundaryRow;
 
             ctx.fillStyle = pColor;
             ctx.font = `${isQuery ? 'bold ' : ''}10px ui-sans-serif, system-ui, sans-serif`;
@@ -1197,6 +1234,13 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
                 displayTxt += '…';
             }
             ctx.fillText(displayTxt, labelWidth - 8, labelY);
+
+            if (isSelectedForAutofind) {
+                ctx.fillStyle = isDark ? '#22c55e' : '#16a34a';
+                ctx.beginPath();
+                ctx.arc(8, labelY, 3, 0, Math.PI * 2);
+                ctx.fill();
+            }
         }
 
         ctx.restore(); // restore translate
@@ -1209,7 +1253,7 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
             hoverCvs.style.width = `${availableWidth}px`;
             hoverCvs.style.height = `${canvasH}px`;
         }
-    }, [sequences, querySeq, scrollLeft, scrollTop, cellW, seqAreaW, availableWidth, totalH, seqLen, viewMode, primers, flankingPrimers, gcContent, isDarkMode, oligoSelection]);
+    }, [sequences, querySeq, scrollLeft, scrollTop, cellW, seqAreaW, availableWidth, totalH, seqLen, viewMode, primers, flankingPrimers, gcContent, isDarkMode, oligoSelection, autofindBoundaryRow]);
 
     /* ── lightweight hover overlay (draws only a thin line) ── */
     const drawHoverOverlay = useCallback(() => {
@@ -1377,6 +1421,14 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
         const startC = Math.max(0, Math.min(seqLen - 1, Math.floor((scrollLeft + mouseX) / cellW)));
         setOligoSelection({ startCol: startC, endCol: startC });
 
+        const mouseYCanvas = e.clientY - rect.top;
+        const rowsStartY = MAIN_GC_TRACK_H + MAIN_MSA_TRACK_H + RULER_HEIGHT;
+        const virtualY = mouseYCanvas + scrollTop;
+        const row = Math.floor((virtualY - rowsStartY) / ROW_HEIGHT);
+        if (row >= 0 && row < sequences.length && virtualY >= rowsStartY) {
+            setAutofindBoundaryRow(row);
+        }
+
         const colAt = (clientX: number) =>
             Math.max(0, Math.min(seqLen - 1, Math.floor((scrollLeft + clientX - rect.left - labelWidth) / cellW)));
 
@@ -1439,21 +1491,24 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
         document.addEventListener('mousemove', onMove);
         document.addEventListener('mouseup', onUp);
         e.preventDefault();
-    }, [labelWidth, seqLen, scrollLeft, cellW, availableWidth, onOligoRegionSelect, flankingPrimers, onFlankingPrimerClick]);
+    }, [labelWidth, seqLen, scrollLeft, scrollTop, cellW, availableWidth, onOligoRegionSelect, flankingPrimers, onFlankingPrimerClick, sequences, setAutofindBoundaryRow]);
 
-    /* ── canvas click → copy sequence OR select ─────────────────── */
     const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
         const cvs = canvasRef.current;
         if (!cvs) return;
         const rect = cvs.getBoundingClientRect();
+        const x = e.clientX - rect.left;
         const y = e.clientY - rect.top;
         const rowsStartY = MAIN_GC_TRACK_H + MAIN_MSA_TRACK_H + RULER_HEIGHT;
-        const row = Math.floor((y - rowsStartY) / ROW_HEIGHT);
+        const virtualY = y + scrollTop;
+        const row = Math.floor((virtualY - rowsStartY) / ROW_HEIGHT);
 
-        if (row >= 0 && row < sequences.length) {
-            const seq = sequences[row];
-            if (viewMode === 'letters') {
-                copySequence(seq);
+        if (row < 0 || row >= sequences.length || virtualY < rowsStartY) return;
+
+        if (x < labelWidth && row > 0) {
+            const accession = sequences[row].accession;
+            if (accession) {
+                window.open(`https://www.ncbi.nlm.nih.gov/nuccore/${accession}`, '_blank', 'noopener,noreferrer');
             }
         }
     };
@@ -1500,6 +1555,16 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
                             <path d="M10 18a8 8 0 100-16 8 8 0 000 16zM10 4a6 6 0 100 12 6 6 0 000-12z" opacity={showOverview ? 0 : 0.3} />
                         </svg>
                         {showOverview ? 'Hide overview' : 'Show overview'}
+                    </button>
+                    <button
+                        onClick={() => setAutofindActive((v) => !v)}
+                        className={`px-2 py-1 text-xs font-medium rounded-md border transition-colors flex items-center gap-1 ${autofindActive
+                            ? 'border-indigo-300 dark:border-indigo-800 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/30'
+                            : 'border-slate-300 dark:border-slate-600 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'
+                            }`}
+                        title={autofindActive ? 'Hide autofind proposals' : 'Find zero-mismatch regions'}
+                    >
+                        autofind
                     </button>
                     {copyFeedback && (
                         <span className="text-xs text-emerald-600 dark:text-emerald-400 font-medium animate-pulse">{copyFeedback}</span>
@@ -1563,8 +1628,8 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
                             onChange={(e) => {
                                 const newVF = parseFloat(e.target.value);
                                 const factor = newVF / viewFraction;
-                                // We use factor to adjust zoom but anchored to center
-                                applyZoom(factor);
+                                // Anchor to the left edge so the slider does not teleport the view.
+                                applyZoom(factor, 0);
                             }}
                             className="w-24 h-1.5 accent-indigo-500"
                             style={{ direction: 'rtl' }}
@@ -1578,6 +1643,42 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
                     <span className="text-xs text-slate-400 font-mono w-20 text-right">{Math.round(visibleBases)} bp</span>
                 </div>
             </div>
+
+            {/* ── autofind proposals ── */}
+            {autofindActive && (
+                <div className="px-5 py-3 bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700">
+                    <div className="flex items-center justify-between mb-2">
+                        <span className="text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wide">
+                            Clean Regions
+                        </span>
+                        <span className="text-xs text-slate-400 dark:text-slate-500">
+                            {cleanRegions.length} region{cleanRegions.length !== 1 ? 's' : ''}
+                        </span>
+                    </div>
+                    {cleanRegions.length === 0 ? (
+                        <p className="text-xs text-slate-500 dark:text-slate-400">
+                            No clean regions found.
+                        </p>
+                    ) : (
+                        <div className="flex flex-wrap gap-1.5">
+                            {cleanRegions.map((region) => (
+                                <button
+                                    key={`${region.start}-${region.end}`}
+                                    data-testid="clean-region-pill"
+                                    onClick={() => onAutofindRegionSelect?.(region.start, region.end)}
+                                    className="px-2.5 py-1 text-xs font-mono rounded-md border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 hover:border-indigo-300 dark:hover:border-indigo-800 transition-colors"
+                                    title={`Jump to columns ${region.start + 1}–${region.end + 1}`}
+                                >
+                                    {region.start + 1}–{region.end + 1}
+                                    <span className="ml-1.5 text-slate-400 dark:text-slate-500">
+                                        ({region.length} bp)
+                                    </span>
+                                </button>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            )}
 
             {/* ── minimap navigator ── */}
             {showOverview && (

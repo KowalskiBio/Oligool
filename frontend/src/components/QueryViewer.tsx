@@ -1,8 +1,9 @@
-import { useState, useEffect, useRef, forwardRef, useImperativeHandle } from 'react';
+import { useState, useEffect, useRef, forwardRef, useImperativeHandle, useCallback } from 'react';
 import MOLigoPanel from './MOLigoPanel';
 import FlankingPrimersPanel from './FlankingPrimersPanel';
 import HairpinSVG from './HairpinSVG';
 import DimerSVG from './DimerSVG';
+import { dimerAsciiFromItem } from './DimerAscii';
 import type { OligoSnapshot, SavedPosition, FixedAbsCoords } from '../utils/session';
 
 /** Imperative handle App uses to pull QueryViewer's state when saving a session. */
@@ -24,6 +25,7 @@ interface QueryViewerProps {
     onNavigateTo?: (colStart: number, colEnd: number) => void;
     /** Gapped column range selected by the user in MSAViewer for constrained oligo search */
     oligoRegion?: { startCol: number; endCol: number } | null;
+    autofindRegion?: { startCol: number; endCol: number } | null;
     idtCredentials?: {
         clientId: string;
         clientSecret: string;
@@ -66,7 +68,7 @@ interface OligizeResponse {
     param_warnings?: string[];
 }
 
-const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function QueryViewer({ data, jobName, onPrimersUpdate, onFlankingPrimersUpdate, onNavigateTo, oligoRegion, idtCredentials, alignment, navigateTarget, isDarkMode, importedSession }, ref) {
+const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function QueryViewer({ data, jobName, onPrimersUpdate, onFlankingPrimersUpdate, onNavigateTo, oligoRegion, autofindRegion, idtCredentials, alignment, navigateTarget, isDarkMode, importedSession }, ref) {
     const [copyFeedback, setCopyFeedback] = useState('');
 
     // IDT Analysis State
@@ -146,12 +148,15 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
     const [isAutoSearchNeeded, setIsAutoSearchNeeded] = useState(true);
     const lastShiftsApplied = useRef({ s1: 0, s2: 0 });
     const prevDataRef = useRef(data);
+    const fixedContextRef = useRef<{ fullSeq: string; gappedSeq: string; start: number; end: number; offset: number } | null>(null);
     const fixedRebuildRef = useRef<{ data?: typeof data; fixed?: FixedAbsCoords | null; searchParams?: typeof searchParams }>({});
     // When region analysis is active, fetchPrimers uses this subsequence so sliders stay within the region
     const regionSeqContextRef = useRef<{ rawSub: string; ungappedOffset: number } | null>(null);
+    const handleRegionAnalysisRef = useRef<() => Promise<void>>(async () => {});
     const [regionAnalysisActive, setRegionAnalysisActive] = useState(false);
     // Reset toggle whenever a new region is drawn
     useEffect(() => {
+        setFixedAbsCoords(null);
         if (!regionAnalysisActive) return;
         regionSeqContextRef.current = null;
         setRegionAnalysisActive(false);
@@ -180,15 +185,29 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
     // Fix Position toggle — when set, fetchPrimers is bypassed and oligos stick to global absolute coordinates
     const [fixedAbsCoords, setFixedAbsCoords] = useState<FixedAbsCoords | null>(null);
 
+    const captureFixedContext = useCallback(() => {
+        const gappedSeq = data.seq;
+        const ungapped = gappedSeq.replace(/-/g, '');
+        fixedContextRef.current = {
+            fullSeq: data.fullSeq ?? ungapped,
+            gappedSeq,
+            start: data.start,
+            end: data.end,
+            offset: data.ungappedOffset ?? 0,
+        };
+    }, [data]);
+
     const toggleFixPosition = () => {
         setFixedAbsCoords(prev => {
             if (prev) {
+                fixedContextRef.current = null;
                 // Unfixing → trigger a fresh auto-search
                 setIsAutoSearchNeeded(true);
                 return null;
             }
             // Fixing current primers
             if (!primers) return null;
+            captureFixedContext();
             const p1AbsStart = data.start + mapUngappedToGapped(primers.p1.start, data.seq) + 1;
             const p1AbsEnd   = data.start + mapUngappedToGapped(primers.p1.end,   data.seq) + 1;
             const p2AbsStart = data.start + mapUngappedToGapped(primers.p2.start, data.seq) + 1;
@@ -261,6 +280,7 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
         const p1GEnd = mapUngappedToGapped(p1.end, data.seq);
         const p2GStart = mapUngappedToGapped(p2.start, data.seq);
         const p2GEnd = mapUngappedToGapped(p2.end, data.seq);
+        captureFixedContext();
         onPrimersUpdate({
             p1: { start: data.start + p1GStart, end: data.start + p1GEnd },
             p2: { start: data.start + p2GStart, end: data.start + p2GEnd },
@@ -305,31 +325,33 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
 
     const resizeFixedOligo = (id: 'p1' | 'p2', delta: number): number | null => {
         if (!fixedAbsCoords) return null;
+        const fc = fixedContextRef.current;
         const absStart = id === 'p1' ? fixedAbsCoords.p1AbsStart : fixedAbsCoords.p2AbsStart;
         const absEnd = id === 'p1' ? fixedAbsCoords.p1AbsEnd : fixedAbsCoords.p2AbsEnd;
-        const overlaps = absEnd - 1 >= data.start && absStart - 1 <= data.end;
-        if (!overlaps) {
-            setFixedAbsCoords(null);
-            setIsAutoSearchNeeded(true);
+        if (!fc) {
+            const overlaps = absEnd - 1 >= data.start && absStart - 1 <= data.end;
+            if (!overlaps) {
+                setFixedAbsCoords(null);
+                setIsAutoSearchNeeded(true);
+            }
             return null;
         }
-        const offset = data.ungappedOffset ?? 0;
-        const relStart = mapGappedToUngapped(absStart - 1 - data.start, data.seq);
-        const relEnd = mapGappedToUngapped(absEnd - 1 - data.start, data.seq);
-        let ungappedStart = relStart + offset;
-        let ungappedEnd = relEnd + offset;
+        const relStart = mapGappedToUngapped(absStart - 1 - fc.start, fc.gappedSeq);
+        const relEnd = mapGappedToUngapped(absEnd - 1 - fc.start, fc.gappedSeq);
+        let ungappedStart = relStart + fc.offset;
+        let ungappedEnd = relEnd + fc.offset;
         const currentLen = ungappedEnd - ungappedStart;
         const targetLen = Math.max(10, Math.min(60, currentLen + delta));
         if (id === 'p1') {
-            ungappedEnd = Math.min(fullSeq.length, ungappedStart + targetLen);
+            ungappedEnd = Math.min(fc.fullSeq.length, ungappedStart + targetLen);
         } else {
             ungappedStart = Math.max(0, ungappedEnd - targetLen);
         }
-        const newSeq = fullSeq.substring(ungappedStart, ungappedEnd).toUpperCase();
-        const newRelStart = mapUngappedToGapped(ungappedStart - offset, data.seq);
-        const newRelEnd = mapUngappedToGapped(ungappedEnd - offset, data.seq);
-        const newAbsStart = data.start + newRelStart + 1;
-        const newAbsEnd = data.start + newRelEnd + 1;
+        const newSeq = fc.fullSeq.substring(ungappedStart, ungappedEnd).toUpperCase();
+        const newRelStart = mapUngappedToGapped(ungappedStart - fc.offset, fc.gappedSeq);
+        const newRelEnd = mapUngappedToGapped(ungappedEnd - fc.offset, fc.gappedSeq);
+        const newAbsStart = fc.start + newRelStart + 1;
+        const newAbsEnd = fc.start + newRelEnd + 1;
         const gc = calcGc(newSeq);
         const tm = calcTm(newSeq);
         if (id === 'p1') {
@@ -371,6 +393,7 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
 
     const restorePosition = (pos: SavedPosition) => {
         // Lock instantly to the exact absolute genomic sequence, bypassing backend searches completely.
+        captureFixedContext();
         setFixedAbsCoords({
             p1AbsStart: pos.p1AbsStart, p1AbsEnd: pos.p1AbsEnd,
             p2AbsStart: pos.p2AbsStart, p2AbsEnd: pos.p2AbsEnd,
@@ -423,6 +446,13 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
         if (data && !fixedAbsCoords) {
             const prev = prevDataRef.current;
             if (prev && prev.id === data.id && prev.seq !== data.seq && primers) {
+                fixedContextRef.current = {
+                    fullSeq: prev.fullSeq ?? prev.seq.replace(/-/g, ''),
+                    gappedSeq: prev.seq,
+                    start: prev.start,
+                    end: prev.end,
+                    offset: prev.ungappedOffset ?? 0,
+                };
                 setFixedAbsCoords({
                     p1AbsStart: prev.start + mapUngappedToGapped(primers.p1.start, prev.seq) + 1,
                     p1AbsEnd:   prev.start + mapUngappedToGapped(primers.p1.end,   prev.seq) + 1,
@@ -476,13 +506,15 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
         setShowFlankingPrimers(s.showFlankingPrimers);
         lastShiftsApplied.current = { s1: s.moligo1Shift, s2: s.moligo2Shift };
         if (s.currentOligo) {
+            captureFixedContext();
             setFixedAbsCoords(s.currentOligo);
             setIsAutoSearchNeeded(false);
         } else {
+            fixedContextRef.current = null;
             setFixedAbsCoords(null);
             setIsAutoSearchNeeded(true);
         }
-    }, [importedSession, data]);
+    }, [importedSession, data, captureFixedContext]);
 
     // Coordinate Mapping Helper: Ungapped Index -> Gapped Index (Relative to slice)
     const mapUngappedToGapped = (ungappedIdx: number, gappedSeq: string): number => {
@@ -634,6 +666,17 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
     };
 
     useEffect(() => {
+        handleRegionAnalysisRef.current = handleRegionAnalysis;
+    });
+
+    useEffect(() => {
+        if (!autofindRegion || !oligoRegion || !data) return;
+        if (autofindRegion.startCol !== oligoRegion.startCol || autofindRegion.endCol !== oligoRegion.endCol) return;
+        setFixedAbsCoords(null);
+        handleRegionAnalysisRef.current();
+    }, [autofindRegion, oligoRegion, data]);
+
+    useEffect(() => {
         if (!data) {
             onPrimersUpdate(null);
             return;
@@ -651,51 +694,22 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                 fixedRebuildRef.current = { data, fixed: fixedAbsCoords, searchParams };
                 if (!needsRebuild) return;
 
-                const rawSeq = data.seq.replace(/-/g, '');
-                const sliceRel = (abs: number) => abs - 1 - data.start;
-                const inView = (absStart: number, absEnd: number) =>
-                    absEnd - 1 >= data.start && absStart - 1 <= data.end;
-
-                const p1RelStart = sliceRel(fixedAbsCoords.p1AbsStart);
-                const p1RelEnd = sliceRel(fixedAbsCoords.p1AbsEnd);
-                const p2RelStart = sliceRel(fixedAbsCoords.p2AbsStart);
-                const p2RelEnd = sliceRel(fixedAbsCoords.p2AbsEnd);
-
-                let p1UngappedStart: number;
-                let p1UngappedEnd: number;
-                if (inView(fixedAbsCoords.p1AbsStart, fixedAbsCoords.p1AbsEnd)) {
-                    p1UngappedStart = mapGappedToUngapped(p1RelStart, data.seq);
-                    p1UngappedEnd = mapGappedToUngapped(p1RelEnd, data.seq);
-                } else if (fixedAbsCoords.p1AbsEnd - 1 < data.start) {
-                    p1UngappedStart = -fixedAbsCoords.p1Seq.length;
-                    p1UngappedEnd = 0;
-                } else {
-                    p1UngappedStart = rawSeq.length;
-                    p1UngappedEnd = rawSeq.length + fixedAbsCoords.p1Seq.length;
+                const fc = fixedContextRef.current;
+                if (fc) {
+                    const toCtx = (abs: number) => mapGappedToUngapped(abs - 1 - fc.start, fc.gappedSeq);
+                    const p1Start = toCtx(fixedAbsCoords.p1AbsStart);
+                    const p1End = toCtx(fixedAbsCoords.p1AbsEnd);
+                    const p2Start = toCtx(fixedAbsCoords.p2AbsStart);
+                    const p2End = toCtx(fixedAbsCoords.p2AbsEnd);
+                    const fauxResponse: OligizeResponse = {
+                        p1: { start: p1Start, end: p1End, seq: fixedAbsCoords.p1Seq, len: fixedAbsCoords.p1Seq.length, tm: fixedAbsCoords.p1Tm, gc: fixedAbsCoords.p1Gc },
+                        p2: { start: p2Start, end: p2End, seq: fixedAbsCoords.p2Seq, len: fixedAbsCoords.p2Seq.length, tm: fixedAbsCoords.p2Tm, gc: fixedAbsCoords.p2Gc },
+                        split_idx: 0,
+                        tm_diff_ok: Math.abs(fixedAbsCoords.p1Tm - fixedAbsCoords.p2Tm) <= Number(searchParams.tm_diff),
+                        params_not_met: false,
+                    };
+                    setPrimers(fauxResponse);
                 }
-
-                let p2UngappedStart: number;
-                let p2UngappedEnd: number;
-                if (inView(fixedAbsCoords.p2AbsStart, fixedAbsCoords.p2AbsEnd)) {
-                    p2UngappedStart = mapGappedToUngapped(p2RelStart, data.seq);
-                    p2UngappedEnd = mapGappedToUngapped(p2RelEnd, data.seq);
-                } else if (fixedAbsCoords.p2AbsEnd - 1 < data.start) {
-                    p2UngappedStart = -fixedAbsCoords.p2Seq.length;
-                    p2UngappedEnd = 0;
-                } else {
-                    p2UngappedStart = rawSeq.length;
-                    p2UngappedEnd = rawSeq.length + fixedAbsCoords.p2Seq.length;
-                }
-
-                const fauxResponse: OligizeResponse = {
-                    p1: { start: p1UngappedStart, end: p1UngappedEnd, seq: fixedAbsCoords.p1Seq, len: fixedAbsCoords.p1Seq.length, tm: fixedAbsCoords.p1Tm, gc: fixedAbsCoords.p1Gc },
-                    p2: { start: p2UngappedStart, end: p2UngappedEnd, seq: fixedAbsCoords.p2Seq, len: fixedAbsCoords.p2Seq.length, tm: fixedAbsCoords.p2Tm, gc: fixedAbsCoords.p2Gc },
-                    split_idx: 0,
-                    tm_diff_ok: Math.abs(fixedAbsCoords.p1Tm - fixedAbsCoords.p2Tm) <= Number(searchParams.tm_diff),
-                    params_not_met: false,
-                };
-
-                setPrimers(fauxResponse);
                 setParamsNotMet(false);
                 setLoading(false);
 
@@ -868,13 +882,26 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
             if (dragState) {
                 const D = dragState.deltaChars;
                 if (D !== 0) {
+                    const fc = fixedContextRef.current;
+                    const off = fc ? fc.offset : offsetRef.current;
+                    const fs = fc ? fc.fullSeq : fullSeqRef.current;
+                    const gappedSeq = fc ? fc.gappedSeq : data.seq;
+                    const absStart = fc ? fc.start : data.start;
                     const p = primersRef.current;
-                    const off = offsetRef.current;
-                    const fs = fullSeqRef.current;
-                    if (p && fs) {
-                        // Recompute final live positions (mirrors the render-time logic)
-                        let p1S = p.p1.start + off, p1E = p.p1.end + off;
-                        let p2S = p.p2.start + off, p2E = p.p2.end + off;
+                    const fac = fixedAbsCoords;
+                    if (fs && (p || fac)) {
+                        let p1S: number, p1E: number, p2S: number, p2E: number;
+                        if (fac && fc) {
+                            const toCtx = (abs: number) => mapGappedToUngapped(abs - 1 - fc.start, fc.gappedSeq) + fc.offset;
+                            p1S = toCtx(fac.p1AbsStart); p1E = toCtx(fac.p1AbsEnd);
+                            p2S = toCtx(fac.p2AbsStart); p2E = toCtx(fac.p2AbsEnd);
+                        } else if (p) {
+                            p1S = p.p1.start + off; p1E = p.p1.end + off;
+                            p2S = p.p2.start + off; p2E = p.p2.end + off;
+                        } else {
+                            setDragState(null);
+                            return;
+                        }
                         const { id, type } = dragState;
                         if (type === 'move') { p1S += D; p1E += D; p2S += D; p2E += D; }
                         else if (id === 'p1') {
@@ -892,8 +919,7 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                         const p1Seq = fs.substring(p1S, p1E).toUpperCase();
                         const p2Seq = fs.substring(p2S, p2E).toUpperCase();
                         const calcGcF = (s: string) => ((s.match(/[GCgc]/g) || []).length / s.length) * 100;
-                        const offset = data.ungappedOffset ?? 0;
-                        const toGappedAbs = (u: number) => data.start + mapUngappedToGapped(u - offset, data.seq) + 1;
+                        const toGappedAbs = (u: number) => absStart + mapUngappedToGapped(u - off, gappedSeq) + 1;
                         setFixedAbsCoords({
                             p1AbsStart: toGappedAbs(p1S), p1AbsEnd: toGappedAbs(p1E),
                             p2AbsStart: toGappedAbs(p2S), p2AbsEnd: toGappedAbs(p2E),
@@ -936,6 +962,15 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
     let liveP2Start = primers ? primers.p2.start + offset : -1;
     let liveP2End   = primers ? primers.p2.end   + offset : -1;
 
+    if (fixedAbsCoords && fixedContextRef.current) {
+        const fc = fixedContextRef.current;
+        const toCtxUngapped = (abs: number) => mapGappedToUngapped(abs - 1 - fc.start, fc.gappedSeq) + fc.offset;
+        liveP1Start = toCtxUngapped(fixedAbsCoords.p1AbsStart);
+        liveP1End   = toCtxUngapped(fixedAbsCoords.p1AbsEnd);
+        liveP2Start = toCtxUngapped(fixedAbsCoords.p2AbsStart);
+        liveP2End   = toCtxUngapped(fixedAbsCoords.p2AbsEnd);
+    }
+
     if (primers && dragState) {
         const D = dragState.deltaChars;
         if (dragState.type === 'move') {
@@ -955,14 +990,15 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
     }
 
     const renderSequence = () => {
-        const minStart = primers ? Math.min(liveP1Start, liveP2Start) : offset;
-        const maxEnd   = primers ? Math.max(liveP1End, liveP2End)     : offset + rawSeq.length;
+        const renderOffset = fixedAbsCoords && fixedContextRef.current ? fixedContextRef.current.offset : offset;
+        const renderFullSeq = fixedAbsCoords && fixedContextRef.current ? fixedContextRef.current.fullSeq : fullSeq;
+        const minStart = primers ? Math.min(liveP1Start, liveP2Start) : renderOffset;
+        const maxEnd   = primers ? Math.max(liveP1End, liveP2End)     : renderOffset + rawSeq.length;
 
         const viewStart = Math.max(0, minStart - interactiveFlankWindow);
-        const viewEnd   = Math.min(fullSeq.length, maxEnd + interactiveFlankWindow);
+        const viewEnd   = Math.min(renderFullSeq.length, maxEnd + interactiveFlankWindow);
 
-        // Split into fixed-length lines for numbered display
-        const slice = fullSeq.substring(viewStart, viewEnd);
+        const slice = renderFullSeq.substring(viewStart, viewEnd);
         const lines: string[] = [];
         for (let i = 0; i < slice.length; i += seqLineLength) {
             lines.push(slice.slice(i, i + seqLineLength));
@@ -1147,8 +1183,13 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                 if (item.DotBracket && !isDimer) {
                     hairpinDotBracket = item.DotBracket;
                     hairpinSeq = fullSeq;
-                } else if (isDimer && item.Bonds && seq) {
-                    asciiStructure = buildDimerAscii(item, seq, seq2);
+                } else if (isDimer && seq) {
+                    if (item.Bonds) {
+                        asciiStructure = buildDimerAscii(item, seq, seq2);
+                    } else if (item.DotBracket) {
+                        const dimerSeq = seq2 ? `${seq}&${seq2}` : `${seq}&${seq}`;
+                        asciiStructure = dimerAsciiFromItem(dimerSeq, item.DotBracket);
+                    }
                 }
             }
 
@@ -1918,7 +1959,7 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
 
                 {/* ── Rename Oligos Panel ─────────────────────────── */}
                 {primers && (
-                    <div className="mt-4 border-t border-slate-100 dark:border-slate-700 pt-4">
+                    <div className="mt-4 border-t border-slate-100 dark:border-slate-700 pt-4 px-5">
                         <div className="flex items-center gap-2 mb-3">
                             <div className="w-1.5 h-4 bg-slate-400 rounded-full"></div>
                             <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest">Rename Oligos</h4>

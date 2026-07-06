@@ -1,4 +1,12 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+
+type GameSpeed = 'slow' | 'normal' | 'fast';
+
+const SPEED_PRESETS: Record<GameSpeed, { bullet: number; minGap: number; maxGap: number; run: number; label: string }> = {
+  slow:   { bullet: 4,  minGap: 1800, maxGap: 2800, run: 2.2, label: 'Slow' },
+  normal: { bullet: 6,  minGap: 1300, maxGap: 2100, run: 3.0, label: 'Normal' },
+  fast:   { bullet: 8,  minGap: 900,  maxGap: 1500, run: 3.8, label: 'Fast' },
+};
 
 const CW = 680;
 const CH = 160;
@@ -112,6 +120,8 @@ interface Bullet { x: number; y: number }
 const RabbitGame: React.FC = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rafRef    = useRef(0);
+  const speedRef  = useRef<GameSpeed>('normal');
+  const [speed, setSpeed] = useState<GameSpeed>('normal');
 
   useEffect(() => {
     const canvas = canvasRef.current!;
@@ -120,7 +130,9 @@ const RabbitGame: React.FC = () => {
 
     // ── game state ──────────────────────────────────────────────────────────
     const state = {
-      ry:        GROUND_PX as number,   // rabbit top-y (CSS px)
+      rx:        RABBIT_LEFT as number,
+      ry:        GROUND_PX as number,
+      vx:        0,
       vy:        0,
       onGround:  true,
       bullets:   [] as Bullet[],
@@ -128,31 +140,31 @@ const RabbitGame: React.FC = () => {
       frame:     0,
       dead:      false,
       highScore: 0,
-      volley:    [] as number[],        // timestamps of pending bullet fires
-      muzzle:    0,                     // frames left for muzzle flash
+      nextShot:  0,
+      muzzle:    0,
     };
+    const keys = { left: false, right: false };
 
-    const scheduleVolley = (now: number) => {
+    const scheduleNextShot = (now: number) => {
       const sc = state.score;
-      const minGap = Math.max(550,  2000 - sc * 2.8);
-      const maxGap = Math.max(900,  3200 - sc * 3.5);
-      const t0 = now + minGap + Math.random() * (maxGap - minGap);
-
-      const r = Math.random();
-      if (sc > 200 && r < 0.15)       state.volley = [t0, t0 + 170, t0 + 340];  // triple
-      else if (sc > 80 && r < 0.42)   state.volley = [t0, t0 + 190];             // double
-      else                             state.volley = [t0];                        // single
+      const preset = SPEED_PRESETS[speedRef.current];
+      const scoreT = Math.min(1, sc / 1200);
+      const minGap = preset.minGap - scoreT * 300;
+      const maxGap = preset.maxGap - scoreT * 400;
+      state.nextShot = now + minGap + Math.random() * (maxGap - minGap);
     };
 
     const restart = () => {
+      state.rx        = RABBIT_LEFT;
       state.ry        = GROUND_PX;
+      state.vx        = 0;
       state.vy        = 0;
       state.onGround  = true;
       state.bullets   = [];
       state.score     = 0;
       state.frame     = 0;
       state.dead      = false;
-      state.volley    = [];
+      state.nextShot  = 0;
       state.muzzle    = 0;
     };
 
@@ -191,7 +203,6 @@ const RabbitGame: React.FC = () => {
     // ── main loop ──────────────────────────────────────────────────────────
     const loop = (ts: number) => {
       if (!state.dead) {
-        // Physics
         state.vy += 0.65;
         state.ry += state.vy;
         if (state.ry >= GROUND_PX) {
@@ -200,28 +211,30 @@ const RabbitGame: React.FC = () => {
           state.onGround = true;
         }
 
-        // Schedule first volley
-        if (state.volley.length === 0) scheduleVolley(ts);
+        const preset = SPEED_PRESETS[speedRef.current];
+        if (keys.left && !keys.right)  state.vx = -preset.run;
+        else if (keys.right && !keys.left) state.vx = preset.run;
+        else state.vx = 0;
+        state.rx += state.vx;
+        const maxRx = HUNTER_LEFT - R_COLS * PS - 8;
+        state.rx = Math.max(0, Math.min(state.rx, maxRx));
 
-        // Fire
-        const fired = state.volley.filter(t => ts >= t);
-        if (fired.length) {
-          fired.forEach(() => state.bullets.push({ x: BULLET_X0, y: BULLET_Y0 }));
-          state.volley  = state.volley.filter(t => ts < t);
-          state.muzzle  = 8;
-          if (state.volley.length === 0) scheduleVolley(ts);
+        if (state.nextShot === 0) scheduleNextShot(ts);
+
+        if (ts >= state.nextShot) {
+          state.bullets.push({ x: BULLET_X0, y: BULLET_Y0 });
+          state.muzzle = 8;
+          scheduleNextShot(ts);
         }
 
-        // Move bullets
-        const spd = 6 + Math.min(4, Math.floor(state.score / 120) * 0.8);
+        const spd = preset.bullet + Math.min(3, Math.floor(state.score / 150) * 0.5);
         state.bullets = state.bullets.filter(b => b.x > -24);
         state.bullets.forEach(b => { b.x -= spd; });
 
-        // Collision (tight inner hitbox)
         const rT  = state.ry + 3 * PS;
         const rBo = state.ry + (R_ROWS - 2) * PS;
-        const rL  = RABBIT_LEFT + 2 * PS;
-        const rR  = RABBIT_LEFT + (R_COLS - 3) * PS;
+        const rL  = state.rx + 2 * PS;
+        const rR  = state.rx + (R_COLS - 3) * PS;
 
         for (const b of state.bullets) {
           if (b.x + PS * 3 > rL && b.x < rR && b.y + PS > rT && b.y < rBo) {
@@ -281,7 +294,7 @@ const RabbitGame: React.FC = () => {
       state.bullets.forEach(drawBullet);
 
       // Rabbit
-      drawSprite(state.onGround ? S_STAND : S_JUMP, RABBIT_LEFT, Math.round(state.ry));
+      drawSprite(state.onGround ? S_STAND : S_JUMP, Math.round(state.rx), Math.round(state.ry));
 
       // HUD
       ctx.fillStyle = '#e2e8f0';
@@ -295,12 +308,11 @@ const RabbitGame: React.FC = () => {
       }
       ctx.textAlign = 'left';
 
-      // Jump hint (first 3 s)
       if (state.frame < 180 && !state.dead) {
         ctx.fillStyle = 'rgba(148,163,184,0.7)';
         ctx.font      = '10px monospace';
         ctx.textAlign = 'center';
-        ctx.fillText('SPACE / CLICK  to jump', CW / 2, CH - 5);
+        ctx.fillText('SPACE/W/UP  to jump   A/D  to run', CW / 2, CH - 5);
         ctx.textAlign = 'left';
       }
 
@@ -329,22 +341,58 @@ const RabbitGame: React.FC = () => {
 
     rafRef.current = requestAnimationFrame(loop);
 
-    const onKey = (e: KeyboardEvent) => { if (e.code === 'Space') { e.preventDefault(); jump(); } };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.code === 'Space' || e.code === 'ArrowUp' || e.code === 'KeyW') {
+        e.preventDefault();
+        jump();
+      } else if (e.code === 'ArrowLeft' || e.code === 'KeyA') {
+        e.preventDefault();
+        keys.left = true;
+      } else if (e.code === 'ArrowRight' || e.code === 'KeyD') {
+        e.preventDefault();
+        keys.right = true;
+      }
+    };
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (e.code === 'ArrowLeft' || e.code === 'KeyA') keys.left = false;
+      else if (e.code === 'ArrowRight' || e.code === 'KeyD') keys.right = false;
+    };
     canvas.addEventListener('click', jump);
-    window.addEventListener('keydown', onKey);
+    window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('keyup', onKeyUp);
 
     return () => {
       cancelAnimationFrame(rafRef.current);
       canvas.removeEventListener('click', jump);
-      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('keyup', onKeyUp);
     };
   }, []);
+
+  useEffect(() => {
+    speedRef.current = speed;
+  }, [speed]);
 
   return (
     <div className="flex flex-col items-center gap-2 mt-6">
       <p className="text-xs text-slate-400 dark:text-slate-500 font-mono tracking-wide">
         help the bunny survive while BLAST runs!
       </p>
+      <div className="flex items-center gap-1.5">
+        {(Object.keys(SPEED_PRESETS) as GameSpeed[]).map((s) => (
+          <button
+            key={s}
+            onClick={() => setSpeed(s)}
+            className={`px-2.5 py-1 text-xs font-medium rounded-md border transition-colors ${
+              speed === s
+                ? 'bg-indigo-600 border-indigo-600 text-white'
+                : 'bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:bg-indigo-50 dark:hover:bg-indigo-900/20'
+            }`}
+          >
+            {SPEED_PRESETS[s].label}
+          </button>
+        ))}
+      </div>
       <canvas
         ref={canvasRef}
         width={CW}

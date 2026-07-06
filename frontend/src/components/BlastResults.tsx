@@ -62,9 +62,10 @@ const HitRow: React.FC<{ hit: BlastHit; idx: number; dimmed?: boolean }> = ({ hi
 const BlastResults: React.FC<BlastResultsProps> = ({ hits, filteredHits = [], showMatches = false, onToggleShowMatches }) => {
     const [isCollapsed, setIsCollapsed] = useState(true);
 
-    if (!hits || hits.length === 0) return null;
+    const safeHits = hits || [];
+    const totalVisible = safeHits.length + (showMatches ? filteredHits.length : 0);
 
-    const totalVisible = hits.length + (showMatches ? filteredHits.length : 0);
+    if (!hits || hits.length === 0) return null;
 
     return (
         <div className="mt-6 border border-slate-200 dark:border-slate-700 rounded-xl shadow-sm overflow-hidden bg-white dark:bg-slate-800 transition-colors">

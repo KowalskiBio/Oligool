@@ -52,6 +52,9 @@ function App() {
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [navigateTarget, setNavigateTarget] = useState<{ colStart: number; colEnd: number; ts: number } | null>(null);
   const [oligoRegion, setOligoRegion] = useState<{ startCol: number; endCol: number } | null>(null);
+  const [autofindRegion, setAutofindRegion] = useState<{ startCol: number; endCol: number } | null>(null);
+  const [autofindSelectedAccessions, setAutofindSelectedAccessions] = useState<Set<string>>(new Set());
+  const [showWhatsNew, setShowWhatsNew] = useState(false);
 
   // Session save / load
   const queryViewerRef = useRef<QueryViewerHandle>(null);
@@ -208,6 +211,10 @@ function App() {
       setBlastHits(data.blast_hits);
       setFilteredHits(data.filtered_hits || []);
       setShowMatches(false);
+      setAutofindSelectedAccessions(new Set([
+        ...data.blast_hits.map((h: BlastHit) => h.accession),
+        ...(data.filtered_hits || []).map((h: BlastHit) => h.accession),
+      ]));
       setBlastMeta(data.blast_meta);
       setStep('aligning');
 
@@ -234,6 +241,7 @@ function App() {
     setError('');
     setInput('');
     setSelectedFlankingPrimers(null);
+    setAutofindSelectedAccessions(new Set());
     setImportedSession(null);
   };
 
@@ -254,7 +262,14 @@ function App() {
       savedAt: new Date().toISOString(),
       jobName,
       search: { input, organism, eValue, percIdentity, filterMatches, maxHitsPreset, customHits },
-      results: { blastHits, filteredHits, blastMeta, showMatches, alignment },
+      results: {
+        blastHits,
+        filteredHits,
+        blastMeta,
+        showMatches,
+        alignment,
+        autofindSelectedAccessions: Array.from(autofindSelectedAccessions),
+      },
       oligo: queryViewerRef.current?.getSnapshot() ?? null,
       flankingPrimers: selectedFlankingPrimers ?? null,
     };
@@ -283,6 +298,7 @@ function App() {
     setFilteredHits(session.results.filteredHits || []);
     setBlastMeta(session.results.blastMeta || null);
     setShowMatches(!!session.results.showMatches);
+    setAutofindSelectedAccessions(new Set(session.results.autofindSelectedAccessions || []));
 
     // Reset transient view state. We intentionally do NOT null selectedSequence:
     // the importNonce `key` forces a clean QueryViewer remount, and keeping the
@@ -361,12 +377,13 @@ function App() {
               }}
             />
             <div className="flex items-center gap-2">
-              <span
-                title="Session save/load is still being finalized — the moligo selection and used primers may not fully restore yet."
-                className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800 whitespace-nowrap"
+              <button
+                onClick={() => setShowWhatsNew(true)}
+                title="Kliknutím zobrazíte novinky a návod k použití"
+                className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800 whitespace-nowrap cursor-pointer hover:bg-amber-200 dark:hover:bg-amber-900/50 transition-colors"
               >
                 under development
-              </span>
+              </button>
               {sessionMsg && (
                 <span
                   className={`text-xs font-medium animate-in fade-in ${sessionMsg.type === 'ok' ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}
@@ -896,6 +913,13 @@ function App() {
                 isDarkMode={isDarkMode}
                 navigateTarget={navigateTarget}
                 onOligoRegionSelect={(startCol, endCol) => setOligoRegion({ startCol, endCol })}
+                onAutofindRegionSelect={(colStart, colEnd) => {
+                  setNavigateTarget({ colStart, colEnd, ts: Date.now() });
+                  setOligoRegion({ startCol: colStart, endCol: colEnd });
+                  setAutofindRegion({ startCol: colStart, endCol: colEnd });
+                }}
+                selectedAccessions={autofindSelectedAccessions}
+                onSelectionChange={setAutofindSelectedAccessions}
               />
               {step === 'done' && selectedSequence && (
                 <QueryViewer
@@ -908,6 +932,7 @@ function App() {
                   onFlankingPrimersUpdate={setSelectedFlankingPrimers}
                   onNavigateTo={(colStart, colEnd) => setNavigateTarget({ colStart, colEnd, ts: Date.now() })}
                   oligoRegion={oligoRegion}
+                  autofindRegion={autofindRegion}
                   idtCredentials={{
                     clientId: idtClientId,
                     clientSecret: idtClientSecret,
@@ -923,6 +948,66 @@ function App() {
             </>
           )}
         </main>
+
+        {showWhatsNew && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" onClick={() => setShowWhatsNew(false)}>
+            <div className="max-w-lg w-full max-h-[80vh] overflow-y-auto bg-white dark:bg-slate-800 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-700 p-6" onClick={e => e.stopPropagation()}>
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-200">Co je nového</h2>
+                <button onClick={() => setShowWhatsNew(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-xl leading-none">&times;</button>
+              </div>
+              <div className="space-y-4 text-sm text-slate-700 dark:text-slate-300">
+                <section>
+                  <h3 className="font-semibold text-indigo-600 dark:text-indigo-400 mb-1">Autofind v MSA prohlížeči</h3>
+                  <p>
+                    V horním MSA prohlížeči klikněte levým tlačítkem na řádek sekvence nějakého BLAST zásahu.
+                    Vybraný zásah a všechny nad ním se použijí pro analýzu mismatchů při autofindu;
+                    zásahy pod ním se ignorují.
+                    Zelená tečka a podbarvení řádků ukazují, které sekvence jsou zapojené.
+                  </p>
+                </section>
+                <section>
+                  <h3 className="font-semibold text-indigo-600 dark:text-indigo-400 mb-1">Pevná pozice a Context Viewer</h3>
+                  <p>
+                    Když si uzamknete pozici oliga a potom se podíváte jinam v sekvenci,
+                    Context Viewer už nezobrazuje nesmyslný kontext.
+                    Zůstává ukotvený k původní sekvenci, dokud pozici sami neuvolníte nebo neupravíte.
+                  </p>
+                </section>
+                <section>
+                  <h3 className="font-semibold text-indigo-600 dark:text-indigo-400 mb-1">Odkazy do NCBI</h3>
+                  <p>
+                    Kliknutím na název zásahu v levém sloupci MSA prohlížeče se otevře příslušná stránka
+                    <em>nuccore</em> na NCBI v nové záložce.
+                  </p>
+                </section>
+                <section>
+                  <h3 className="font-semibold text-indigo-600 dark:text-indigo-400 mb-1">Hra s králíkem</h3>
+                  <p>
+                    Při čekání na BLAST si můžete zahrát načítací hru.
+                    Nově lze vybrat rychlost (Slow / Normal / Fast) a králíkem se pohybovat do stran
+                    pomocí kláves A/D nebo šipek. Střílejí se jen jednotlivé střely s rozestupy.
+                  </p>
+                </section>
+                <section>
+                  <h3 className="font-semibold text-indigo-600 dark:text-indigo-400 mb-1">Vzhled a drobnosti</h3>
+                  <p>
+                    Panel pro přejmenování oligos má nyní stejné odsazení jako okolní prvky.
+                    Ukládání relace je stále ve vývoji — prosíme, mějte to na paměti.
+                  </p>
+                </section>
+              </div>
+              <div className="mt-6 flex justify-end">
+                <button
+                  onClick={() => setShowWhatsNew(false)}
+                  className="px-4 py-2 text-sm font-medium rounded-md bg-indigo-600 text-white hover:bg-indigo-700 transition-colors"
+                >
+                  Rozumím
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         <footer className="mt-10 pt-6 border-t border-slate-200 dark:border-slate-700 text-center text-xs text-slate-500 dark:text-slate-400 space-y-1">
           <p>
