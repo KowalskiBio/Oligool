@@ -960,25 +960,26 @@ function App() {
                 <section>
                   <h3 className="font-semibold text-indigo-600 dark:text-indigo-400 mb-1">Autofind v MSA prohlížeči</h3>
                   <p>
-                    V horním MSA prohlížeči klikněte levým tlačítkem na řádek sekvence nějakého BLAST zásahu.
-                    Vybraný zásah a všechny nad ním se použijí pro analýzu mismatchů při autofindu;
+                    V horním MSA prohlížeči klikněte levým tlačítkem na řádek sekvence nějakého BLAST hitu.
+                    Vybraný hit a všechny nad ním se použijí pro analýzu mismatchů při autofindu;
                     zásahy pod ním se ignorují.
                     Zelená tečka a podbarvení řádků ukazují, které sekvence jsou zapojené.
+                    Autofind hledá nejdelší místo pro tvorbu oliga, které nemá mismatch.
                   </p>
                 </section>
                 <section>
                   <h3 className="font-semibold text-indigo-600 dark:text-indigo-400 mb-1">Pevná pozice a Context Viewer</h3>
                   <p>
                     Když si uzamknete pozici oliga a potom se podíváte jinam v sekvenci,
-                    Context Viewer už nezobrazuje nesmyslný kontext.
+                    Context Viewer už nezobrazuje nesmyslnou sekvenci.
                     Zůstává ukotvený k původní sekvenci, dokud pozici sami neuvolníte nebo neupravíte.
                   </p>
                 </section>
                 <section>
                   <h3 className="font-semibold text-indigo-600 dark:text-indigo-400 mb-1">Odkazy do NCBI</h3>
                   <p>
-                    Kliknutím na název zásahu v levém sloupci MSA prohlížeče se otevře příslušná stránka
-                    <em>nuccore</em> na NCBI v nové záložce.
+                    Kliknutím na název hitu v levém sloupci MSA vieweru se otevře příslušná stránka
+                    na NCBI v nové záložce.
                   </p>
                 </section>
                 <section>
