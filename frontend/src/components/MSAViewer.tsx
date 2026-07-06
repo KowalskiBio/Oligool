@@ -1421,14 +1421,6 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
         const startC = Math.max(0, Math.min(seqLen - 1, Math.floor((scrollLeft + mouseX) / cellW)));
         setOligoSelection({ startCol: startC, endCol: startC });
 
-        const mouseYCanvas = e.clientY - rect.top;
-        const rowsStartY = MAIN_GC_TRACK_H + MAIN_MSA_TRACK_H + RULER_HEIGHT;
-        const virtualY = mouseYCanvas + scrollTop;
-        const row = Math.floor((virtualY - rowsStartY) / ROW_HEIGHT);
-        if (row >= 0 && row < sequences.length && virtualY >= rowsStartY) {
-            setAutofindBoundaryRow(row);
-        }
-
         const colAt = (clientX: number) =>
             Math.max(0, Math.min(seqLen - 1, Math.floor((scrollLeft + clientX - rect.left - labelWidth) / cellW)));
 
@@ -1491,7 +1483,7 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
         document.addEventListener('mousemove', onMove);
         document.addEventListener('mouseup', onUp);
         e.preventDefault();
-    }, [labelWidth, seqLen, scrollLeft, scrollTop, cellW, availableWidth, onOligoRegionSelect, flankingPrimers, onFlankingPrimerClick, sequences, setAutofindBoundaryRow]);
+    }, [labelWidth, seqLen, scrollLeft, cellW, availableWidth, onOligoRegionSelect, flankingPrimers, onFlankingPrimerClick]);
 
     const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
         const cvs = canvasRef.current;
@@ -1510,7 +1502,10 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
             if (accession) {
                 window.open(`https://www.ncbi.nlm.nih.gov/nuccore/${accession}`, '_blank', 'noopener,noreferrer');
             }
+            return;
         }
+
+        setAutofindBoundaryRow(row);
     };
 
     if (!alignment || sequences.length === 0) return null;
