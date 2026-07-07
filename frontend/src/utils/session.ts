@@ -121,6 +121,7 @@ export interface OligoolSession {
         showMatches: boolean;
         alignment: string;
         autofindSelectedAccessions?: string[];
+        autofindTreatIndelsAsMismatches?: boolean;
         selectedSequence?: SelectedSequence;
         msaViewport?: MsaViewport;
     };
@@ -169,6 +170,7 @@ const DEFAULT_RESULTS = {
     showMatches: false,
     alignment: '',
     autofindSelectedAccessions: [] as string[],
+    autofindTreatIndelsAsMismatches: false,
 };
 
 function normalizePrimer(primer: unknown): SavedPosition['p1'] {
@@ -275,6 +277,9 @@ export function migrateSession(data: unknown): OligoolSession {
             autofindSelectedAccessions: Array.isArray(results.autofindSelectedAccessions)
                 ? results.autofindSelectedAccessions as string[]
                 : DEFAULT_RESULTS.autofindSelectedAccessions,
+            autofindTreatIndelsAsMismatches: typeof results.autofindTreatIndelsAsMismatches === 'boolean'
+                ? results.autofindTreatIndelsAsMismatches
+                : DEFAULT_RESULTS.autofindTreatIndelsAsMismatches,
             selectedSequence: results.selectedSequence && typeof results.selectedSequence === 'object'
                 ? results.selectedSequence as SelectedSequence
                 : undefined,

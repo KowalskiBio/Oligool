@@ -54,6 +54,9 @@ function App() {
   const [oligoRegion, setOligoRegion] = useState<{ startCol: number; endCol: number } | null>(null);
   const [autofindRegion, setAutofindRegion] = useState<{ startCol: number; endCol: number } | null>(null);
   const [autofindSelectedAccessions, setAutofindSelectedAccessions] = useState<Set<string>>(new Set());
+  const [autofindTreatIndelsAsMismatches, setAutofindTreatIndelsAsMismatches] = useState(
+    () => localStorage.getItem('autofind_treat_indels_as_mismatches') === 'true'
+  );
   const [showWhatsNew, setShowWhatsNew] = useState(false);
 
   const queryViewerRef = useRef<QueryViewerHandle>(null);
@@ -88,6 +91,9 @@ function App() {
   useEffect(() => { localStorage.setItem('custom_hits', customHits); }, [customHits]);
   useEffect(() => { localStorage.setItem('job_name', jobName); }, [jobName]);
   useEffect(() => { localStorage.setItem('idt_mg_conc', idtMgConc); }, [idtMgConc]);
+  useEffect(() => {
+    localStorage.setItem('autofind_treat_indels_as_mismatches', autofindTreatIndelsAsMismatches.toString());
+  }, [autofindTreatIndelsAsMismatches]);
 
   useEffect(() => {
     const saved = localStorage.getItem(AUTOSAVE_KEY);
@@ -285,13 +291,14 @@ function App() {
         showMatches,
         alignment,
         autofindSelectedAccessions: Array.from(autofindSelectedAccessions),
+        autofindTreatIndelsAsMismatches,
         selectedSequence: selectedSequence ?? undefined,
         msaViewport: msaViewerRef.current?.getViewportSnapshot(),
       },
       oligo: queryViewerRef.current?.getSnapshot() ?? null,
       flankingPrimers: selectedFlankingPrimers ?? null,
     };
-  }, [alignment, blastHits, filteredHits, blastMeta, showMatches, jobName, input, organism, eValue, percIdentity, filterMatches, maxHitsPreset, customHits, autofindSelectedAccessions, selectedFlankingPrimers, selectedSequence]);
+  }, [alignment, blastHits, filteredHits, blastMeta, showMatches, jobName, input, organism, eValue, percIdentity, filterMatches, maxHitsPreset, customHits, autofindSelectedAccessions, autofindTreatIndelsAsMismatches, selectedFlankingPrimers, selectedSequence]);
 
   // ── Restore a previously saved session, skipping the BLAST/MSA pipeline ──
   const applySession = useCallback((session: OligoolSession) => {
@@ -309,6 +316,7 @@ function App() {
     setBlastMeta(session.results.blastMeta || null);
     setShowMatches(!!session.results.showMatches);
     setAutofindSelectedAccessions(new Set(session.results.autofindSelectedAccessions || []));
+    setAutofindTreatIndelsAsMismatches(!!session.results.autofindTreatIndelsAsMismatches);
 
     setSelectedPrimers(null);
     setOligoRegion(null);
@@ -1002,6 +1010,8 @@ function App() {
                 }}
                 selectedAccessions={autofindSelectedAccessions}
                 onSelectionChange={setAutofindSelectedAccessions}
+                autofindTreatIndelsAsMismatches={autofindTreatIndelsAsMismatches}
+                onAutofindTreatIndelsAsMismatchesChange={setAutofindTreatIndelsAsMismatches}
               />
               {step === 'done' && selectedSequence && (
                 <QueryViewer
