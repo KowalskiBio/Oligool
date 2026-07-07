@@ -53,6 +53,17 @@ test_*.js
 # OpenCode / OhMyOpenCode
 .omo/
 .opencode/
+.claude/
+.gemini/
+.mcp.json
+opencode.jsonc
+AGENTS.md
+GEMINI.md
+
+# Local screenshots / artifacts
+frontend_desktop.png
+frontend_mobile.png
+frontend_settings.png
 
 # Environment files (may contain API keys)
 .env
