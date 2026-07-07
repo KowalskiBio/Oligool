@@ -622,7 +622,7 @@ async def analyze_idt_oligos(request: IdtAnalyzeRequest):
     try:
         from strider import ThermoEngine
         from strider.thermo.hairpin import hairpin_thermo  # strider >= 0.3.2
-        from strider.thermo.dimer_thermo import dimer_thermo  # strider >= 0.3.5 / fork
+        from strider.thermo.dimer_thermo import dimer_thermo  # strider >= 0.3.5
         from strider.thermo.dimer_thermo import dimer_thermo_subopt  # strider >= 0.6.0
 
         base_temp = request.temp if hasattr(request, "temp") and request.temp is not None else 25.0
