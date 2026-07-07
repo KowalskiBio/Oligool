@@ -82,6 +82,24 @@ export interface FlankingPrimerSelection {
     rev: { start: number; end: number } | null;
 }
 
+/** Snapshot of the visible query sequence window shown in the MSA viewer. */
+export interface SelectedSequence {
+    id: string;
+    seq: string;
+    start: number;
+    end: number;
+    fullSeq?: string;
+    ungappedOffset?: number;
+}
+
+/** MSA viewer viewport state so save/load restores the exact scroll/zoom the user left. */
+export interface MsaViewport {
+    scrollLeft: number;
+    scrollTop: number;
+    viewFraction: number;
+    viewMode: 'bars' | 'letters';
+}
+
 export interface OligoolSession {
     app: typeof OLIGOOL_SESSION_APP;
     version: number;
@@ -103,6 +121,8 @@ export interface OligoolSession {
         showMatches: boolean;
         alignment: string;
         autofindSelectedAccessions?: string[];
+        selectedSequence?: SelectedSequence;
+        msaViewport?: MsaViewport;
     };
     oligo: OligoSnapshot | null;
     flankingPrimers: FlankingPrimerSelection | null;
@@ -255,6 +275,12 @@ export function migrateSession(data: unknown): OligoolSession {
             autofindSelectedAccessions: Array.isArray(results.autofindSelectedAccessions)
                 ? results.autofindSelectedAccessions as string[]
                 : DEFAULT_RESULTS.autofindSelectedAccessions,
+            selectedSequence: results.selectedSequence && typeof results.selectedSequence === 'object'
+                ? results.selectedSequence as SelectedSequence
+                : undefined,
+            msaViewport: results.msaViewport && typeof results.msaViewport === 'object'
+                ? (results.msaViewport as MsaViewport)
+                : undefined,
         },
         oligo: normalizeOligoSnapshot(d.oligo),
         flankingPrimers: d.flankingPrimers && typeof d.flankingPrimers === 'object' ? d.flankingPrimers as FlankingPrimerSelection : null,

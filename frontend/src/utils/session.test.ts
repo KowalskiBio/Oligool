@@ -132,6 +132,26 @@ describe('migrateSession', () => {
     expect(migrated.search.eValue).toBe('0.05')
     expect(migrated.search.filterMatches).toBe(false)
   })
+
+  it('preserves selectedSequence and msaViewport when present', () => {
+    const withViewport = {
+      ...baseSession,
+      results: {
+        ...baseSession.results,
+        selectedSequence: { id: 'Query', seq: 'ATCG', start: 0, end: 3, fullSeq: 'ATCG', ungappedOffset: 0 },
+        msaViewport: { scrollLeft: 120, scrollTop: 0, viewFraction: 0.25, viewMode: 'letters' },
+      },
+    }
+    const migrated = migrateSession(withViewport)
+    expect(migrated.results.selectedSequence).toEqual(withViewport.results.selectedSequence)
+    expect(migrated.results.msaViewport).toEqual(withViewport.results.msaViewport)
+  })
+
+  it('allows missing selectedSequence and msaViewport', () => {
+    const migrated = migrateSession(baseSession)
+    expect(migrated.results.selectedSequence).toBeUndefined()
+    expect(migrated.results.msaViewport).toBeUndefined()
+  })
 })
 
 describe('parseSessionText', () => {

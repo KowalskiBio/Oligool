@@ -17,5 +17,7 @@ test.describe('session save/load/restore', () => {
 
     await expect(page.getByText('Loaded "Synthetic_QA"')).toBeVisible()
     await expect(page.getByText('Oligo 1')).toBeVisible()
+
+    await expect(page.locator('button', { hasText: 'Sequence' }).first()).toHaveClass(/bg-indigo-500/)
   })
 })

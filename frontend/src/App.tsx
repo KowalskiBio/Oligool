@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import MSAViewer from './components/MSAViewer';
+import MSAViewer, { type MSAViewerHandle } from './components/MSAViewer';
 import QueryViewer, { type QueryViewerHandle, type ImportedSession } from './components/QueryViewer';
 import BlastResults from './components/BlastResults';
 import RabbitGame from './components/RabbitGame';
@@ -23,7 +23,7 @@ function App() {
   const [showMatches, setShowMatches] = useState(false);
   const [blastMeta, setBlastMeta] = useState<{ rid: string; rtoe: number; query_len: number } | null>(null);
   const [alignment, setAlignment] = useState('');
-  const [selectedSequence, setSelectedSequence] = useState<{ id: string; seq: string; start: number; end: number } | null>(null);
+  const [selectedSequence, setSelectedSequence] = useState<{ id: string; seq: string; start: number; end: number; fullSeq?: string; ungappedOffset?: number } | null>(null);
   const [error, setError] = useState('');
   const [apiKey, setApiKey] = useState(() => localStorage.getItem('ncbi_api_key') || '');
   const [idtClientId, setIdtClientId] = useState(() => localStorage.getItem('idt_client_id') || '');
@@ -57,6 +57,7 @@ function App() {
   const [showWhatsNew, setShowWhatsNew] = useState(false);
 
   const queryViewerRef = useRef<QueryViewerHandle>(null);
+  const msaViewerRef = useRef<MSAViewerHandle>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const importNonceRef = useRef(0);
   const [importedSession, setImportedSession] = useState<ImportedSession | null>(null);
@@ -65,6 +66,7 @@ function App() {
   const [showPreview, setShowPreview] = useState(false);
   const [restoredRegion, setRestoredRegion] = useState<{ start: number; end: number } | null>(null);
   const autosaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingMsaViewportRef = useRef<{ scrollLeft: number; scrollTop: number; viewFraction: number; viewMode: 'bars' | 'letters' } | null>(null);
   const AUTOSAVE_KEY = 'oligool_autosave';
 
   useEffect(() => {
@@ -283,11 +285,13 @@ function App() {
         showMatches,
         alignment,
         autofindSelectedAccessions: Array.from(autofindSelectedAccessions),
+        selectedSequence: selectedSequence ?? undefined,
+        msaViewport: msaViewerRef.current?.getViewportSnapshot(),
       },
       oligo: queryViewerRef.current?.getSnapshot() ?? null,
       flankingPrimers: selectedFlankingPrimers ?? null,
     };
-  }, [alignment, blastHits, filteredHits, blastMeta, showMatches, jobName, input, organism, eValue, percIdentity, filterMatches, maxHitsPreset, customHits, autofindSelectedAccessions, selectedFlankingPrimers]);
+  }, [alignment, blastHits, filteredHits, blastMeta, showMatches, jobName, input, organism, eValue, percIdentity, filterMatches, maxHitsPreset, customHits, autofindSelectedAccessions, selectedFlankingPrimers, selectedSequence]);
 
   // ── Restore a previously saved session, skipping the BLAST/MSA pipeline ──
   const applySession = useCallback((session: OligoolSession) => {
@@ -311,6 +315,9 @@ function App() {
     setSelectedFlankingPrimers(session.flankingPrimers || null);
     setError('');
 
+    setSelectedSequence(session.results.selectedSequence ?? null);
+    pendingMsaViewportRef.current = session.results.msaViewport ?? null;
+
     setAlignment(session.results.alignment);
     setStep('done');
 
@@ -318,7 +325,7 @@ function App() {
       importNonceRef.current += 1;
       setImportedSession({ nonce: importNonceRef.current, oligo: session.oligo });
       const co = session.oligo.currentOligo;
-      if (co) {
+      if (co && !session.results.msaViewport) {
         setNavigateTarget({ colStart: co.p1AbsStart - 1, colEnd: co.p2AbsEnd - 1, ts: Date.now() });
       }
     } else {
@@ -403,6 +410,13 @@ function App() {
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [handleSaveSession]);
+
+  useEffect(() => {
+    if (pendingMsaViewportRef.current && msaViewerRef.current) {
+      msaViewerRef.current.applyViewportSnapshot(pendingMsaViewportRef.current);
+      pendingMsaViewportRef.current = null;
+    }
+  }, [alignment]);
 
   const isStepActive = (s: Step) => stepOrder.indexOf(s) <= stepOrder.indexOf(step);
   const isStepCurrent = (s: Step) => s === step;
@@ -971,6 +985,7 @@ function App() {
           {visibleAlignment && (
             <>
               <MSAViewer
+                ref={msaViewerRef}
                 alignment={visibleAlignment}
                 onVisibleQueryChange={setSelectedSequence}
                 jobName={jobName}

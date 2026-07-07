@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useMemo, useCallback, forwardRef, useImperativeHandle } from 'react';
 import { findCleanRegions, computeMismatchCols, type CleanRegion } from '../utils/msa';
 
 /* ── helpers ────────────────────────────────────────── */
@@ -51,6 +51,11 @@ interface MSAViewerProps {
     showAutofindUI?: boolean;
 }
 
+export interface MSAViewerHandle {
+    getViewportSnapshot: () => { scrollLeft: number; scrollTop: number; viewFraction: number; viewMode: 'bars' | 'letters' };
+    applyViewportSnapshot: (viewport: { scrollLeft: number; scrollTop: number; viewFraction: number; viewMode: 'bars' | 'letters' }) => void;
+}
+
 /* ── constants ────────────────────────────────────────── */
 // Removed fixed labelWidth; now calculated dynamically in the component.
 const RIGHT_PADDING = 20;
@@ -68,7 +73,7 @@ const MINIMAP_HEIGHT = MINIMAP_GC_H + MINIMAP_RULER_H + 50 + MINIMAP_HANDLE_H;
 const MAIN_GC_TRACK_H = 40;
 const MAIN_MSA_TRACK_H = 30;
 
-const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, primers, flankingPrimers, isDarkMode, navigateTarget, onOligoRegionSelect, onAutofindRegionSelect, onFlankingPrimerClick, selectedAccessions, onSelectionChange, restoredRegion, showAutofindUI = true }) => {
+const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVisibleQueryChange, primers, flankingPrimers, isDarkMode, navigateTarget, onOligoRegionSelect, onAutofindRegionSelect, onFlankingPrimerClick, selectedAccessions, onSelectionChange, restoredRegion, showAutofindUI = true }, ref) => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const hoverOverlayRef = useRef<HTMLCanvasElement>(null);
     const minimapRef = useRef<HTMLCanvasElement>(null);
@@ -116,6 +121,26 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
     const viewFractionRef = useRef(viewFraction);
     const seqAreaWRef = useRef(0);
     const totalVirtualWRef = useRef(0);
+
+    useImperativeHandle(ref, () => ({
+        getViewportSnapshot: () => ({
+            scrollLeft,
+            scrollTop,
+            viewFraction,
+            viewMode,
+        }),
+        applyViewportSnapshot: (viewport) => {
+            setViewMode(viewport.viewMode);
+            setViewFraction(viewport.viewFraction);
+            setScrollLeft(viewport.scrollLeft);
+            setScrollTop(viewport.scrollTop);
+            if (scrollRef.current) {
+                scrollRef.current.scrollLeft = viewport.scrollLeft;
+                scrollRef.current.scrollTop = viewport.scrollTop;
+            }
+            targetScrollRef.current = viewport.scrollLeft;
+        },
+    }), [scrollLeft, scrollTop, viewFraction, viewMode]);
 
     const panBy = (dir: -1 | 1) => {
         const el = scrollRef.current;
@@ -1838,7 +1863,7 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
             )}
         </div >
     );
-};
+});
 
 /* ── small clipboard icon component ── */
 const ClipboardIcon = () => (
