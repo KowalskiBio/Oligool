@@ -6,12 +6,7 @@ primer3-py
 pywebview>=4.0.0
 requests>=2.25.0
 # Hairpin Tm uses strider.thermo.hairpin.hairpin_thermo (bulge-aware, added in
-# 0.3.2 via the merged loop-ΔH tables). 0.3.3+ adds Tan-Chen TBI salt correction
-# for stems ≥6 bp and lazy-loaded torch in 0.3.4.
-#
-# Dimer Tm is available upstream from v0.7.0 onward.
-#
-# NOTE: v0.7.0 has a bug where ThermoEngine.subopt() ignores sodium/magnesium
-# when enumerating suboptimal hairpin structures. We temporarily pin to the
-# patched fork (PR #7) until the fix lands upstream.
-strider-dna @ git+https://github.com/KowalskiBio/strider.git@fix/subopt-hairpin-salt
+# 0.3.2). Tan-Chen TBI salt correction for stems ≥6 bp is available upstream.
+# Dimer Tm and suboptimal dimer enumeration are available upstream from v0.7.0.
+# The v0.7.0 ThermoEngine.subopt() salt bug is fixed in upstream v1.1.0.
+strider-dna @ git+https://github.com/EmilioVenegas/strider.git@v1.1.0
