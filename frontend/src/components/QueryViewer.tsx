@@ -175,6 +175,8 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
     const [editingLabelText, setEditingLabelText] = useState('');
     const [pinPulse, setPinPulse] = useState(false);
     const [isSavedPosOpen, setIsSavedPosOpen] = useState(true);
+    const [lastDeleted, setLastDeleted] = useState<{ position: SavedPosition; index: number; timeoutId: ReturnType<typeof setTimeout> } | null>(null);
+    const [compareBaseId, setCompareBaseId] = useState<string | null>(null);
     const [searchOligo1Seq, setSearchOligo1Seq] = useState('');
     const [searchOligo2Seq, setSearchOligo2Seq] = useState('');
     const [searchOligoError, setSearchOligoError] = useState<string | null>(null);
@@ -385,6 +387,8 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
             p2: { start: primers.p2.start, end: primers.p2.end, seq: primers.p2.seq, gc: calcGc(primers.p2.seq), tm: primers.p2.tm },
             p1AbsStart, p1AbsEnd, p2AbsStart, p2AbsEnd,
             moligo1Shift, moligo2Shift, moligo1Len, moligo2Len,
+            notes: '',
+            color: 'slate',
         };
         setSavedPositions(prev => [...prev, pos]);
         setPinPulse(true);
@@ -406,16 +410,31 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
         setMoligo2Shift(pos.moligo2Shift);
         setMoligo1Len(pos.moligo1Len);
         setMoligo2Len(pos.moligo2Len);
-        // Teleport MSA to the position (using exact=false so we get comfortable context padding)
         if (onNavigateTo) {
-            onNavigateTo(pos.p2AbsStart - 1, pos.p1AbsEnd - 1);
+            onNavigateTo(pos.p1AbsStart - 1, pos.p2AbsEnd - 1);
         }
     };
 
     const deletePosition = (id: string) => {
-        setSavedPositions(prev => prev.filter(p => p.id !== id));
+        if (lastDeleted) {
+            clearTimeout(lastDeleted.timeoutId);
+        }
+        let removed: SavedPosition | null = null;
+        let removedIndex = -1;
+        setSavedPositions(prev => {
+            removedIndex = prev.findIndex(p => p.id === id);
+            removed = removedIndex >= 0 ? prev[removedIndex] : null;
+            return prev.filter(p => p.id !== id);
+        });
+        if (removed) {
+            const timeoutId = setTimeout(() => setLastDeleted(null), 5000);
+            setLastDeleted({ position: removed, index: removedIndex, timeoutId });
+        }
         if (editingLabelId === id) setEditingLabelId(null);
+        if (compareBaseId === id) setCompareBaseId(null);
     };
+
+
 
     const commitLabelEdit = (id: string) => {
         if (editingLabelText.trim()) {

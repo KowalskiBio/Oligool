@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import MSAViewer from './components/MSAViewer';
 import QueryViewer, { type QueryViewerHandle, type ImportedSession } from './components/QueryViewer';
 import BlastResults from './components/BlastResults';
@@ -56,12 +56,16 @@ function App() {
   const [autofindSelectedAccessions, setAutofindSelectedAccessions] = useState<Set<string>>(new Set());
   const [showWhatsNew, setShowWhatsNew] = useState(false);
 
-  // Session save / load
   const queryViewerRef = useRef<QueryViewerHandle>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const importNonceRef = useRef(0);
   const [importedSession, setImportedSession] = useState<ImportedSession | null>(null);
   const [sessionMsg, setSessionMsg] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
+  const [pendingSession, setPendingSession] = useState<OligoolSession | null>(null);
+  const [showPreview, setShowPreview] = useState(false);
+  const [restoredRegion, setRestoredRegion] = useState<{ start: number; end: number } | null>(null);
+  const autosaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const AUTOSAVE_KEY = 'oligool_autosave';
 
   useEffect(() => {
     if (isDarkMode) {
@@ -82,6 +86,20 @@ function App() {
   useEffect(() => { localStorage.setItem('custom_hits', customHits); }, [customHits]);
   useEffect(() => { localStorage.setItem('job_name', jobName); }, [jobName]);
   useEffect(() => { localStorage.setItem('idt_mg_conc', idtMgConc); }, [idtMgConc]);
+
+  useEffect(() => {
+    const saved = localStorage.getItem(AUTOSAVE_KEY);
+    if (!saved) return;
+    try {
+      const session = parseSessionText(saved);
+      if (session.results.alignment) {
+        setPendingSession(session);
+        setShowPreview(true);
+      }
+    } catch {
+      localStorage.removeItem(AUTOSAVE_KEY);
+    }
+  }, []);
 
   // Sync Mg²⁺ changes from QueryViewer's inline input back to App state
   useEffect(() => {
@@ -250,13 +268,9 @@ function App() {
     setTimeout(() => setSessionMsg(null), ms);
   };
 
-  // ── Save the whole working session to a downloadable file ──────────────
-  const handleSaveSession = () => {
-    if (!alignment) {
-      flashSessionMsg('err', 'Nothing to save yet — run a search first.');
-      return;
-    }
-    const session: OligoolSession = {
+  const buildSession = useCallback((): OligoolSession | null => {
+    if (!alignment) return null;
+    return {
       app: OLIGOOL_SESSION_APP,
       version: OLIGOOL_SESSION_VERSION,
       savedAt: new Date().toISOString(),
@@ -273,17 +287,10 @@ function App() {
       oligo: queryViewerRef.current?.getSnapshot() ?? null,
       flankingPrimers: selectedFlankingPrimers ?? null,
     };
-    try {
-      downloadSession(session);
-      flashSessionMsg('ok', 'Session saved');
-    } catch (e: any) {
-      flashSessionMsg('err', e?.message || 'Failed to save session');
-    }
-  };
+  }, [alignment, blastHits, filteredHits, blastMeta, showMatches, jobName, input, organism, eValue, percIdentity, filterMatches, maxHitsPreset, customHits, autofindSelectedAccessions, selectedFlankingPrimers]);
 
   // ── Restore a previously saved session, skipping the BLAST/MSA pipeline ──
-  const applySession = (session: OligoolSession) => {
-    // Search inputs
+  const applySession = useCallback((session: OligoolSession) => {
     setJobName(session.jobName || 'Query');
     setInput(session.search?.input ?? '');
     setOrganism(session.search?.organism ?? '');
@@ -293,50 +300,109 @@ function App() {
     setMaxHitsPreset(session.search?.maxHitsPreset ?? '50');
     setCustomHits(session.search?.customHits ?? '');
 
-    // Results
     setBlastHits(session.results.blastHits || []);
     setFilteredHits(session.results.filteredHits || []);
     setBlastMeta(session.results.blastMeta || null);
     setShowMatches(!!session.results.showMatches);
     setAutofindSelectedAccessions(new Set(session.results.autofindSelectedAccessions || []));
 
-    // Reset transient view state. We intentionally do NOT null selectedSequence:
-    // the importNonce `key` forces a clean QueryViewer remount, and keeping the
-    // sequence avoids depending on an MSA re-broadcast (which never fires when the
-    // restored alignment is byte-identical to the one already loaded).
     setSelectedPrimers(null);
     setOligoRegion(null);
     setSelectedFlankingPrimers(session.flankingPrimers || null);
     setError('');
 
-    // Load the alignment last and jump straight to results
     setAlignment(session.results.alignment);
     setStep('done');
 
-    // Arm the oligo/pinned-position restore for QueryViewer (applied once it remounts)
     if (session.oligo) {
       importNonceRef.current += 1;
       setImportedSession({ nonce: importNonceRef.current, oligo: session.oligo });
       const co = session.oligo.currentOligo;
       if (co) {
-        // Navigate the MSA to the restored oligo (1-indexed gapped cols → 0-indexed)
-        setNavigateTarget({ colStart: co.p2AbsStart - 1, colEnd: co.p1AbsEnd - 1, ts: Date.now() });
+        setNavigateTarget({ colStart: co.p1AbsStart - 1, colEnd: co.p2AbsEnd - 1, ts: Date.now() });
       }
     } else {
       setImportedSession(null);
     }
-  };
+  }, []);
+
+  // ── Save the whole working session to a downloadable file ──────────────
+  const handleSaveSession = useCallback(() => {
+    const session = buildSession();
+    if (!session) {
+      flashSessionMsg('err', 'Nothing to save yet — run a search first.');
+      return;
+    }
+    try {
+      downloadSession(session);
+      localStorage.removeItem(AUTOSAVE_KEY);
+      flashSessionMsg('ok', 'Session saved');
+    } catch (e: any) {
+      flashSessionMsg('err', e?.message || 'Failed to save session');
+    }
+  }, [buildSession]);
+
+  const confirmApplySession = useCallback((session: OligoolSession) => {
+    applySession(session);
+    flashSessionMsg('ok', `Loaded "${session.jobName || 'session'}"`);
+    setPendingSession(null);
+    setShowPreview(false);
+    localStorage.removeItem(AUTOSAVE_KEY);
+  }, [applySession]);
+
+  const rejectPendingSession = useCallback(() => {
+    setPendingSession(null);
+    setShowPreview(false);
+  }, []);
 
   const handleLoadSessionFile = async (file: File) => {
     try {
       const text = await file.text();
       const session = parseSessionText(text);
-      applySession(session);
-      flashSessionMsg('ok', `Loaded "${session.jobName || 'session'}"`);
+      setPendingSession(session);
+      setShowPreview(true);
     } catch (e: any) {
       flashSessionMsg('err', e?.message || 'Failed to load session', 5000);
     }
   };
+
+  useEffect(() => {
+    if (autosaveTimeoutRef.current) {
+      clearTimeout(autosaveTimeoutRef.current);
+    }
+    autosaveTimeoutRef.current = setTimeout(() => {
+      const session = buildSession();
+      if (session) {
+        localStorage.setItem(AUTOSAVE_KEY, JSON.stringify(session));
+      }
+    }, 2000);
+    return () => {
+      if (autosaveTimeoutRef.current) {
+        clearTimeout(autosaveTimeoutRef.current);
+      }
+    };
+  }, [buildSession]);
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) return;
+
+      if (e.key === 'p' || e.key === 'P') {
+        const pinBtn = document.getElementById('btn-pin-position') as HTMLButtonElement | null;
+        if (pinBtn && !pinBtn.disabled) {
+          pinBtn.click();
+        }
+      }
+
+      if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'S')) {
+        e.preventDefault();
+        handleSaveSession();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [handleSaveSession]);
 
   const isStepActive = (s: Step) => stepOrder.indexOf(s) <= stepOrder.indexOf(step);
   const isStepCurrent = (s: Step) => s === step;
@@ -912,6 +978,7 @@ function App() {
                 flankingPrimers={selectedFlankingPrimers}
                 isDarkMode={isDarkMode}
                 navigateTarget={navigateTarget}
+                restoredRegion={restoredRegion}
                 onOligoRegionSelect={(startCol, endCol) => setOligoRegion({ startCol, endCol })}
                 onAutofindRegionSelect={(colStart, colEnd) => {
                   setNavigateTarget({ colStart, colEnd, ts: Date.now() });
@@ -930,7 +997,10 @@ function App() {
                   jobName={jobName}
                   onPrimersUpdate={setSelectedPrimers}
                   onFlankingPrimersUpdate={setSelectedFlankingPrimers}
-                  onNavigateTo={(colStart, colEnd) => setNavigateTarget({ colStart, colEnd, ts: Date.now() })}
+                  onNavigateTo={(colStart, colEnd) => {
+                    setNavigateTarget({ colStart, colEnd, ts: Date.now() });
+                    setRestoredRegion({ start: colStart, end: colEnd });
+                  }}
                   oligoRegion={oligoRegion}
                   autofindRegion={autofindRegion}
                   idtCredentials={{
@@ -1004,6 +1074,53 @@ function App() {
                   className="px-4 py-2 text-sm font-medium rounded-md bg-indigo-600 text-white hover:bg-indigo-700 transition-colors"
                 >
                   Rozumím
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {showPreview && pendingSession && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" onClick={rejectPendingSession}>
+            <div className="max-w-md w-full bg-white dark:bg-slate-800 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-700 p-6" onClick={e => e.stopPropagation()}>
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-200">Restore session?</h2>
+                <button onClick={rejectPendingSession} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-xl leading-none">&times;</button>
+              </div>
+              <div className="space-y-3 text-sm text-slate-700 dark:text-slate-300">
+                <div className="flex justify-between border-b border-slate-100 dark:border-slate-700 pb-2">
+                  <span className="text-slate-500">Job name</span>
+                  <span className="font-medium">{pendingSession.jobName}</span>
+                </div>
+                <div className="flex justify-between border-b border-slate-100 dark:border-slate-700 pb-2">
+                  <span className="text-slate-500">Alignment length</span>
+                  <span className="font-medium">{pendingSession.results.alignment.split('\n').find(l => !l.startsWith('>'))?.length ?? 0} bp</span>
+                </div>
+                <div className="flex justify-between border-b border-slate-100 dark:border-slate-700 pb-2">
+                  <span className="text-slate-500">Pinned positions</span>
+                  <span className="font-medium">{pendingSession.oligo?.savedPositions.length ?? 0}</span>
+                </div>
+                <div className="flex justify-between border-b border-slate-100 dark:border-slate-700 pb-2">
+                  <span className="text-slate-500">Current oligo</span>
+                  <span className="font-medium">{pendingSession.oligo?.currentOligo ? 'yes' : 'no'}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Saved</span>
+                  <span className="font-medium">{new Date(pendingSession.savedAt).toLocaleString()}</span>
+                </div>
+              </div>
+              <div className="mt-6 flex justify-end gap-3">
+                <button
+                  onClick={rejectPendingSession}
+                  className="px-4 py-2 text-sm font-medium rounded-md border border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => confirmApplySession(pendingSession)}
+                  className="px-4 py-2 text-sm font-medium rounded-md bg-indigo-600 text-white hover:bg-indigo-700 transition-colors"
+                >
+                  Restore
                 </button>
               </div>
             </div>

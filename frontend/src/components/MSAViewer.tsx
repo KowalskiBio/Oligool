@@ -45,6 +45,8 @@ interface MSAViewerProps {
     onFlankingPrimerClick?: (colStart: number, colEnd: number) => void;
     selectedAccessions?: Set<string>;
     onSelectionChange?: (accessions: Set<string>) => void;
+    /** Optional region to highlight as a restored/pinned range */
+    restoredRegion?: { start: number; end: number } | null;
 }
 
 /* ── constants ────────────────────────────────────────── */
@@ -64,7 +66,7 @@ const MINIMAP_HEIGHT = MINIMAP_GC_H + MINIMAP_RULER_H + 50 + MINIMAP_HANDLE_H;
 const MAIN_GC_TRACK_H = 40;
 const MAIN_MSA_TRACK_H = 30;
 
-const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, primers, flankingPrimers, isDarkMode, navigateTarget, onOligoRegionSelect, onAutofindRegionSelect, onFlankingPrimerClick, selectedAccessions, onSelectionChange }) => {
+const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, primers, flankingPrimers, isDarkMode, navigateTarget, onOligoRegionSelect, onAutofindRegionSelect, onFlankingPrimerClick, selectedAccessions, onSelectionChange, restoredRegion }) => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const hoverOverlayRef = useRef<HTMLCanvasElement>(null);
     const minimapRef = useRef<HTMLCanvasElement>(null);
@@ -605,11 +607,21 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
             }
         }
 
+        if (restoredRegion && restoredRegion.start < restoredRegion.end) {
+            const rx = MINIMAP_LABEL_W + Math.max(0, (restoredRegion.start / seqLen) * mmSeqW);
+            const rw = Math.max(2, ((restoredRegion.end - restoredRegion.start) / seqLen) * mmSeqW);
+            ctx.fillStyle = isDark ? 'rgba(99, 102, 241, 0.35)' : 'rgba(99, 102, 241, 0.25)';
+            ctx.fillRect(rx, MINIMAP_GC_H + 4, rw, MINIMAP_RULER_H + 42);
+            ctx.strokeStyle = isDark ? 'rgba(129, 140, 248, 0.7)' : 'rgba(67, 56, 202, 0.6)';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(rx + 0.5, MINIMAP_GC_H + 4.5, rw - 1, MINIMAP_RULER_H + 41);
+        }
+
         ctx.fillStyle = isDark ? '#334155' : '#cbd5e1';
         ctx.fillRect(MINIMAP_LABEL_W - 1, 0, 1, MINIMAP_HEIGHT);
 
         staticMinimapDrawnRef.current = true;
-    }, [sequences, querySeq, seqLen, availableWidth, gcContent, primers, flankingPrimers, isDark]);
+    }, [sequences, querySeq, seqLen, availableWidth, gcContent, primers, flankingPrimers, isDark, restoredRegion]);
 
     const drawMinimap = useCallback(() => {
         const cvs = minimapRef.current;
@@ -906,7 +918,10 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
                         fg = isDark ? '#cbd5e1' : '#374151';
 
                         if (isQuery) {
-                            if (primers && col >= primers.p1.start && col < primers.p1.end) {
+                            if (restoredRegion && col >= restoredRegion.start && col < restoredRegion.end) {
+                                bg = isDark ? '#3730a3' : '#c7d2fe';
+                                fg = isDark ? '#e0e7ff' : '#312e81';
+                            } else if (primers && col >= primers.p1.start && col < primers.p1.end) {
                                 bg = isDark ? '#065f46' : '#86efac';
                                 fg = isDark ? '#a7f3d0' : '#064e3b';
                             } else if (primers && col >= primers.p2.start && col < primers.p2.end) {
@@ -962,7 +977,10 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
                         ctx.fillStyle = '#dc2626';
                         ctx.fillRect(x, y + 2, barW, ROW_HEIGHT - 4);
                     } else if (isQuery && ch !== '-') {
-                        if (primers && col >= primers.p1.start && col < primers.p1.end) {
+                        if (restoredRegion && col >= restoredRegion.start && col < restoredRegion.end) {
+                            ctx.fillStyle = isDark ? '#6366f1' : '#818cf8';
+                            ctx.fillRect(x, y + 2, barW, ROW_HEIGHT - 4);
+                        } else if (primers && col >= primers.p1.start && col < primers.p1.end) {
                             ctx.fillStyle = '#22c55e';
                             ctx.fillRect(x, y + 2, barW, ROW_HEIGHT - 4);
                         } else if (primers && col >= primers.p2.start && col < primers.p2.end) {
@@ -1253,7 +1271,7 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
             hoverCvs.style.width = `${availableWidth}px`;
             hoverCvs.style.height = `${canvasH}px`;
         }
-    }, [sequences, querySeq, scrollLeft, scrollTop, cellW, seqAreaW, availableWidth, totalH, seqLen, viewMode, primers, flankingPrimers, gcContent, isDarkMode, oligoSelection, autofindBoundaryRow]);
+    }, [sequences, querySeq, scrollLeft, scrollTop, cellW, seqAreaW, availableWidth, totalH, seqLen, viewMode, primers, flankingPrimers, gcContent, isDarkMode, oligoSelection, autofindBoundaryRow, restoredRegion]);
 
     /* ── lightweight hover overlay (draws only a thin line) ── */
     const drawHoverOverlay = useCallback(() => {

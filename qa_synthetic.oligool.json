@@ -1,0 +1,136 @@
+{
+  "app": "oligool",
+  "version": 1,
+  "savedAt": "2026-07-07T00:00:00.000Z",
+  "jobName": "Synthetic_QA",
+  "search": {
+    "input": "CATACCGATAACAACCACGAGCTAGTAAGCGCCGTCGCGCCAATAAATCTTATGCCACATGCCCGGAATTAGGTCTGTTACTCGTAGCAAACGTATGCGGACCACCCTCATTGGTCAGGTCCAGCGCATAGGGTAGGATAGGATCTGTACCATGCTCAATCAAACAGGAACAAGCTGGAATTTCCGATTGAATTTAGTGCAGGGGGATATATGTGTTGGCCATGCCCACCGAGAACCAAGACCTCCGACATCTTGATGGAATGGGTAGCCGCAGTCGAAACTCCACTTGGATTAGCTCCTAAG",
+    "organism": "",
+    "eValue": "0.05",
+    "percIdentity": "0",
+    "filterMatches": false,
+    "maxHitsPreset": "50",
+    "customHits": ""
+  },
+  "results": {
+    "blastHits": [
+      {
+        "accession": "QA001",
+        "description": "Synthetic hit 1 [Homo sapiens]",
+        "evalue": 1e-30,
+        "identity": 95.0,
+        "query_cover": 100.0
+      },
+      {
+        "accession": "QA002",
+        "description": "Synthetic hit 2 [Mus musculus]",
+        "evalue": 1e-28,
+        "identity": 92.0,
+        "query_cover": 100.0
+      }
+    ],
+    "filteredHits": [
+      {
+        "accession": "QA001",
+        "description": "Synthetic hit 1 [Homo sapiens]",
+        "evalue": 1e-30,
+        "identity": 95.0,
+        "query_cover": 100.0
+      },
+      {
+        "accession": "QA002",
+        "description": "Synthetic hit 2 [Mus musculus]",
+        "evalue": 1e-28,
+        "identity": 92.0,
+        "query_cover": 100.0
+      }
+    ],
+    "blastMeta": {
+      "rid": "qa-rid",
+      "rtoe": 0,
+      "query_len": 300
+    },
+    "showMatches": false,
+    "alignment": ">Query\nCATACCGATAACAACCACGAGCTAGTAAGCGCCGTCGCGCCAATAAATCTTATGCCACATGCCCGGAATTAGGTCTGTTACTCGTAGCAAACGTATGCGGACCACCCTCATTGGTCAGGTCCAGCGCATAGGGTAGGATAGGATCTGTACCATGCTCAATCAAACAGGAACAAGCTGGAATTTCCGATTGAATTTAGTGCAGGGGGATATATGTGTTGGCCATGCCCACCGAGAACCAAGACCTCCGACATCTTGATGGAATGGGTAGCCGCAGTCGAAACTCCACTTGGATTAGCTCCTAAG\n>Hit1 [organism=Homo sapiens]\nAATACCGATAACAACCAGGAGCTAGTAAGCGCCGACGCGCCAATAAATCTTCTGCCACATGCCCGGAAGTAGGTCTGTTACTCGTGGCAAACGTATGCGG---ACACTCATTGGTCAGGTCCCGCGCATAGGGTAGGATTGGATCTGTACCATGCTAAATCAAACAGGAACAATCTGGAATTTCCGATTGCATTTAGTGCAGGGGGAAATATGTGTTGGCCATGTCCACCGAGAACCAAGAACTCCGACATCTTGATGCAATGGGTAGCCGCAGTAGAAACTCCACTTGGATGAGCTCCTAAG\n>Hit2 [organism=Mus musculus]\nCATACAGATAACAACCACGAGCTAGTAATCGCCGTCGCGCCAATAAATCTTGTGCCACATGCCCGGAATTAGGTTTGTTACTCGTAGCAAACGTATGGGGACCACCCTCATTGGTCAGGTCCACCGCATAGGGTAGGATAGGATCTATACCATGCTCAATCAAACAGGATCAAGCTGGAATTTCCGATTGAAATTAGTGCAGGGGGATATATGTGATGGCCATGCCCACCGAGAACCACGACCTCCGACATCTTGATGGAAAGGGTAGCCGCAGTCGAAACTCCTCTTGGATTAGCTCCTAAG",
+    "autofindSelectedAccessions": [
+      "QA001",
+      "QA002"
+    ]
+  },
+  "oligo": {
+    "moligo1Shift": 0,
+    "moligo2Shift": 0,
+    "moligo1Len": 21,
+    "moligo2Len": 21,
+    "oligo1Name": "Oligo_1",
+    "oligo2Name": "Oligo_2",
+    "searchParams": {
+      "min_len": 15,
+      "max_l": 35,
+      "tm_min": 60.0,
+      "tm_max": 63.0,
+      "tm_diff": 1.5,
+      "gc_min": 30,
+      "gc_max": 80
+    },
+    "advancedParams": {
+      "salt_mono": 50.0,
+      "salt_div": 10.0,
+      "dntp_conc": 0.8,
+      "dna_conc": 500.0
+    },
+    "idtAdvancedParams": {
+      "mv_conc": 50.0,
+      "mg_conc": 10.0,
+      "dntp_conc": 0.8,
+      "oligo_conc": 0.25
+    },
+    "tagSeq": "",
+    "fwdPrimer": "",
+    "revPrimer": "",
+    "savedPositions": [
+      {
+        "id": "pin-1",
+        "label": "Position 1",
+        "createdAt": 1751846400000,
+        "p1": {
+          "start": 50,
+          "end": 70,
+          "seq": "TATGCCACATGCCCGGAATTA",
+          "gc": 47.6,
+          "tm": 60.0
+        },
+        "p2": {
+          "start": 130,
+          "end": 150,
+          "seq": "GGGTAGGATAGGATCTGTACC",
+          "gc": 52.4,
+          "tm": 60.0
+        },
+        "p1AbsStart": 51,
+        "p1AbsEnd": 71,
+        "p2AbsStart": 131,
+        "p2AbsEnd": 151,
+        "moligo1Shift": 0,
+        "moligo2Shift": 0,
+        "moligo1Len": 21,
+        "moligo2Len": 21
+      }
+    ],
+    "interactiveFlankWindow": 200,
+    "showFlankingPrimers": false,
+    "currentOligo": {
+      "p1AbsStart": 51,
+      "p1AbsEnd": 71,
+      "p2AbsStart": 131,
+      "p2AbsEnd": 151,
+      "p1Seq": "TATGCCACATGCCCGGAATTA",
+      "p2Seq": "GGGTAGGATAGGATCTGTACC",
+      "p1Tm": 60.0,
+      "p2Tm": 60.0,
+      "p1Gc": 47.6,
+      "p2Gc": 52.4
+    }
+  },
+  "flankingPrimers": null
+}
