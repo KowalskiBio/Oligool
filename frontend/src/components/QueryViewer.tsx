@@ -1,9 +1,10 @@
-import { useState, useEffect, useRef, forwardRef, useImperativeHandle, useCallback } from 'react';
+import { useState, useEffect, useRef, forwardRef, useImperativeHandle, useCallback, useMemo } from 'react';
 import MOLigoPanel from './MOLigoPanel';
 import FlankingPrimersPanel from './FlankingPrimersPanel';
 import HairpinSVG from './HairpinSVG';
 import DimerSVG from './DimerSVG';
 import { dimerAsciiFromItem } from './DimerAscii';
+import { PIN_COLORS, exportPositionsCSV, exportPositionsTSV } from '../utils/session';
 import type { OligoSnapshot, SavedPosition, FixedAbsCoords } from '../utils/session';
 
 /** Imperative handle App uses to pull QueryViewer's state when saving a session. */
@@ -176,7 +177,9 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
     const [pinPulse, setPinPulse] = useState(false);
     const [isSavedPosOpen, setIsSavedPosOpen] = useState(true);
     const [lastDeleted, setLastDeleted] = useState<{ position: SavedPosition; index: number; timeoutId: ReturnType<typeof setTimeout> } | null>(null);
+    const [positionSearch, setPositionSearch] = useState('');
     const [compareBaseId, setCompareBaseId] = useState<string | null>(null);
+    const [compareTarget, setCompareTarget] = useState<{ base: SavedPosition; target: SavedPosition } | null>(null);
     const [searchOligo1Seq, setSearchOligo1Seq] = useState('');
     const [searchOligo2Seq, setSearchOligo2Seq] = useState('');
     const [searchOligoError, setSearchOligoError] = useState<string | null>(null);
@@ -435,6 +438,58 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
     };
 
 
+
+    const undoDelete = () => {
+        if (!lastDeleted) return;
+        clearTimeout(lastDeleted.timeoutId);
+        setSavedPositions(prev => {
+            const next = [...prev];
+            next.splice(lastDeleted.index, 0, lastDeleted.position);
+            return next;
+        });
+        setLastDeleted(null);
+    };
+
+    const clearAllPositions = () => {
+        if (lastDeleted) {
+            clearTimeout(lastDeleted.timeoutId);
+        }
+        setLastDeleted(null);
+        setSavedPositions([]);
+        setEditingLabelId(null);
+        setCompareBaseId(null);
+        setCompareTarget(null);
+    };
+
+    const updatePositionNotes = (id: string, notes: string) => {
+        setSavedPositions(prev => prev.map(p => p.id === id ? { ...p, notes } : p));
+    };
+
+    const updatePositionColor = (id: string, color: string) => {
+        setSavedPositions(prev => prev.map(p => p.id === id ? { ...p, color } : p));
+    };
+
+    const filteredPositions = useMemo(() => {
+        const term = positionSearch.trim().toLowerCase();
+        if (!term) return savedPositions;
+        const rangeMatch = term.match(/^(\d+)\s*-\s*(\d+)$/);
+        if (rangeMatch) {
+            const start = parseInt(rangeMatch[1], 10);
+            const end = parseInt(rangeMatch[2], 10);
+            return savedPositions.filter(p =>
+                (p.p1AbsStart >= start && p.p1AbsStart <= end) ||
+                (p.p1AbsEnd >= start && p.p1AbsEnd <= end) ||
+                (p.p2AbsStart >= start && p.p2AbsStart <= end) ||
+                (p.p2AbsEnd >= start && p.p2AbsEnd <= end)
+            );
+        }
+        return savedPositions.filter(p =>
+            p.label.toLowerCase().includes(term) ||
+            (p.notes || '').toLowerCase().includes(term) ||
+            p.p1.seq.toLowerCase().includes(term) ||
+            p.p2.seq.toLowerCase().includes(term)
+        );
+    }, [savedPositions, positionSearch]);
 
     const commitLabelEdit = (id: string) => {
         if (editingLabelText.trim()) {
@@ -1794,31 +1849,79 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                                     </svg>
                                     <span className="text-xs font-bold text-slate-500 uppercase tracking-widest group-hover:text-slate-700 dark:group-hover:text-slate-300 transition-colors">
-                                        📍 Saved Positions
+                                        Saved Positions
                                     </span>
                                     <span className="text-[10px] font-bold bg-indigo-100 dark:bg-indigo-900/50 text-indigo-600 dark:text-indigo-400 rounded-full px-2 py-0.5">
                                         {savedPositions.length}
                                     </span>
                                 </div>
-                                <button
-                                    onClick={e => { e.stopPropagation(); setSavedPositions([]); setEditingLabelId(null); }}
-                                    className="text-[10px] font-bold text-slate-400 hover:text-red-500 transition-colors uppercase tracking-wider px-2 py-1 rounded hover:bg-red-50 dark:hover:bg-red-900/20"
-                                    title="Clear all saved positions"
-                                >
-                                    Clear all
-                                </button>
                             </div>
+
+                            {/* Toolbar */}
+                            {isSavedPosOpen && (
+                                <div className="flex flex-wrap items-center gap-2 mb-3 animate-in fade-in slide-in-from-top-2 duration-200">
+                                    <div className="relative flex-1 min-w-[12rem]">
+                                        <svg className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                                        </svg>
+                                        <input
+                                            type="text"
+                                            value={positionSearch}
+                                            onChange={e => setPositionSearch(e.target.value)}
+                                            placeholder="Search labels, notes, seq or range (e.g. 10-50)"
+                                            className="w-full pl-8 pr-3 py-1.5 text-xs rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-indigo-400"
+                                        />
+                                    </div>
+                                    <button
+                                        onClick={() => exportPositionsCSV(filteredPositions, jobName)}
+                                        className="text-[10px] font-bold px-2.5 py-1.5 rounded-md border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
+                                        title="Export as CSV"
+                                    >
+                                        CSV
+                                    </button>
+                                    <button
+                                        onClick={() => exportPositionsTSV(filteredPositions, jobName)}
+                                        className="text-[10px] font-bold px-2.5 py-1.5 rounded-md border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
+                                        title="Export as TSV"
+                                    >
+                                        TSV
+                                    </button>
+                                    <button
+                                        onClick={clearAllPositions}
+                                        className="text-[10px] font-bold text-slate-400 hover:text-red-500 transition-colors uppercase tracking-wider px-2.5 py-1.5 rounded border border-transparent hover:border-red-100 dark:hover:border-red-900/30 hover:bg-red-50 dark:hover:bg-red-900/20"
+                                        title="Clear all saved positions"
+                                    >
+                                        Clear all
+                                    </button>
+                                </div>
+                            )}
+
+                            {/* Undo toast */}
+                            {lastDeleted && (
+                                <div className="mb-3 flex items-center justify-between gap-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-3 py-2 animate-in fade-in slide-in-from-top-2 duration-200">
+                                    <span className="text-xs text-slate-600 dark:text-slate-300">
+                                        Deleted <b className="text-slate-800 dark:text-slate-100">{lastDeleted.position.label}</b>
+                                    </span>
+                                    <button
+                                        onClick={undoDelete}
+                                        className="text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-200 px-2 py-1 rounded hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-colors"
+                                    >
+                                        Undo
+                                    </button>
+                                </div>
+                            )}
 
                             {/* Cards grid */}
                             {isSavedPosOpen && (
                                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 animate-in fade-in slide-in-from-top-2 duration-200">
-                                    {savedPositions.map((pos) => (
+                                    {filteredPositions.map((pos) => (
                                         <div
                                             key={pos.id}
                                             className="bg-white dark:bg-slate-800 rounded-xl border border-indigo-100 dark:border-indigo-900/40 shadow-sm hover:shadow-md hover:border-indigo-300 dark:hover:border-indigo-700 transition-all duration-200 flex flex-col overflow-hidden"
+                                            style={{ borderLeftWidth: '4px', borderLeftColor: PIN_COLORS.find(c => c.name === pos.color)?.value || '#64748b' }}
                                         >
                                             {/* Card top bar */}
-                                            <div className="flex items-center justify-between px-3 pt-2.5 pb-1.5 border-b border-slate-100 dark:border-slate-700">
+                                            <div className="flex items-center justify-between px-3 pt-2.5 pb-1.5 border-b border-slate-100 dark:border-slate-700 gap-2">
                                                 {editingLabelId === pos.id ? (
                                                     <input
                                                         autoFocus
@@ -1829,21 +1932,32 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                                                             if (e.key === 'Enter') commitLabelEdit(pos.id);
                                                             if (e.key === 'Escape') setEditingLabelId(null);
                                                         }}
-                                                        className="flex-1 text-xs font-bold bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-700 rounded px-1.5 py-0.5 outline-none focus:ring-1 focus:ring-indigo-400 mr-1"
+                                                        className="flex-1 text-xs font-bold bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-700 rounded px-1.5 py-0.5 outline-none focus:ring-1 focus:ring-indigo-400"
                                                     />
                                                 ) : (
                                                     <button
                                                         onClick={() => { setEditingLabelId(pos.id); setEditingLabelText(pos.label); }}
-                                                        className="flex items-center gap-1 text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-200 transition-colors group/label"
+                                                        className="flex items-center gap-1 text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-200 transition-colors group/label min-w-0"
                                                         title="Click to rename"
                                                     >
-                                                        <span>{pos.label}</span>
-                                                        <svg className="w-3 h-3 opacity-0 group-hover/label:opacity-60 transition-opacity" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                        <span className="truncate">{pos.label}</span>
+                                                        <svg className="w-3 h-3 opacity-0 group-hover/label:opacity-60 transition-opacity shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536M9 13l6.586-6.586a2 2 0 112.828 2.828L11.828 15.828a2 2 0 01-1.414.586H9v-2.414a2 2 0 01.586-1.414z" />
                                                         </svg>
                                                     </button>
                                                 )}
-                                                <span className="text-[9px] text-slate-400 font-medium ml-auto shrink-0">{relativeTime(pos.createdAt)}</span>
+                                                <div className="flex items-center gap-1 ml-auto shrink-0">
+                                                    {PIN_COLORS.map((c) => (
+                                                        <button
+                                                            key={c.name}
+                                                            onClick={() => updatePositionColor(pos.id, c.name)}
+                                                            title={c.name}
+                                                            className={`w-3.5 h-3.5 rounded-full border transition-transform ${pos.color === c.name ? 'border-slate-400 dark:border-slate-300 scale-110 ring-1 ring-offset-1 ring-slate-300 dark:ring-offset-slate-800' : 'border-transparent hover:scale-105'}`}
+                                                            style={{ backgroundColor: c.value }}
+                                                        />
+                                                    ))}
+                                                    <span className="text-[9px] text-slate-400 font-medium ml-1">{relativeTime(pos.createdAt)}</span>
+                                                </div>
                                             </div>
 
                                             {/* Coordinate rows */}
@@ -1890,6 +2004,17 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                                                 </div>
                                             </div>
 
+                                            {/* Notes */}
+                                            <div className="px-3 pb-2">
+                                                <textarea
+                                                    value={pos.notes || ''}
+                                                    onChange={e => updatePositionNotes(pos.id, e.target.value)}
+                                                    placeholder="Notes..."
+                                                    rows={2}
+                                                    className="w-full text-[10px] rounded-md border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/40 text-slate-600 dark:text-slate-300 p-1.5 resize-none focus:outline-none focus:ring-1 focus:ring-indigo-400"
+                                                />
+                                            </div>
+
                                             {/* Actions */}
                                             <div className="flex border-t border-slate-100 dark:border-slate-700">
                                                 <button
@@ -1901,6 +2026,26 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                                                     </svg>
                                                     Restore
+                                                </button>
+                                                <button
+                                                    onClick={() => {
+                                                        if (compareBaseId && compareBaseId !== pos.id) {
+                                                            const base = savedPositions.find(p => p.id === compareBaseId);
+                                                            if (base) setCompareTarget({ base, target: pos });
+                                                            setCompareBaseId(null);
+                                                        } else if (compareBaseId === pos.id) {
+                                                            setCompareBaseId(null);
+                                                        } else {
+                                                            setCompareBaseId(pos.id);
+                                                        }
+                                                    }}
+                                                    className={`flex-1 flex items-center justify-center gap-1 py-2 text-[10px] font-bold transition-colors border-r border-slate-100 dark:border-slate-700 ${compareBaseId === pos.id ? 'text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700'}`}
+                                                    title={compareBaseId === pos.id ? 'Click another card to compare' : 'Select for comparison'}
+                                                >
+                                                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                                                    </svg>
+                                                    {compareBaseId === pos.id ? 'Comparing...' : 'Compare'}
                                                 </button>
                                                 <button
                                                     onClick={() => deletePosition(pos.id)}
@@ -1916,6 +2061,52 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                                     ))}
                                 </div>
                             )}
+                        </div>
+                    )}
+
+                    {/* Comparison modal */}
+                    {compareTarget && (
+                        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" onClick={() => setCompareTarget(null)}>
+                            <div className="max-w-2xl w-full bg-white dark:bg-slate-800 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-700 p-6" onClick={e => e.stopPropagation()}>
+                                <div className="flex items-center justify-between mb-4">
+                                    <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-200">Compare positions</h2>
+                                    <button onClick={() => setCompareTarget(null)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-xl leading-none">&times;</button>
+                                </div>
+                                {(() => {
+                                    const { base, target } = compareTarget;
+                                    const renderPair = (label: string, a: SavedPosition['p1'], b: SavedPosition['p1'], aAbs: { start: number; end: number }, bAbs: { start: number; end: number }) => (
+                                        <div className="mb-4">
+                                            <div className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">{label}</div>
+                                            <div className="grid grid-cols-2 gap-3">
+                                                <div className="rounded-lg border border-slate-200 dark:border-slate-700 p-3">
+                                                    <div className="text-[10px] font-bold text-slate-400 mb-1">{base.label}</div>
+                                                    <div className="font-mono text-xs text-slate-700 dark:text-slate-200 break-all">{a.seq}</div>
+                                                    <div className="text-[10px] text-slate-500 mt-1">bp {aAbs.start}–{aAbs.end} · GC {a.gc.toFixed(1)}% · Tm {a.tm.toFixed(1)}°C</div>
+                                                </div>
+                                                <div className="rounded-lg border border-slate-200 dark:border-slate-700 p-3">
+                                                    <div className="text-[10px] font-bold text-slate-400 mb-1">{target.label}</div>
+                                                    <div className="font-mono text-xs text-slate-700 dark:text-slate-200 break-all">{b.seq}</div>
+                                                    <div className="text-[10px] text-slate-500 mt-1">bp {bAbs.start}–{bAbs.end} · GC {b.gc.toFixed(1)}% · Tm {b.tm.toFixed(1)}°C</div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    );
+                                    return (
+                                        <div>
+                                            {renderPair('Oligo 1', base.p1, target.p1, { start: base.p1AbsStart, end: base.p1AbsEnd }, { start: target.p1AbsStart, end: target.p1AbsEnd })}
+                                            {renderPair('Oligo 2', base.p2, target.p2, { start: base.p2AbsStart, end: base.p2AbsEnd }, { start: target.p2AbsStart, end: target.p2AbsEnd })}
+                                        </div>
+                                    );
+                                })()}
+                                <div className="mt-4 flex justify-end">
+                                    <button
+                                        onClick={() => setCompareTarget(null)}
+                                        className="px-4 py-2 text-sm font-medium rounded-md bg-indigo-600 text-white hover:bg-indigo-700 transition-colors"
+                                    >
+                                        Close
+                                    </button>
+                                </div>
+                            </div>
                         </div>
                     )}
 
