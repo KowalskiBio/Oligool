@@ -9,6 +9,9 @@ requests>=2.25.0
 # 0.3.2 via the merged loop-ΔH tables). 0.3.3+ adds Tan-Chen TBI salt correction
 # for stems ≥6 bp and lazy-loaded torch in 0.3.4.
 #
-# Dimer Tm is implemented in the KowalskiBio fork (feat/dimer-tm); re-pin to a
-# released PyPI version once upstream PR #3 lands.
-strider-dna @ git+https://github.com/KowalskiBio/strider.git@7a871d7cb9f6eef30a9027a8f6640f047cc1e5e9
+# Dimer Tm is available upstream from v0.7.0 onward.
+#
+# NOTE: v0.7.0 has a bug where ThermoEngine.subopt() ignores sodium/magnesium
+# when enumerating suboptimal hairpin structures. We temporarily pin to the
+# patched fork (PR #7) until the fix lands upstream.
+strider-dna @ git+https://github.com/KowalskiBio/strider.git@fix/subopt-hairpin-salt

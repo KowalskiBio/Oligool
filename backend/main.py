@@ -623,10 +623,7 @@ async def analyze_idt_oligos(request: IdtAnalyzeRequest):
         from strider import ThermoEngine
         from strider.thermo.hairpin import hairpin_thermo  # strider >= 0.3.2
         from strider.thermo.dimer_thermo import dimer_thermo  # strider >= 0.3.5 / fork
-        try:
-            from strider.thermo.dimer_thermo import dimer_thermo_subopt
-        except ImportError:
-            dimer_thermo_subopt = None
+        from strider.thermo.dimer_thermo import dimer_thermo_subopt  # strider >= 0.6.0
 
         base_temp = request.temp if hasattr(request, "temp") and request.temp is not None else 25.0
         mv_m = request.mv_conc / 1000.0
@@ -644,7 +641,14 @@ async def analyze_idt_oligos(request: IdtAnalyzeRequest):
         # strider's own melting_temperature is BImolecular and only correct for dimers.
         def add_strider_analysis(seq1, hp_data, seq2=None):
             """Strider-dna enrichment for hairpin (seq2=None) or dimer (seq2 provided)."""
-            if not (isinstance(hp_data, list) or (isinstance(hp_data, dict) and not hp_data.get("error"))):
+            # When IDT returned an error (e.g. 401 with empty token), still run
+            # Strider analysis so Local_DeltaG / Local_Tm are available.  Preserve
+            # the original IDT error as IDT_Error on each result item.
+            idt_error = None
+            if isinstance(hp_data, dict) and hp_data.get("error"):
+                idt_error = hp_data["error"]
+                hp_data = [{}]
+            elif not (isinstance(hp_data, list) or isinstance(hp_data, dict)):
                 return hp_data
 
             is_dimer = seq2 is not None
@@ -752,6 +756,8 @@ async def analyze_idt_oligos(request: IdtAnalyzeRequest):
                 item["Local_DeltaG"] = viz_dg
                 item["Local_Tm"] = mfe_tm
                 item["SuboptDimers"] = subopt_dimers if is_dimer else []
+                if idt_error is not None:
+                    item["IDT_Error"] = idt_error
                 if viz_struct:
                     item["DotBracket"] = viz_struct
                     for k in ["AsciiStructure", "VisualPrint", "asciiStructure", "visualPrint"]:
@@ -787,6 +793,21 @@ async def analyze_idt_oligos(request: IdtAnalyzeRequest):
                         "IDT_Tm": None
                     })
                     added += 1
+            else:
+                # Expose suboptimal dimer structures (up to 4) in addition to the MFE/best item.
+                seen = {viz_struct} if viz_struct else set()
+                added = 0
+                for sub in subopt_dimers:
+                    if added >= 4: break
+                    if sub.get("DotBracket") in seen: continue
+                    if not _valid_paired(sub.get("DotBracket", "")): continue
+                    sub["Local_DeltaG"] = sub.get("DeltaG")
+                    sub["Local_Tm"] = sub.get("Tm")
+                    sub["DeltaG"] = None
+                    sub["IDT_Tm"] = None
+                    final_results.append(sub)
+                    seen.add(sub["DotBracket"])
+                    added += 1
 
             return final_results if is_list else final_results[0]
 
@@ -815,15 +836,20 @@ async def analyze_idt_oligos(request: IdtAnalyzeRequest):
             if len(data) == 0:
                 return {"DeltaG": None, "raw": data}
             
-            # Sort items by IDT DeltaG (most stable first)
-            scored_items = []
-            for item in data:
+            # Sort items by the most stable available DeltaG: IDT first, then local Strider value.
+            def _best_dg(item):
                 idt_dg = _extract_idt_delta_g(item)
-                scored_items.append((idt_dg if idt_dg is not None else 999.0, item))
+                if idt_dg is not None:
+                    return idt_dg
+                local_dg = item.get("Local_DeltaG")
+                if local_dg is not None:
+                    return local_dg
+                return 999.0
             
+            scored_items = [(_best_dg(item), item) for item in data]
             scored_items.sort(key=lambda x: x[0])
             top_items = [x[1] for x in scored_items[:5]]
-            top_idt_dgs = [x[0] if x[0] != 999.0 else None for x in scored_items[:5]]
+            top_idt_dgs = [_extract_idt_delta_g(x[1]) for x in scored_items[:5]]
             top_local_dgs = [x[1].get("Local_DeltaG") for x in scored_items[:5]]
             top_idt_tms = [x[1].get("IDT_Tm") for x in scored_items[:5]]
             top_local_tms = [x[1].get("Local_Tm") for x in scored_items[:5]]
