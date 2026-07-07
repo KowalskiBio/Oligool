@@ -137,4 +137,34 @@ describe('computeMismatchCols', () => {
     const result = computeMismatchCols(sequences, new Set(['Query', 'Hit1']))
     expect(result).toEqual(new Set([0, 1, 2, 3, 4, 5, 6, 7]))
   })
+
+  it('treats gaps in non-query sequences as mismatches when treatIndelsAsMismatches is true', () => {
+    const query = 'ATCGATCG'
+    const sequences = [
+      { id: 'Query', seq: query, accession: 'Query' },
+      { id: 'Hit1', seq: 'ATC-ATCG', accession: 'Hit1' },
+    ]
+    const result = computeMismatchCols(sequences, new Set(['Hit1']), true)
+    expect(result).toEqual(new Set([3]))
+  })
+
+  it('treats insertions in non-query sequences as mismatches when treatIndelsAsMismatches is true', () => {
+    const query = 'ATC-ATCG'
+    const sequences = [
+      { id: 'Query', seq: query, accession: 'Query' },
+      { id: 'Hit1', seq: 'ATCGATCG', accession: 'Hit1' },
+    ]
+    const result = computeMismatchCols(sequences, new Set(['Hit1']), true)
+    expect(result).toEqual(new Set([3]))
+  })
+
+  it('still ignores gaps when treatIndelsAsMismatches is false', () => {
+    const query = 'ATCGATCG'
+    const sequences = [
+      { id: 'Query', seq: query, accession: 'Query' },
+      { id: 'Hit1', seq: 'ATC-ATCG', accession: 'Hit1' },
+    ]
+    const result = computeMismatchCols(sequences, new Set(['Hit1']), false)
+    expect(result).toEqual(new Set())
+  })
 })

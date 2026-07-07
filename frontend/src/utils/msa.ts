@@ -18,11 +18,15 @@ export const MIN_CLEAN_REGION_BP = 100
  * @param sequences - Aligned sequences; the first entry is the query.
  * @param selectedAccessions - Optional set of accession strings to filter non-query sequences.
  *   If undefined/null, all non-query sequences are included (backward compatible).
+ * @param treatIndelsAsMismatches - When true, gaps in non-query sequences (deletions)
+ *   and non-gap characters where the query is gapped (insertions) are treated as mismatches.
+ *   Default false preserves the original gap-ignoring behavior.
  * @returns Set of column indices where selected non-query sequences differ from the query.
  */
 export function computeMismatchCols(
   sequences: readonly Sequence[],
-  selectedAccessions?: ReadonlySet<string>
+  selectedAccessions?: ReadonlySet<string>,
+  treatIndelsAsMismatches = false,
 ): Set<number> {
   const set = new Set<number>();
   if (sequences.length < 2 || sequences[0].seq.length === 0) return set;
@@ -32,7 +36,8 @@ export function computeMismatchCols(
   
   for (let col = 0; col < seqLen; col++) {
     const qch = (querySeq[col] || '-').toUpperCase();
-    if (qch === '-') continue;
+    const queryIsGap = qch === '-';
+    if (queryIsGap && !treatIndelsAsMismatches) continue;
     
     for (let row = 1; row < sequences.length; row++) {
       // Skip rows based on accession filtering
@@ -44,7 +49,19 @@ export function computeMismatchCols(
       }
       
       const ch = (sequences[row].seq[col] || '-').toUpperCase();
-      if (ch !== '-' && ch !== qch) {
+      if (queryIsGap) {
+        // Insertion in the non-query sequence: query is gapped but the hit is not.
+        if (ch !== '-') {
+          set.add(col);
+          break;
+        }
+      } else if (ch === '-') {
+        // Deletion in the non-query sequence.
+        if (treatIndelsAsMismatches) {
+          set.add(col);
+          break;
+        }
+      } else if (ch !== qch) {
         set.add(col);
         break;
       }
