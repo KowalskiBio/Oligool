@@ -49,6 +49,10 @@ interface MSAViewerProps {
     restoredRegion?: { start: number; end: number } | null;
     /** If false, hide the autofind button and clean-region proposals (green selection dots still render). */
     showAutofindUI?: boolean;
+    /** When true, autofind treats insertions/deletions (gaps) in non-query sequences as mismatches. */
+    autofindTreatIndelsAsMismatches?: boolean;
+    /** Called when the user toggles the "count indels as mismatches" option. */
+    onAutofindTreatIndelsAsMismatchesChange?: (value: boolean) => void;
 }
 
 export interface MSAViewerHandle {
@@ -73,7 +77,7 @@ const MINIMAP_HEIGHT = MINIMAP_GC_H + MINIMAP_RULER_H + 50 + MINIMAP_HANDLE_H;
 const MAIN_GC_TRACK_H = 40;
 const MAIN_MSA_TRACK_H = 30;
 
-const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVisibleQueryChange, primers, flankingPrimers, isDarkMode, navigateTarget, onOligoRegionSelect, onAutofindRegionSelect, onFlankingPrimerClick, selectedAccessions, onSelectionChange, restoredRegion, showAutofindUI = true }, ref) => {
+const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVisibleQueryChange, primers, flankingPrimers, isDarkMode, navigateTarget, onOligoRegionSelect, onAutofindRegionSelect, onFlankingPrimerClick, selectedAccessions, onSelectionChange, restoredRegion, showAutofindUI = true, autofindTreatIndelsAsMismatches = false, onAutofindTreatIndelsAsMismatchesChange }, ref) => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const hoverOverlayRef = useRef<HTMLCanvasElement>(null);
     const minimapRef = useRef<HTMLCanvasElement>(null);
@@ -459,8 +463,8 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
 
     /* ── precompute mismatch columns for O(1) hover lookup ── */
     const mismatchCols = useMemo(() => {
-        return computeMismatchCols(sequences, selectedAccessions);
-    }, [sequences, selectedAccessions]);
+        return computeMismatchCols(sequences, selectedAccessions, autofindTreatIndelsAsMismatches);
+    }, [sequences, selectedAccessions, autofindTreatIndelsAsMismatches]);
 
     const autofindBoundaryRow = useMemo(() => {
         if (!selectedAccessions) return sequences.length - 1;
@@ -1697,6 +1701,17 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
                             {cleanRegions.length} region{cleanRegions.length !== 1 ? 's' : ''}
                         </span>
                     </div>
+                    <label className="flex items-center gap-2 mb-2 cursor-pointer select-none">
+                        <input
+                            type="checkbox"
+                            checked={autofindTreatIndelsAsMismatches}
+                            onChange={(e) => onAutofindTreatIndelsAsMismatchesChange?.(e.target.checked)}
+                            className="rounded border-slate-300 dark:border-slate-600 text-indigo-600 focus:ring-indigo-500"
+                        />
+                        <span className="text-xs text-slate-600 dark:text-slate-400">
+                            Count insertions/deletions as mismatches
+                        </span>
+                    </label>
                     {cleanRegions.length === 0 ? (
                         <p className="text-xs text-slate-500 dark:text-slate-400">
                             No clean regions found.
