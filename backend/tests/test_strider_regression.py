@@ -1,21 +1,13 @@
-"""Regression test: strider-dna v0.7.0 vs fork baseline.
+"""Regression test: strider-dna baseline self-consistency.
 
-Reads .omo/evidence/strider-fork-baseline.json, recomputes each entry under
-v0.7.0 using the same Strider function calls as capture_baseline.py, and
-asserts that drift stays within type-specific tolerances:
+Reads .omo/evidence/strider-v1.1.0-baseline.json, recomputes each entry with the
+same Strider function calls as capture_baseline.py, and asserts that drift stays
+near zero. This guards against accidental behavior changes when upgrading strider
+or modifying the analysis code.
 
-Hairpin cases:
-  - |delta_g drift| <= 0.3 kcal/mol
-  - |Tm drift|      <= 1.0 deg-C
-
-Dimer cases:
-  - Upstream v0.6.0+ (including v0.7.0) adds DUPLEX_INIT_DG37 = +1.96 kcal/mol
-    (SantaLucia & Hicks 2004 bimolecular duplex initiation/nucleation term) that
-    the fork omitted. This is an intentional upstream correction, not a regression.
-    We therefore assert that dG drift ≈ +1.96 kcal/mol (within ±0.1) rather than
-    requiring near-zero drift.
-  - The same initiation term also shifts Tm by several degrees (correcting
-    previously inflated dimer Tm).  A wider tolerance of ±15 °C is used.
+Tolerances (same-version recomputation, floating point only):
+  - |delta_g drift| <= 1e-6 kcal/mol
+  - |Tm drift|      <= 1e-6 deg-C
 """
 
 from __future__ import annotations
@@ -34,17 +26,12 @@ from strider.thermo.dimer_thermo import dimer_thermo
 # ---------------------------------------------------------------------------
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-BASELINE_PATH = REPO_ROOT / ".omo" / "evidence" / "strider-fork-baseline.json"
+BASELINE_PATH = REPO_ROOT / ".omo" / "evidence" / "strider-v1.1.0-baseline.json"
 LOG_PATH = REPO_ROOT / ".omo" / "evidence" / "task-6-regression.log"
 
-# Hairpin tolerances (no known systematic shift)
-HP_MAX_DG_DRIFT = 0.3   # kcal/mol
-HP_MAX_TM_DRIFT = 1.0   # deg-C
-
-# Dimer tolerances (expected offset from DUPLEX_INIT_DG37 addition)
-DIM_EXPECTED_DG_OFFSET = 1.96   # kcal/mol — the initiation term added in v0.6.0+ (still present in v0.7.0)
-DIM_DG_TOLERANCE = 0.1          # allowed deviation from expected offset
-DIM_MAX_TM_DRIFT = 15.0         # deg-C — initiation term shifts Tm significantly
+# Same-version tolerances (floating-point noise only)
+MAX_DG_DRIFT = 1e-6   # kcal/mol
+MAX_TM_DRIFT = 1e-6   # deg-C
 
 # ---------------------------------------------------------------------------
 # Baseline loader
@@ -128,11 +115,9 @@ def _init_log():
     """Overwrite log at module start."""
     LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
     with open(LOG_PATH, "w", encoding="utf-8") as fh:
-        fh.write("# Strider v0.7.0 regression log\n")
+        fh.write("# Strider v1.1.0 regression log\n")
         fh.write(f"# baseline: {BASELINE_PATH}\n")
-        fh.write(f"# hairpin tolerance: dG <= {HP_MAX_DG_DRIFT} kcal/mol, Tm <= {HP_MAX_TM_DRIFT} C\n")
-        fh.write(f"# dimer expected dG offset: +{DIM_EXPECTED_DG_OFFSET} kcal/mol (DUPLEX_INIT_DG37), tol +/-{DIM_DG_TOLERANCE}\n")
-        fh.write(f"# dimer Tm tolerance: <= {DIM_MAX_TM_DRIFT} C\n\n")
+        fh.write(f"# tolerance: dG <= {MAX_DG_DRIFT} kcal/mol, Tm <= {MAX_TM_DRIFT} C\n\n")
 
 
 @pytest.mark.parametrize(
@@ -140,60 +125,49 @@ def _init_log():
     BASELINE_ENTRIES,
     ids=[e["label"] for e in BASELINE_ENTRIES],
 )
-def test_regression_vs_fork(entry: dict[str, Any]) -> None:
-    """Each baseline entry must meet type-specific drift tolerances under v0.7.0."""
+def test_regression_vs_baseline(entry: dict[str, Any]) -> None:
+    """Each baseline entry must reproduce within floating-point tolerance."""
     label = entry["label"]
-    is_dimer = entry["type"] != "hairpin"
     computed = _recompute_entry(entry)
 
-    dg_fork = entry["delta_g_fork"]
-    dg_v070 = computed["delta_g"]
-    dg_drift = abs(dg_v070 - dg_fork)
+    dg_baseline = entry["delta_g_fork"]
+    dg_current = computed["delta_g"]
+    dg_drift = abs(dg_current - dg_baseline)
 
-    tm_fork = entry["tm_fork"]
-    tm_v070 = computed["tm"]
+    tm_baseline = entry["tm_fork"]
+    tm_current = computed["tm"]
 
     # --- delta G assertion ---
-    if is_dimer:
-        # v0.6.0+ (including v0.7.0) adds DUPLEX_INIT_DG37 = +1.96; drift should match this offset.
-        offset_error = abs(dg_drift - DIM_EXPECTED_DG_OFFSET)
-        assert offset_error <= DIM_DG_TOLERANCE, (
-            f"{label}: dG drift {dg_drift:.4f} != expected offset "
-            f"{DIM_EXPECTED_DG_OFFSET} +/- {DIM_DG_TOLERANCE} "
-            f"(fork={dg_fork:.4f}, v070={dg_v070:.4f})"
-        )
-    else:
-        assert dg_drift <= HP_MAX_DG_DRIFT, (
-            f"{label}: dG drift {dg_drift:.4f} > {HP_MAX_DG_DRIFT} "
-            f"(fork={dg_fork:.4f}, v070={dg_v070:.4f})"
-        )
+    assert dg_drift <= MAX_DG_DRIFT, (
+        f"{label}: dG drift {dg_drift:.4f} > {MAX_DG_DRIFT} "
+        f"(baseline={dg_baseline:.4f}, current={dg_current:.4f})"
+    )
 
     # --- Tm assertion ---
-    if tm_fork is None:
-        # Fork reported no Tm; v0.7.0 should also yield None.
-        if tm_v070 is not None:
+    if tm_baseline is None:
+        if tm_current is not None:
             pytest.fail(
-                f"{label}: fork Tm=None but v0.7.0 returned Tm={tm_v070:.2f}"
+                f"{label}: baseline Tm=None but current returned Tm={tm_current:.2f}"
             )
     else:
-        assert tm_v070 is not None, (
-            f"{label}: fork Tm={tm_fork:.2f} but v0.7.0 returned None"
+        assert tm_current is not None, (
+            f"{label}: baseline Tm={tm_baseline:.2f} but current returned None"
         )
-        tm_drift = abs(tm_v070 - tm_fork)
-        max_tm = DIM_MAX_TM_DRIFT if is_dimer else HP_MAX_TM_DRIFT
-        assert tm_drift <= max_tm, (
-            f"{label}: Tm drift {tm_drift:.2f} > {max_tm} "
-            f"(fork={tm_fork:.2f}, v070={tm_v070:.2f})"
+        tm_drift = abs(tm_current - tm_baseline)
+        assert tm_drift <= MAX_TM_DRIFT, (
+            f"{label}: Tm drift {tm_drift:.2f} > {MAX_TM_DRIFT} "
+            f"(baseline={tm_baseline:.2f}, current={tm_current:.2f})"
         )
 
     # --- Log per-entry drift ---
     tm_drift_str = (
-        f"{abs(tm_v070 - tm_fork):.4f}" if tm_fork is not None and tm_v070 is not None
+        f"{abs(tm_current - tm_baseline):.4f}"
+        if tm_baseline is not None and tm_current is not None
         else "N/A"
     )
-    kind = "dimer" if is_dimer else "hairpin"
+    kind = "dimer" if entry["type"] != "hairpin" else "hairpin"
     _append_log(
         f"{label} [{kind}]: dG_drift={dg_drift:.4f}, Tm_drift={tm_drift_str} "
-        f"(fork_dG={dg_fork:.4f}, v070_dG={dg_v070:.4f}, "
-        f"fork_Tm={tm_fork}, v070_Tm={tm_v070})"
+        f"(baseline_dG={dg_baseline:.4f}, current_dG={dg_current:.4f}, "
+        f"baseline_Tm={tm_baseline}, current_Tm={tm_current})"
     )

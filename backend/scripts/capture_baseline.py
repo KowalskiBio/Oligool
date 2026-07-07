@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Capture Strider fork baseline ΔG/Tm for a reference primer panel.
+"""Capture Strider baseline ΔG/Tm for a reference primer panel.
 
 Uses exactly the same Strider functions Oligool's backend/main.py uses so the
 output can serve as a regression baseline when upgrading strider.
@@ -7,6 +7,7 @@ output can serve as a regression baseline when upgrading strider.
 
 from __future__ import annotations
 
+import argparse
 import json
 import math
 import os
@@ -23,7 +24,7 @@ HAIRPIN_SEQ = "GCGCTTTTGCGC"
 HETERODIMER_SEQ2 = "GCTTCGAGTACGTTGTTG"
 FLAT_SEQ = "AAAA"
 
-OUTPUT_PATH = ".omo/evidence/strider-fork-baseline.json"
+DEFAULT_OUTPUT_PATH = ".omo/evidence/strider-baseline.json"
 
 
 @dataclass
@@ -207,6 +208,17 @@ def validate(document: dict[str, Any]) -> list[str]:
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser(
+        description="Capture a Strider regression baseline for a reference primer panel."
+    )
+    parser.add_argument(
+        "--output",
+        "-o",
+        default=DEFAULT_OUTPUT_PATH,
+        help="Output JSON path (default: %(default)s)",
+    )
+    args = parser.parse_args()
+
     document = capture()
     errors = validate(document)
     if errors:
@@ -215,12 +227,12 @@ def main() -> None:
             print(f"  - {err}")
         raise SystemExit(1)
 
-    os.makedirs(os.path.dirname(OUTPUT_PATH), exist_ok=True)
-    with open(OUTPUT_PATH, "w", encoding="utf-8") as fh:
+    os.makedirs(os.path.dirname(args.output) or ".", exist_ok=True)
+    with open(args.output, "w", encoding="utf-8") as fh:
         json.dump(document, fh, indent=2, sort_keys=False)
         fh.write("\n")
 
-    print(f"Baseline written to {OUTPUT_PATH}")
+    print(f"Baseline written to {args.output}")
     print(f"Strider version: {document['strider_version']}")
     print(f"Entries: {len(document['entries'])}")
     for entry in document["entries"]:
