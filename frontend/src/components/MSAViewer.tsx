@@ -47,6 +47,8 @@ interface MSAViewerProps {
     onSelectionChange?: (accessions: Set<string>) => void;
     /** Optional region to highlight as a restored/pinned range */
     restoredRegion?: { start: number; end: number } | null;
+    /** If false, hide the autofind button and clean-region proposals (green selection dots still render). */
+    showAutofindUI?: boolean;
 }
 
 /* ── constants ────────────────────────────────────────── */
@@ -66,7 +68,7 @@ const MINIMAP_HEIGHT = MINIMAP_GC_H + MINIMAP_RULER_H + 50 + MINIMAP_HANDLE_H;
 const MAIN_GC_TRACK_H = 40;
 const MAIN_MSA_TRACK_H = 30;
 
-const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, primers, flankingPrimers, isDarkMode, navigateTarget, onOligoRegionSelect, onAutofindRegionSelect, onFlankingPrimerClick, selectedAccessions, onSelectionChange, restoredRegion }) => {
+const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, primers, flankingPrimers, isDarkMode, navigateTarget, onOligoRegionSelect, onAutofindRegionSelect, onFlankingPrimerClick, selectedAccessions, onSelectionChange, restoredRegion, showAutofindUI = true }) => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const hoverOverlayRef = useRef<HTMLCanvasElement>(null);
     const minimapRef = useRef<HTMLCanvasElement>(null);
@@ -1569,16 +1571,18 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
                         </svg>
                         {showOverview ? 'Hide overview' : 'Show overview'}
                     </button>
-                    <button
-                        onClick={() => setAutofindActive((v) => !v)}
-                        className={`px-2 py-1 text-xs font-medium rounded-md border transition-colors flex items-center gap-1 ${autofindActive
-                            ? 'border-indigo-300 dark:border-indigo-800 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/30'
-                            : 'border-slate-300 dark:border-slate-600 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'
-                            }`}
-                        title={autofindActive ? 'Hide autofind proposals' : 'Find zero-mismatch regions'}
-                    >
-                        autofind
-                    </button>
+                    {showAutofindUI && (
+                        <button
+                            onClick={() => setAutofindActive((v) => !v)}
+                            className={`px-2 py-1 text-xs font-medium rounded-md border transition-colors flex items-center gap-1 ${autofindActive
+                                ? 'border-indigo-300 dark:border-indigo-800 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/30'
+                                : 'border-slate-300 dark:border-slate-600 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'
+                                }`}
+                            title={autofindActive ? 'Hide autofind proposals' : 'Find zero-mismatch regions'}
+                        >
+                            autofind
+                        </button>
+                    )}
                     {copyFeedback && (
                         <span className="text-xs text-emerald-600 dark:text-emerald-400 font-medium animate-pulse">{copyFeedback}</span>
                     )}
@@ -1658,7 +1662,7 @@ const MSAViewer: React.FC<MSAViewerProps> = ({ alignment, onVisibleQueryChange, 
             </div>
 
             {/* ── autofind proposals ── */}
-            {autofindActive && (
+            {showAutofindUI && autofindActive && (
                 <div className="px-5 py-3 bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700">
                     <div className="flex items-center justify-between mb-2">
                         <span className="text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wide">

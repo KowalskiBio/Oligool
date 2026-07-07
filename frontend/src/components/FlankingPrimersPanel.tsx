@@ -837,6 +837,7 @@ export default function FlankingPrimersPanel({
                     navigateTarget={primerNavTarget ?? navigateTarget}
                     onFlankingPrimerClick={handleFlankingPrimerClick}
                     onOligoRegionSelect={handleMSARegionSelect}
+                    showAutofindUI={false}
                 />
             )}
 

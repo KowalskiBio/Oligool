@@ -2063,52 +2063,124 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                             )}
                         </div>
                     )}
+                     {/* Comparison modal */}
+                     {compareTarget && compareBaseId && (
+                         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" onClick={() => { setCompareTarget(null); setCompareBaseId(null); }}>
+                             <div className="max-w-3xl w-full bg-white dark:bg-slate-800 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-700 p-6" onClick={e => e.stopPropagation()}>
+                                 <div className="flex items-center justify-between mb-4">
+                                     <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-200">Compare positions</h2>
+                                     <button onClick={() => { setCompareTarget(null); setCompareBaseId(null); }} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-xl leading-none">&times;</button>
+                                 </div>
+                                  {(() => {
+                                      const { base, target } = compareTarget;
+                                      if (!base || !target) return null;
 
-                    {/* Comparison modal */}
-                    {compareTarget && (
-                        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" onClick={() => setCompareTarget(null)}>
-                            <div className="max-w-2xl w-full bg-white dark:bg-slate-800 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-700 p-6" onClick={e => e.stopPropagation()}>
-                                <div className="flex items-center justify-between mb-4">
-                                    <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-200">Compare positions</h2>
-                                    <button onClick={() => setCompareTarget(null)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-xl leading-none">&times;</button>
-                                </div>
-                                {(() => {
-                                    const { base, target } = compareTarget;
-                                    const renderPair = (label: string, a: SavedPosition['p1'], b: SavedPosition['p1'], aAbs: { start: number; end: number }, bAbs: { start: number; end: number }) => (
-                                        <div className="mb-4">
-                                            <div className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">{label}</div>
-                                            <div className="grid grid-cols-2 gap-3">
-                                                <div className="rounded-lg border border-slate-200 dark:border-slate-700 p-3">
-                                                    <div className="text-[10px] font-bold text-slate-400 mb-1">{base.label}</div>
-                                                    <div className="font-mono text-xs text-slate-700 dark:text-slate-200 break-all">{a.seq}</div>
-                                                    <div className="text-[10px] text-slate-500 mt-1">bp {aAbs.start}–{aAbs.end} · GC {a.gc.toFixed(1)}% · Tm {a.tm.toFixed(1)}°C</div>
-                                                </div>
-                                                <div className="rounded-lg border border-slate-200 dark:border-slate-700 p-3">
-                                                    <div className="text-[10px] font-bold text-slate-400 mb-1">{target.label}</div>
-                                                    <div className="font-mono text-xs text-slate-700 dark:text-slate-200 break-all">{b.seq}</div>
-                                                    <div className="text-[10px] text-slate-500 mt-1">bp {bAbs.start}–{bAbs.end} · GC {b.gc.toFixed(1)}% · Tm {b.tm.toFixed(1)}°C</div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    );
-                                    return (
-                                        <div>
-                                            {renderPair('Oligo 1', base.p1, target.p1, { start: base.p1AbsStart, end: base.p1AbsEnd }, { start: target.p1AbsStart, end: target.p1AbsEnd })}
-                                            {renderPair('Oligo 2', base.p2, target.p2, { start: base.p2AbsStart, end: base.p2AbsEnd }, { start: target.p2AbsStart, end: target.p2AbsEnd })}
-                                        </div>
-                                    );
-                                })()}
-                                <div className="mt-4 flex justify-end">
-                                    <button
-                                        onClick={() => setCompareTarget(null)}
-                                        className="px-4 py-2 text-sm font-medium rounded-md bg-indigo-600 text-white hover:bg-indigo-700 transition-colors"
-                                    >
-                                        Close
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    )}
+                                     const getColorDot = (color?: string) => {
+                                         const colorObj = PIN_COLORS.find(c => c.name === color) || PIN_COLORS[0];
+                                         return (<span className="inline-block w-2.5 h-2.5 rounded-full mr-1" style={{ backgroundColor: colorObj.value }} />);
+                                     };
+
+                                     // Character-level diff highlighting
+                                     const renderDiffSequence = (seq1: string, seq2: string) => {
+                                         const maxLen = Math.max(seq1.length, seq2.length);
+                                         const result = [];
+                                         for (let i = 0; i < maxLen; i++) {
+                                             if (seq1[i] !== seq2[i]) {
+                                                 result.push(<span key={i} className="text-red-500 dark:text-red-400 font-bold">{seq2[i] || '-'}</span>);
+                                             } else {
+                                                 result.push(<span key={i} className="text-slate-700 dark:text-slate-200">{seq2[i] || '-'}</span>);
+                                             }
+                                         }
+                                         return <>{result}</>;
+                                     };
+
+                                      const renderOligoPair = (label: string, oligoKey: 'p1' | 'p2') => {
+                                          const baseOligo = base[oligoKey];
+                                          const targetOligo = target[oligoKey];
+                                         return (
+                                             <div className="mb-6">
+                                                 <div className="text-sm font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wider mb-3">{label}</div>
+                                                 <div className="grid grid-cols-2 gap-4">
+                                                     {/* Base position */}
+                                                     <div className="bg-slate-50 dark:bg-slate-900/20 rounded-lg border border-slate-200 dark:border-slate-700 p-4">
+                                                         <div className="flex items-center gap-2 mb-3">
+                                                             <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">{base.label}</span>
+                                                             {getColorDot(base.color)}
+                                                         </div>
+                                                         {base.notes && (
+                                                             <div className="text-[10px] text-slate-500 dark:text-slate-400 italic mb-2 line-clamp-2">{base.notes}</div>
+                                                         )}
+                                                         <div className="flex items-center justify-between bg-white dark:bg-slate-800 rounded p-2 mb-2">
+                                                             <code className="font-mono text-sm text-slate-700 dark:text-slate-200 break-all flex-1">{baseOligo.seq}</code>
+                                                             <button
+                                                                 onClick={() => handleCopy(baseOligo.seq)}
+                                                                 title="Copy sequence"
+                                                                 className="p-1 hover:bg-slate-100 dark:hover:bg-slate-700 rounded transition-colors shrink-0 ml-2"
+                                                             >
+                                                                 <svg className="w-3.5 h-3.5 text-slate-400 hover:text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
+                                                                 </svg>
+                                                             </button>
+                                                         </div>
+                                                         <div className="flex flex-wrap gap-2 text-[10px] text-slate-500 dark:text-slate-400">
+                                                             <span className="font-mono">bp {base[`${oligoKey}AbsStart`]}–{base[`${oligoKey}AbsEnd`]}</span>
+                                                             <span>GC: <b className="text-slate-600 dark:text-slate-300">{baseOligo.gc.toFixed(1)}%</b></span>
+                                                             <span>Tm: <b className="text-slate-600 dark:text-slate-300">{baseOligo.tm.toFixed(1)}°C</b></span>
+                                                         </div>
+                                                     </div>
+                                                     
+                                                     {/* Target position */}
+                                                     <div className="bg-slate-50 dark:bg-slate-900/20 rounded-lg border border-slate-200 dark:border-slate-700 p-4">
+                                                          <div className="flex items-center gap-2 mb-3">
+                                                              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">{target.label}</span>
+                                                              {getColorDot(target.color)}
+                                                          </div>
+                                                          {target.notes && (
+                                                              <div className="text-[10px] text-slate-500 dark:text-slate-400 italic mb-2 line-clamp-2">{target.notes}</div>
+                                                          )}
+                                                         <div className="flex items-center justify-between bg-white dark:bg-slate-800 rounded p-2 mb-2">
+                                                             <code className="font-mono text-sm break-all flex-1">
+                                                                 {renderDiffSequence(baseOligo.seq, targetOligo.seq)}
+                                             </code>
+                                                             <button
+                                                                 onClick={() => handleCopy(targetOligo.seq)}
+                                                                 title="Copy sequence"
+                                                                 className="p-1 hover:bg-slate-100 dark:hover:bg-slate-700 rounded transition-colors shrink-0 ml-2"
+                                                             >
+                                                                 <svg className="w-3.5 h-3.5 text-slate-400 hover:text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
+                                                                 </svg>
+                                                             </button>
+                                                         </div>
+                                                         <div className="flex flex-wrap gap-2 text-[10px] text-slate-500 dark:text-slate-400">
+                                                              <span className="font-mono">bp {target[`${oligoKey}AbsStart`]}–{target[`${oligoKey}AbsEnd`]}</span>
+                                                             <span>GC: <b className="text-slate-600 dark:text-slate-300">{targetOligo.gc.toFixed(1)}%</b></span>
+                                                             <span>Tm: <b className="text-slate-600 dark:text-slate-300">{targetOligo.tm.toFixed(1)}°C</b></span>
+                                                         </div>
+                                                     </div>
+                                                 </div>
+                                             </div>
+                                         );
+                                     };
+
+                                     return (
+                                         <div>
+                                             {renderOligoPair('Oligo 2 (Left / 5\')', 'p2')}
+                                             {renderOligoPair('Oligo 1 (Right / 3\')', 'p1')}
+                                         </div>
+                                     );
+                                 })()}
+                                 <div className="mt-4 flex justify-end">
+                                     <button
+                                         onClick={() => { setCompareTarget(null); setCompareBaseId(null); }}
+                                         className="px-4 py-2 text-sm font-medium rounded-md bg-indigo-600 text-white hover:bg-indigo-700 transition-colors"
+                                     >
+                                         Close
+                                     </button>
+                                 </div>
+                             </div>
+                         </div>
+                     )}
 
                     {primers && idtCredentials && (
                         <div className="mt-4 border-t border-slate-100 dark:border-slate-700 pt-4">
