@@ -12,6 +12,7 @@ interface DesignedPrimer {
     homodimer: { structure_found: boolean; tm: number | null; dg: number | null };
     primer3: { tm: number | null; gc_percent: number | null; self_any: number | null; self_end: number | null; hairpin_th: number | null };
     interval?: [number, number];
+    name?: string;
 }
 
 interface DesignResult {
@@ -39,7 +40,7 @@ interface Props {
     idtCredentials?: any;
     idtAdvancedParams?: any;
     gappedData?: { seq: string; start: number; ungappedOffset?: number };
-    onFlankingPrimersUpdate?: (primers: { fwd: { start: number, end: number } | null, rev: { start: number, end: number } | null } | null) => void;
+    onFlankingPrimersUpdate?: (primers: { fwd: { start: number, end: number } | null, rev: { start: number, end: number } | null, fwdName?: string, revName?: string } | null) => void;
 }
 
 const API = ((import.meta.env.VITE_API_BASE as string) || '');
@@ -74,6 +75,13 @@ export default function FlankingPrimersPanel({
     // selected primer to "use"
     const [selFwd, setSelFwd] = useState<DesignedPrimer | null>(null);
     const [selRev, setSelRev] = useState<DesignedPrimer | null>(null);
+    // Debounce refs for IDT analysis after drag
+    const idtDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const idtPairDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const skipNextPairEffectRef = useRef(false);
+
+    const [fwdName, setFwdName] = useState('');
+    const [revName, setRevName] = useState('');
 
     const [copyFb, setCopyFb] = useState('');
     const doCopy = (text: string, key: string) => {
@@ -319,7 +327,7 @@ export default function FlankingPrimersPanel({
     const [analysisError, setAnalysisError] = useState<string | null>(null);
     const [isAnalysisExpanded, setIsAnalysisExpanded] = useState(true);
 
-    const runProductAnalysis = async (p1Seq: string, p2Seq: string) => {
+    const runProductAnalysis = useCallback(async (p1Seq: string, p2Seq: string) => {
         setIsAnalyzing(true);
         setAnalysisError(null);
         try {
@@ -330,7 +338,8 @@ export default function FlankingPrimersPanel({
                     client_id: idtCredentials.clientId,
                     client_secret: idtCredentials.clientSecret,
                     username: idtCredentials.username,
-                    password: idtCredentials.password
+                    password: idtCredentials.password,
+                    idt_region: idtCredentials.region || 'eu'
                 })
             });
             if (!tRes.ok) throw new Error("IDT Auth Failed");
@@ -346,7 +355,8 @@ export default function FlankingPrimersPanel({
                     mg_conc: idtAdvancedParams?.mg_conc ?? 10.0,
                     mv_conc: idtAdvancedParams?.mv_conc ?? 50.0,
                     dntp_conc: idtAdvancedParams?.dntp_conc ?? 0.8,
-                    oligo_conc: idtAdvancedParams?.oligo_conc ?? 0.25
+                    oligo_conc: idtAdvancedParams?.oligo_conc ?? 0.25,
+                    idt_region: idtCredentials.region || 'eu'
                 })
             });
             if (!aRes.ok) throw new Error("Product Analysis Failed");
@@ -358,14 +368,13 @@ export default function FlankingPrimersPanel({
         } finally {
             setIsAnalyzing(false);
         }
-    };
+    }, [idtCredentials, idtAdvancedParams]);
 
     const [idtResultsIndiv, setIdtResultsIndiv] = useState<Record<string, any>>({});
     const [analyzingIndiv, setAnalyzingIndiv] = useState<Record<string, boolean>>({});
 
     const analyzeIndividual = async (seq: string) => {
-        if (!idtCredentials || idtResultsIndiv[seq] || analyzingIndiv[seq]) return;
-        setAnalyzingIndiv(prev => ({ ...prev, [seq]: true }));
+        if (!idtCredentials || idtResultsIndiv[seq]) return;
         try {
             const tRes = await fetch(((import.meta.env.VITE_API_BASE as string) || "") + '/idt/token', {
                 method: 'POST',
@@ -374,7 +383,8 @@ export default function FlankingPrimersPanel({
                     client_id: idtCredentials.clientId,
                     client_secret: idtCredentials.clientSecret,
                     username: idtCredentials.username,
-                    password: idtCredentials.password
+                    password: idtCredentials.password,
+                    idt_region: idtCredentials.region || 'eu'
                 })
             });
             if (!tRes.ok) throw new Error("IDT Auth Failed");
@@ -390,7 +400,8 @@ export default function FlankingPrimersPanel({
                     mg_conc: idtAdvancedParams?.mg_conc ?? 10.0,
                     mv_conc: idtAdvancedParams?.mv_conc ?? 50.0,
                     dntp_conc: idtAdvancedParams?.dntp_conc ?? 0.8,
-                    oligo_conc: idtAdvancedParams?.oligo_conc ?? 0.25
+                    oligo_conc: idtAdvancedParams?.oligo_conc ?? 0.25,
+                    idt_region: idtCredentials.region || 'eu'
                 })
             });
             if (!aRes.ok) throw new Error("Product Analysis Failed");
@@ -403,15 +414,34 @@ export default function FlankingPrimersPanel({
         }
     };
 
+    // Stable ref for values read inside the drag effect's mouseup closure.
+    // The closure must not be recreated on every render while dragging.
+    const latestRef = useRef({ idtCredentials, selFwd, selRev, analyzeIndividual, runProductAnalysis });
+    useEffect(() => {
+        latestRef.current = { idtCredentials, selFwd, selRev, analyzeIndividual, runProductAnalysis };
+    });
 
     useEffect(() => {
+        if (skipNextPairEffectRef.current) {
+            // Reset flag and skip this invocation (debounced handler will run analysis)
+            skipNextPairEffectRef.current = false;
+            return;
+        }
         if (selFwd && selRev && idtCredentials) {
             runProductAnalysis(selFwd.sequence, selRev.sequence);
         } else {
             setIdtResults(null);
             setAnalysisError(null);
         }
-    }, [selFwd, selRev, idtCredentials, idtAdvancedParams]);
+    }, [selFwd, selRev, idtCredentials, idtAdvancedParams, runProductAnalysis]);
+
+    // Cleanup debounced timers on component unmount
+    useEffect(() => {
+        return () => {
+            if (idtDebounceRef.current) clearTimeout(idtDebounceRef.current);
+            if (idtPairDebounceRef.current) clearTimeout(idtPairDebounceRef.current);
+        };
+    }, []);
 
     const getIdtStatusColor = (dg: number | undefined) => {
         if (dg === undefined || dg === null) return 'text-slate-400';
@@ -564,13 +594,41 @@ export default function FlankingPrimersPanel({
                 const seq = id === 'fwd' ? fwdStrandSeq : revComp(fwdStrandSeq);
                 const gc = calcGCLocal(seq);
                 const tm = calcTmLocal(seq);
+                const existingName = id === 'fwd' ? latestRef.current.selFwd?.name : latestRef.current.selRev?.name;
                 const updated: DesignedPrimer = {
                     sequence: seq, length: seq.length, interval: newInterval,
                     gc_percent: gc, tm,
                     primer3: { tm, gc_percent: gc, self_any: null, self_end: null, hairpin_th: null },
                     hairpin: { structure_found: false, tm: null, dg: null },
                     homodimer: { structure_found: false, tm: null, dg: null },
+                    name: existingName,
                 };
+
+                // Set loading states immediately so the debounce window shows "Analyzing...".
+                const { idtCredentials: creds, selFwd: sf, selRev: sr, analyzeIndividual: analyzeInd, runProductAnalysis: runProd } = latestRef.current;
+                if (creds && updated.sequence) {
+                    // Prevent immediate pair-effect from running
+                    skipNextPairEffectRef.current = true;
+
+                    // Debounced individual analysis
+                    if (idtDebounceRef.current) clearTimeout(idtDebounceRef.current);
+                    setAnalyzingIndiv(prev => ({ ...prev, [updated.sequence]: true }));
+                    idtDebounceRef.current = setTimeout(() => {
+                        analyzeInd(updated.sequence);
+                    }, 1500);
+
+                    // Determine other primer sequence for pair analysis
+                    const otherSeq = id === 'fwd' ? (sr?.sequence || '') : (sf?.sequence || '');
+                    const p1Seq = id === 'fwd' ? updated.sequence : otherSeq;
+                    const p2Seq = id === 'rev' ? updated.sequence : otherSeq;
+                    if (p1Seq && p2Seq) {
+                        if (idtPairDebounceRef.current) clearTimeout(idtPairDebounceRef.current);
+                        setIsAnalyzing(true);
+                        idtPairDebounceRef.current = setTimeout(() => {
+                            runProd(p1Seq, p2Seq);
+                        }, 1500);
+                    }
+                }
 
                 if (id === 'fwd') {
                     setSelFwd(updated);
@@ -671,9 +729,13 @@ export default function FlankingPrimersPanel({
             if (!flankingPrimersForMSA) return; // don't clobber a restored selection
         }
         if (onFlankingPrimersUpdate) {
-            onFlankingPrimersUpdate(flankingPrimersForMSA);
+            onFlankingPrimersUpdate(flankingPrimersForMSA ? {
+                ...flankingPrimersForMSA,
+                fwdName: selFwd?.name || undefined,
+                revName: selRev?.name || undefined,
+            } : null);
         }
-    }, [flankingPrimersForMSA, onFlankingPrimersUpdate]);
+    }, [flankingPrimersForMSA, onFlankingPrimersUpdate, selFwd?.name, selRev?.name]);
 
     const gappedOligoPrimers = oligoPrimers ? {
         p1: { start: mapToGapped(oligoPrimers.p1.start), end: mapToGapped(oligoPrimers.p1.end) },
@@ -754,6 +816,7 @@ export default function FlankingPrimersPanel({
                 <div className="flex items-start justify-between gap-2 mb-2">
                     <div className="flex items-center gap-2">
                         <span className="font-bold text-slate-500 dark:text-slate-400 text-[10px] uppercase tracking-wider">#{idx + 1}</span>
+                        {p.name && <span className="font-bold text-amber-600 dark:text-amber-400 text-[10px] uppercase tracking-wider">{p.name}</span>}
                         <span className="font-mono text-slate-700 dark:text-slate-200 break-all">{p.sequence}</span>
                     </div>
                     <div className="flex gap-1 flex-shrink-0">
@@ -763,12 +826,15 @@ export default function FlankingPrimersPanel({
                         </button>
                         <button onClick={() => {
                             if (!isSelected) {
-                                if (side === 'fwd') setSelFwd(p);
-                                else setSelRev(p);
+                                if (side === 'fwd') { setSelFwd(p); setFwdName(p.name || ''); }
+                                else { setSelRev(p); setRevName(p.name || ''); }
+                                if (!idtResultsIndiv[p.sequence]) {
+                                    setAnalyzingIndiv(prev => ({ ...prev, [p.sequence]: true }));
+                                }
                                 analyzeIndividual(p.sequence);
                             } else {
-                                if (side === 'fwd') setSelFwd(null);
-                                else setSelRev(null);
+                                if (side === 'fwd') { setSelFwd(null); setFwdName(''); }
+                                else { setSelRev(null); setRevName(''); }
                             }
                         }}
                             className={`text-[10px] px-2 py-0.5 rounded border font-bold transition-all ${isSelected ? 'bg-emerald-500 border-emerald-500 text-white' : 'border-emerald-300 text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/20'}`}>
@@ -1018,6 +1084,38 @@ export default function FlankingPrimersPanel({
                                         )}
                                     </div>
                                 )}
+                            </div>
+                        )}
+
+                        {/* ── Rename Primers Panel ─────────────────────────── */}
+                        {selFwd && selRev && (
+                            <div className="col-span-full mt-4 border-t border-slate-100 dark:border-slate-700 pt-4">
+                                <div className="flex items-center gap-2 mb-3">
+                                    <div className="w-1.5 h-4 bg-slate-400 rounded-full"></div>
+                                    <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest">Rename Primers</h4>
+                                </div>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                    <div className="flex flex-col gap-1">
+                                        <label className="text-[10px] font-bold text-emerald-500 uppercase tracking-wider">Forward Primer Label</label>
+                                        <input
+                                            type="text"
+                                            value={fwdName}
+                                            onChange={e => { setFwdName(e.target.value); setSelFwd(prev => prev ? { ...prev, name: e.target.value } : prev); }}
+                                            placeholder="Forward Primer"
+                                            className="px-2.5 py-1.5 text-xs border border-emerald-200 dark:border-emerald-800/50 rounded-md bg-emerald-50/30 dark:bg-emerald-900/10 text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-1 focus:ring-emerald-400"
+                                        />
+                                    </div>
+                                    <div className="flex flex-col gap-1">
+                                        <label className="text-[10px] font-bold text-teal-500 uppercase tracking-wider">Reverse Primer Label</label>
+                                        <input
+                                            type="text"
+                                            value={revName}
+                                            onChange={e => { setRevName(e.target.value); setSelRev(prev => prev ? { ...prev, name: e.target.value } : prev); }}
+                                            placeholder="Reverse Primer"
+                                            className="px-2.5 py-1.5 text-xs border border-teal-200 dark:border-teal-800/50 rounded-md bg-teal-50/30 dark:bg-teal-900/10 text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-1 focus:ring-teal-400"
+                                        />
+                                    </div>
+                                </div>
                             </div>
                         )}
                     </div>
