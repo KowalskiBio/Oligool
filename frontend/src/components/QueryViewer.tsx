@@ -168,8 +168,8 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
 
     // MOLigo state
     const [tagSeq, setTagSeq] = useState(() => localStorage.getItem('tag_seq') || 'taattgaattgaaagataagtgt');
-    const [fwdPrimer, setFwdPrimer] = useState(() => localStorage.getItem('fwd_primer') || 'CGCGGTAGTAAGAAGTGAGA');
-    const [revPrimer, setRevPrimer] = useState(() => localStorage.getItem('rev_primer') || 'ACTCGTAGGGAATAAACCGT');
+    const [fwdPrimer, setFwdPrimer] = useState(() => localStorage.getItem('fwd_primer') || 'TATCCGTCCATCCAAGTCCG');
+    const [revPrimer, setRevPrimer] = useState(() => localStorage.getItem('rev_primer') || 'TGCGTACTACCATACCTGCC');
 
     // Saved Positions state (cleared on new BLAST / data change)
     const [savedPositions, setSavedPositions] = useState<SavedPosition[]>([]);
