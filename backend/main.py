@@ -477,6 +477,7 @@ class IdtAuthRequest(BaseModel):
     client_secret: str
     username: Optional[str] = None
     password: Optional[str] = None
+    idt_region: str = "eu"
 
 
 class IdtAnalyzeRequest(BaseModel):
@@ -487,18 +488,25 @@ class IdtAnalyzeRequest(BaseModel):
     mv_conc: float = 50.0
     dntp_conc: float = 0.8
     oligo_conc: float = 0.2
+    idt_region: str = "eu"
+
+
+def _idt_host(region: str) -> str:
+    return "www.idtdna.com" if region.lower() == "us" else "eu.idtdna.com"
 
 
 @app.post("/idt/token")
 async def get_idt_token(request: IdtAuthRequest):
     import requests
     import base64
-    
-    # Verified working endpoint from user's script
-    url = "https://eu.idtdna.com/IdentityServer/connect/token"
-    
+    import logging
+
+    logger = logging.getLogger(__name__)
+
+    host = _idt_host(request.idt_region)
+    url = f"https://{host}/IdentityServer/connect/token"
+
     try:
-        # Construct Authorization header exactly as in working script
         auth_bytes = f"{request.client_id}:{request.client_secret}".encode("utf-8")
         auth_string = base64.b64encode(auth_bytes).decode("ascii")
 
@@ -508,18 +516,18 @@ async def get_idt_token(request: IdtAuthRequest):
             "Accept": "application/json"
         }
 
-        # Data exactly as in working script
         payload = {
             "grant_type": "password",
             "scope": "test",
             "username": request.username,
             "password": request.password,
         }
-        
+
+        logger.info("Requesting IDT token for user %s on region %s", request.username, request.idt_region)
         response = requests.post(url, data=payload, headers=headers, timeout=15)
-        
+
         if not response.ok:
-            # Try to extract detail from IDT response
+            logger.warning("IDT token request failed for %s on %s: %s %s", request.username, request.idt_region, response.status_code, response.text[:500])
             try:
                 err_data = response.json()
                 detail = err_data.get("error_description") or err_data.get("error") or response.text
@@ -532,6 +540,7 @@ async def get_idt_token(request: IdtAuthRequest):
     except Exception as e:
         if isinstance(e, HTTPException):
             raise e
+        logger.exception("IDT token request raised exception for %s on %s", request.username, request.idt_region)
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -544,8 +553,8 @@ async def analyze_idt_oligos(request: IdtAnalyzeRequest):
         "Content-Type": "application/json",
         "Accept": "application/json"
     })
-    # User confirmed: use EU API host for actual calls
-    base_url = "https://eu.idtdna.com/restapi/v1/OligoAnalyzer"
+    host = _idt_host(request.idt_region)
+    base_url = f"https://{host}/restapi/v1/OligoAnalyzer"
 
     # Limit concurrency to avoid being flagged/throttled by IDT
     semaphore = asyncio.Semaphore(3)
