@@ -33,6 +33,7 @@ interface QueryViewerProps {
         username?: string;
         password?: string;
         mgConc?: number;
+        region?: 'us' | 'eu';
     };
     // MSA Viewer props — forwarded to FlankingPrimersPanel
     alignment?: string;
@@ -994,6 +995,9 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                         const p2Seq = fs.substring(p2S, p2E).toUpperCase();
                         const calcGcF = (s: string) => ((s.match(/[GCgc]/g) || []).length / s.length) * 100;
                         const toGappedAbs = (u: number) => absStart + mapUngappedToGapped(u - off, gappedSeq) + 1;
+                        if (!fixedContextRef.current) {
+                            captureFixedContext();
+                        }
                         setFixedAbsCoords({
                             p1AbsStart: toGappedAbs(p1S), p1AbsEnd: toGappedAbs(p1E),
                             p2AbsStart: toGappedAbs(p2S), p2AbsEnd: toGappedAbs(p2E),
@@ -1146,7 +1150,8 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                     client_id: idtCredentials.clientId,
                     client_secret: idtCredentials.clientSecret,
                     username: idtCredentials.username,
-                    password: idtCredentials.password
+                    password: idtCredentials.password,
+                    idt_region: idtCredentials.region || 'eu'
                 })
             });
             if (!tRes.ok) {
@@ -1162,7 +1167,8 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                 mg_conc: Number(idtAdvancedParams.mg_conc),
                 mv_conc: Number(idtAdvancedParams.mv_conc),
                 dntp_conc: Number(idtAdvancedParams.dntp_conc),
-                oligo_conc: Number(idtAdvancedParams.oligo_conc)
+                oligo_conc: Number(idtAdvancedParams.oligo_conc),
+                idt_region: idtCredentials.region || 'eu'
             };
 
             const aRes = await fetch(((import.meta.env.VITE_API_BASE as string) || "") + '/idt/analyze', {
