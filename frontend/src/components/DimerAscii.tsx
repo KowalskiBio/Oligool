@@ -105,11 +105,14 @@ function buildFromDotBracket(seq1: string, seq2: string, db: string): string | u
   const offset = offsets[Math.floor(offsets.length / 2)];
 
   // One strand stays leftmost; shift the other so pairs can align vertically.
+  // offset = botDisplayIdx - topIdx. When positive the bottom base is naturally
+  // to the right, so we must shift the top strand right; when negative we shift
+  // the bottom strand right.
   const labelWidth = 3;
   let topShift = 0;
   let botShift = 0;
-  if (offset >= 0) botShift = offset;
-  else topShift = -offset;
+  if (offset >= 0) topShift = offset;
+  else botShift = -offset;
 
   const top = "5' " + ' '.repeat(topShift) + seq1;
   const bot = "3' " + ' '.repeat(botShift) + revSeq2;
