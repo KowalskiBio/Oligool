@@ -2,6 +2,41 @@ import { useState, useEffect } from 'react';
 import { TAG_DATABASE } from '../constants/tags';
 import MOLigoReport from './MOLigoReport';
 
+interface IdtRawItem {
+    Local_DeltaG?: number;
+    DeltaG?: number;
+    deltaG?: number;
+    IDT_Tm?: number;
+    Local_Tm?: number;
+    Tm?: number;
+    DotBracket?: string;
+    Sequence?: string;
+    [key: string]: unknown;
+}
+
+export type IdtRawResult = IdtRawItem | IdtRawItem[];
+
+export interface IdtSingleResult {
+    hairpin?: { DeltaG?: number; raw?: IdtRawResult };
+    self_dimer?: { DeltaG?: number; raw?: IdtRawResult };
+    analyze?: IdtRawResult;
+}
+
+export interface MoligoIdtResults {
+    m1?: IdtSingleResult;
+    m2?: IdtSingleResult;
+    pairwise?: { DeltaG?: number; raw?: IdtRawResult };
+}
+
+export interface ReportData {
+    moligo1?: IdtSingleResult;
+    moligo2?: IdtSingleResult;
+    fwdPrimer?: IdtSingleResult;
+    revPrimer?: IdtSingleResult;
+    moligoPairwise?: { DeltaG?: number; raw?: IdtRawResult };
+    primerPairwise?: { DeltaG?: number; raw?: IdtRawResult };
+}
+
 export interface MOLigoProps {
     templateSeq: string;
     moligo1Seq: string;
@@ -15,6 +50,7 @@ export interface MOLigoProps {
     onFwdChange?: (val: string) => void;
     onRevChange?: (val: string) => void;
     onProceed?: () => void;
+    moligoIdtResults?: MoligoIdtResults;
     idtCredentials?: {
         clientId: string;
         clientSecret: string;
@@ -28,6 +64,7 @@ export interface MOLigoProps {
         dntp_conc: number;
         oligo_conc: number;
     };
+    reportData?: ReportData | null;
 }
 
 const C = {
@@ -39,6 +76,8 @@ const C = {
     tmpl: '#94a3b8',   // slate   – template strands
     tmplFill: '#e2e8f0',
 };
+
+const API = ((import.meta.env.VITE_API_BASE as string) || '');
 
 const reverseComplement = (s: string) => {
     const dict: { [key: string]: string } = {
@@ -59,6 +98,17 @@ export default function MOLigoPanel(props: MOLigoProps) {
     const [isSeqMode, setIsSeqMode] = useState(() => localStorage.getItem('moligo_prov_seq_mode') === 'true');
     const [isSchematicOpen, setIsSchematicOpen] = useState(() => localStorage.getItem('moligo_prov_schematic_open') !== 'false');
     const [copyFeedback, setCopyFeedback] = useState<string>('');
+    const [reportData, setReportData] = useState<{
+        moligo1?: IdtSingleResult;
+        moligo2?: IdtSingleResult;
+        fwdPrimer?: IdtSingleResult;
+        revPrimer?: IdtSingleResult;
+        moligoPairwise?: { DeltaG?: number; raw?: IdtRawResult };
+        primerPairwise?: { DeltaG?: number; raw?: IdtRawResult };
+    } | null>(null);
+    const [isReportGenerating, setIsReportGenerating] = useState(false);
+    const [reportError, setReportError] = useState<string | null>(null);
+    const [pendingPdf, setPendingPdf] = useState(false);
 
     const handleCopy = (text: string) => {
         const doFallback = () => {
@@ -86,6 +136,210 @@ export default function MOLigoPanel(props: MOLigoProps) {
     };
 
     const fwdRCSeq = reverseComplement(fwdPrimer || "");
+
+    const extractBestDeltaG = (raw: IdtRawResult | undefined): number | undefined => {
+        if (!raw) return undefined;
+        if (Array.isArray(raw)) {
+            for (const item of raw) {
+                const dg = item?.Local_DeltaG ?? item?.DeltaG ?? item?.deltaG;
+                if (dg !== undefined && dg !== null) return Number(dg);
+            }
+            return undefined;
+        }
+        const dg = raw.Local_DeltaG ?? raw.DeltaG ?? raw.deltaG;
+        return dg !== undefined && dg !== null ? Number(dg) : undefined;
+    };
+
+    const extractBestTm = (raw: IdtRawResult | undefined): number | undefined => {
+        if (!raw) return undefined;
+        if (Array.isArray(raw)) {
+            for (const item of raw) {
+                const tm = item?.IDT_Tm ?? item?.Local_Tm ?? item?.Tm;
+                if (tm !== undefined && tm !== null) return Number(tm);
+            }
+            return undefined;
+        }
+        const tm = raw.IDT_Tm ?? raw.Local_Tm ?? raw.Tm;
+        return tm !== undefined && tm !== null ? Number(tm) : undefined;
+    };
+
+    const analyzeSequencePair = async (token: string, p1: string, p2: string): Promise<{ p1: IdtSingleResult; p2: IdtSingleResult; pairwise: { DeltaG?: number; raw?: IdtRawResult } }> => {
+        const region = props.idtCredentials?.region || 'eu';
+        const adv = props.idtAdvancedParams;
+        const response = await fetch(API + '/idt/analyze', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                p1_seq: p1,
+                p2_seq: p2,
+                token,
+                mg_conc: adv?.mg_conc ?? 10.0,
+                mv_conc: adv?.mv_conc ?? 50.0,
+                dntp_conc: adv?.dntp_conc ?? 0.8,
+                oligo_conc: adv?.oligo_conc ?? 0.25,
+                idt_region: region
+            })
+        });
+        if (!response.ok) {
+            const err = await response.json().catch(() => ({ detail: `IDT Analysis Failed (${response.status})` }));
+            throw new Error(err.detail || 'IDT Analysis Failed');
+        }
+        const data = await response.json();
+        if (data.error) throw new Error(data.error);
+        return {
+            p1: { hairpin: { DeltaG: extractBestDeltaG(data.m1?.hairpin), raw: data.m1?.hairpin }, self_dimer: { DeltaG: extractBestDeltaG(data.m1?.self_dimer), raw: data.m1?.self_dimer }, analyze: data.m1?.analyze },
+            p2: { hairpin: { DeltaG: extractBestDeltaG(data.m2?.hairpin), raw: data.m2?.hairpin }, self_dimer: { DeltaG: extractBestDeltaG(data.m2?.self_dimer), raw: data.m2?.self_dimer }, analyze: data.m2?.analyze },
+            pairwise: { DeltaG: extractBestDeltaG(data.pairwise), raw: data.pairwise }
+        };
+    };
+
+    const generateReportData = async () => {
+        if (!props.idtCredentials?.clientId || !props.idtCredentials?.clientSecret) {
+            throw new Error('IDT credentials are required for the thermodynamic report.');
+        }
+        if (!fwdPrimer || !revPrimer) {
+            throw new Error('Forward and reverse primers are required.');
+        }
+
+        const region = props.idtCredentials.region || 'eu';
+        const authRes = await fetch(API + '/idt/token', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                client_id: props.idtCredentials.clientId,
+                client_secret: props.idtCredentials.clientSecret,
+                username: props.idtCredentials.username,
+                password: props.idtCredentials.password,
+                idt_region: region
+            })
+        });
+        if (!authRes.ok) {
+            const err = await authRes.json().catch(() => ({ detail: 'IDT Auth Failed' }));
+            throw new Error(err.detail || 'IDT Auth Failed');
+        }
+        const { access_token } = await authRes.json();
+
+        const [primerData] = await Promise.all([
+            analyzeSequencePair(access_token, fwdPrimer, revPrimer)
+        ]);
+
+        return {
+            moligo1: props.moligoIdtResults?.m1,
+            moligo2: props.moligoIdtResults?.m2,
+            moligoPairwise: props.moligoIdtResults?.pairwise,
+            fwdPrimer: primerData.p1,
+            revPrimer: primerData.p2,
+            primerPairwise: primerData.pairwise
+        };
+    };
+
+    const buildTxtReport = () => {
+        if (!reportData) return '';
+        const { moligo1: m1Res, moligo2: m2Res, fwdPrimer: fwdRes, revPrimer: revRes, moligoPairwise, primerPairwise } = reportData;
+        const gc = (seq: string) => ((seq.match(/[GCgc]/g) || []).length / (seq.length || 1) * 100).toFixed(1);
+        const dgStr = (v?: number) => v !== undefined ? `${v.toFixed(2)} kcal/mol` : 'N/A';
+        const tmStr = (res?: IdtSingleResult) => {
+            const tm = extractBestTm(res?.hairpin?.raw);
+            return tm !== undefined ? `${tm.toFixed(1)} °C` : 'N/A';
+        };
+
+        let txt = `Oligool MOLigo Design Report\n`;
+        txt += `Job: ${props.jobName || 'N/A'}\n`;
+        txt += `Target: ${props.queryId || 'N/A'}\n`;
+        txt += `Generated: ${new Date().toISOString()}\n`;
+        txt += `\n========================================\n\n`;
+
+        txt += `MOLIGO 1 (Capture + TAG + RevComp(FwdP))\n`;
+        txt += `  Sequence: ${moligo1Seq}${(tagSeq || '').toLowerCase()}${fwdRCSeq}\n`;
+        txt += `  M1 binding part: ${moligo1Seq}\n`;
+        txt += `  Length: ${moligo1Seq.length + (tagSeq?.length || 0) + fwdRCSeq.length} nt\n`;
+        txt += `  GC: ${gc(moligo1Seq)}%\n`;
+        txt += `  Hairpin ΔG: ${dgStr(m1Res?.hairpin?.DeltaG)}\n`;
+        txt += `  Hairpin Tm: ${tmStr(m1Res)}\n`;
+        txt += `  Self-Dimer ΔG: ${dgStr(m1Res?.self_dimer?.DeltaG)}\n`;
+        txt += `\n`;
+
+        txt += `MOLIGO 2 (RevP + Capture)\n`;
+        txt += `  Sequence: ${revPrimer || ''}${moligo2Seq}\n`;
+        txt += `  M2 binding part: ${moligo2Seq}\n`;
+        txt += `  Length: ${(revPrimer || '').length + moligo2Seq.length} nt\n`;
+        txt += `  GC: ${gc(moligo2Seq)}%\n`;
+        txt += `  Hairpin ΔG: ${dgStr(m2Res?.hairpin?.DeltaG)}\n`;
+        txt += `  Hairpin Tm: ${tmStr(m2Res)}\n`;
+        txt += `  Self-Dimer ΔG: ${dgStr(m2Res?.self_dimer?.DeltaG)}\n`;
+        txt += `\n`;
+
+        txt += `FORWARD PRIMER\n`;
+        txt += `  Sequence: ${fwdPrimer || ''}\n`;
+        txt += `  Length: ${(fwdPrimer || '').length} nt\n`;
+        txt += `  GC: ${gc(fwdPrimer || '')}%\n`;
+        txt += `  Hairpin ΔG: ${dgStr(fwdRes?.hairpin?.DeltaG)}\n`;
+        txt += `  Hairpin Tm: ${tmStr(fwdRes)}\n`;
+        txt += `  Self-Dimer ΔG: ${dgStr(fwdRes?.self_dimer?.DeltaG)}\n`;
+        txt += `\n`;
+
+        txt += `REVERSE PRIMER\n`;
+        txt += `  Sequence: ${revPrimer || ''}\n`;
+        txt += `  Length: ${(revPrimer || '').length} nt\n`;
+        txt += `  GC: ${gc(revPrimer || '')}%\n`;
+        txt += `  Hairpin ΔG: ${dgStr(revRes?.hairpin?.DeltaG)}\n`;
+        txt += `  Hairpin Tm: ${tmStr(revRes)}\n`;
+        txt += `  Self-Dimer ΔG: ${dgStr(revRes?.self_dimer?.DeltaG)}\n`;
+        txt += `\n`;
+
+        txt += `PAIRWISE INTERACTIONS\n`;
+        txt += `  M1 – M2 Hetero-Dimer ΔG: ${dgStr(moligoPairwise?.DeltaG)}\n`;
+        txt += `  Fwd – Rev Hetero-Dimer ΔG: ${dgStr(primerPairwise?.DeltaG)}\n`;
+        txt += `\n`;
+
+        txt += `TEMPLATE SEQUENCE\n`;
+        txt += `  ${props.templateSeq}\n`;
+
+        return txt;
+    };
+
+    const downloadTxt = () => {
+        const txt = buildTxtReport();
+        const blob = new Blob([txt], { type: 'text/plain;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${(props.jobName || 'oligool-design').replace(/\s+/g, '_')}_report.txt`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    };
+
+    const handleDownload = async (format: 'txt' | 'pdf') => {
+        setReportError(null);
+        if (!reportData) {
+            setIsReportGenerating(true);
+            try {
+                const data = await generateReportData();
+                setReportData(data);
+                if (format === 'txt') {
+                    setTimeout(downloadTxt, 0);
+                } else {
+                    setPendingPdf(true);
+                }
+            } catch (err) {
+                setReportError(err instanceof Error ? err.message : 'Report generation failed.');
+            } finally {
+                setIsReportGenerating(false);
+            }
+        } else {
+            if (format === 'txt') downloadTxt();
+            else setPendingPdf(true);
+        }
+    };
+
+    useEffect(() => {
+        if (pendingPdf && reportData) {
+            setPendingPdf(false);
+            setTimeout(() => window.print(), 300);
+        }
+    }, [pendingPdf, reportData]);
 
     useEffect(() => {
         localStorage.setItem('moligo_prov_seq_mode', String(isSeqMode));
@@ -513,15 +767,36 @@ export default function MOLigoPanel(props: MOLigoProps) {
 
 
                 {/* ── Report & Analysis Actions ── */}
-                <div className="mt-8 mb-6 flex justify-center items-center gap-4 flex-wrap">
-                    <button
-                        id="btn-proceed-design"
-                        onClick={onProceed}
-                        className="flex items-center gap-2 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white px-6 py-2.5 rounded-lg font-bold transition-all shadow-lg shadow-emerald-200/50 dark:shadow-emerald-900/30 active:scale-95 border border-emerald-400"
-                    >
-                        Proceed with the Design
-                    </button>
-                    <MOLigoReport {...props} />
+                <div className="mt-8 mb-6 flex flex-col items-center gap-4">
+                    <div className="flex justify-center items-center gap-4 flex-wrap">
+                        <button
+                            id="btn-proceed-design"
+                            onClick={onProceed}
+                            className="flex items-center gap-2 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white px-6 py-2.5 rounded-lg font-bold transition-all shadow-lg shadow-emerald-200/50 dark:shadow-emerald-900/30 active:scale-95 border border-emerald-400"
+                        >
+                            Proceed with the Design
+                        </button>
+                    </div>
+                    <div className="flex justify-center items-center gap-3 flex-wrap">
+                        <button
+                            onClick={() => handleDownload('txt')}
+                            disabled={isReportGenerating}
+                            className="flex items-center gap-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 px-4 py-2 rounded-lg font-bold text-sm transition-all disabled:opacity-50"
+                        >
+                            {isReportGenerating ? 'Generating…' : 'Download .txt'}
+                        </button>
+                        <button
+                            onClick={() => handleDownload('pdf')}
+                            disabled={isReportGenerating}
+                            className="flex items-center gap-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 px-4 py-2 rounded-lg font-bold text-sm transition-all disabled:opacity-50"
+                        >
+                            {isReportGenerating ? 'Generating…' : 'Download .pdf'}
+                        </button>
+                    </div>
+                    {reportError && (
+                        <div className="text-sm text-red-500 font-bold max-w-md text-center">{reportError}</div>
+                    )}
+                    <MOLigoReport {...props} reportData={reportData} />
                 </div>
             </div>
         </div>
