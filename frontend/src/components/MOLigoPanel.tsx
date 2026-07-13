@@ -766,37 +766,46 @@ export default function MOLigoPanel(props: MOLigoProps) {
 
 
 
-                {/* ── Report & Analysis Actions ── */}
-                <div className="mt-8 mb-6 flex flex-col items-center gap-4">
-                    <div className="flex justify-center items-center gap-4 flex-wrap">
-                        <button
-                            id="btn-proceed-design"
-                            onClick={onProceed}
-                            className="flex items-center gap-2 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white px-6 py-2.5 rounded-lg font-bold transition-all shadow-lg shadow-emerald-200/50 dark:shadow-emerald-900/30 active:scale-95 border border-emerald-400"
-                        >
-                            Proceed with the Design
-                        </button>
+                {/* ── Final Report Generation ── */}
+                <div className="mt-8 mb-6 p-5 bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-800/50 dark:to-slate-900/50 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm">
+                    <div className="flex items-center gap-2 mb-2">
+                        <div className="w-2 h-5 bg-indigo-500 rounded-full"></div>
+                        <h4 className="text-sm font-bold text-slate-600 dark:text-slate-300 uppercase tracking-widest">Final Report</h4>
                     </div>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">
+                        Generate a full report including thermodynamic analysis (hairpin, self-dimer, pairwise) for both moligos and both primers.
+                    </p>
                     <div className="flex justify-center items-center gap-3 flex-wrap">
                         <button
                             onClick={() => handleDownload('txt')}
                             disabled={isReportGenerating}
-                            className="flex items-center gap-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 px-4 py-2 rounded-lg font-bold text-sm transition-all disabled:opacity-50"
+                            className="flex items-center gap-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 px-5 py-2 rounded-lg font-bold text-sm transition-all disabled:opacity-50 min-w-[140px] justify-center"
                         >
-                            {isReportGenerating ? 'Generating…' : 'Download .txt'}
+                            {isReportGenerating ? 'Generating…' : 'Generate .txt'}
                         </button>
                         <button
                             onClick={() => handleDownload('pdf')}
                             disabled={isReportGenerating}
-                            className="flex items-center gap-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 px-4 py-2 rounded-lg font-bold text-sm transition-all disabled:opacity-50"
+                            className="flex items-center gap-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 px-5 py-2 rounded-lg font-bold text-sm transition-all disabled:opacity-50 min-w-[140px] justify-center"
                         >
-                            {isReportGenerating ? 'Generating…' : 'Download .pdf'}
+                            {isReportGenerating ? 'Generating…' : 'Generate .pdf'}
                         </button>
                     </div>
                     {reportError && (
-                        <div className="text-sm text-red-500 font-bold max-w-md text-center">{reportError}</div>
+                        <div className="mt-3 text-sm text-red-500 font-bold max-w-md text-center mx-auto">{reportError}</div>
                     )}
                     <MOLigoReport {...props} reportData={reportData} />
+                </div>
+
+                {/* ── Report & Analysis Actions ── */}
+                <div className="mt-8 mb-6 flex justify-center items-center gap-4 flex-wrap">
+                    <button
+                        id="btn-proceed-design"
+                        onClick={onProceed}
+                        className="flex items-center gap-2 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white px-6 py-2.5 rounded-lg font-bold transition-all shadow-lg shadow-emerald-200/50 dark:shadow-emerald-900/30 active:scale-95 border border-emerald-400"
+                    >
+                        Proceed with the Design
+                    </button>
                 </div>
             </div>
         </div>
