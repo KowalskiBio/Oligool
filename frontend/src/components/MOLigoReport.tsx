@@ -1,6 +1,6 @@
 import React from 'react';
 import { createPortal } from 'react-dom';
-import type { MOLigoProps } from './MOLigoPanel';
+import type { MOLigoProps, IdtRawResult } from './MOLigoPanel';
 
 interface HighlightRange {
     start: number;
@@ -12,12 +12,10 @@ interface HighlightRange {
 }
 
 export default function MOLigoReport(props: MOLigoProps) {
-    const { templateSeq, moligo1Seq, moligo2Seq, tagSeq, fwdPrimer, revPrimer, queryId, jobName } = props;
+    const { templateSeq, moligo1Seq, moligo2Seq, tagSeq, fwdPrimer, revPrimer, queryId, jobName, reportData } = props;
 
-    // Helper functions for thermodynamic data mock if not exact
     const gcContent = (seq: string) => ((seq.match(/[GCgc]/g) || []).length / (seq.length || 1) * 100).toFixed(1);
 
-    // Compute basic reverse complements
     const reverseComplement = (s: string) => {
         const dict: { [key: string]: string } = { 'A': 'T', 'T': 'A', 'C': 'G', 'G': 'C', 'N': 'N', 'a': 't', 't': 'a', 'c': 'g', 'g': 'c', 'n': 'n' };
         return s.split('').reverse().map(c => dict[c] || c).join('');
@@ -25,77 +23,63 @@ export default function MOLigoReport(props: MOLigoProps) {
 
     const fwdRCSeq = reverseComplement(fwdPrimer || "");
 
-    // Build the format block for sequence matching
-    // We try to find where M2 and M1 map in the templateSeq
-    // Note: If they map to the reverse strand, finding exact match might fail without revcomp, 
-    // but MOLigoPanel claims they bind directly to the (5'->3') strand shown
-    
-    let m2Start = templateSeq.toUpperCase().indexOf(moligo2Seq.toUpperCase());
-    let m1Start = templateSeq.toUpperCase().indexOf(moligo1Seq.toUpperCase());
+    const extractBestTm = (raw: IdtRawResult | undefined): number | undefined => {
+        if (!raw) return undefined;
+        if (Array.isArray(raw)) {
+            for (const item of raw) {
+                const tm = item?.IDT_Tm ?? item?.Local_Tm ?? item?.Tm;
+                if (tm !== undefined && tm !== null) return Number(tm);
+            }
+            return undefined;
+        }
+        const tm = raw.IDT_Tm ?? raw.Local_Tm ?? raw.Tm;
+        return tm !== undefined && tm !== null ? Number(tm) : undefined;
+    };
+
+    const dgStr = (v?: number) => v !== undefined ? `${v.toFixed(2)} kcal/mol` : 'N/A';
+    const tmStr = (raw?: IdtRawResult | undefined) => {
+        const tm = extractBestTm(raw);
+        return tm !== undefined ? `${tm.toFixed(1)} °C` : 'N/A';
+    };
+
+    const m2Start = templateSeq.toUpperCase().indexOf(moligo2Seq.toUpperCase());
+    const m1Start = templateSeq.toUpperCase().indexOf(moligo1Seq.toUpperCase());
 
     const highlights: HighlightRange[] = [];
     if (m2Start >= 0) {
-        highlights.push({ start: m2Start, end: m2Start + moligo2Seq.length, color: 'black', bgColor: '#4ade80' }); // Green marker
+        highlights.push({ start: m2Start, end: m2Start + moligo2Seq.length, color: 'black', bgColor: '#4ade80' });
     }
     if (m1Start >= 0) {
-        // As per the image, maybe yellow and red underlines
-        // If there's a TAG sequence in the template (rare, but let's highlight M1 differently)
         const half = Math.floor(moligo1Seq.length / 2);
-        highlights.push({ start: m1Start, end: m1Start + half, color: 'black', bgColor: '#facc15' }); // Yellow marker
-        highlights.push({ start: m1Start + half, end: m1Start + moligo1Seq.length, color: 'red', bold: true, underline: true }); // Red underline marker
+        highlights.push({ start: m1Start, end: m1Start + half, color: 'black', bgColor: '#facc15' });
+        highlights.push({ start: m1Start + half, end: m1Start + moligo1Seq.length, color: 'red', bold: true, underline: true });
     }
 
     const formatGenBankSeq = (seq: string, offset = 1) => {
-        const lines = [];
-        const LINE_LEN = 60;
-        
-        for (let i = 0; i < seq.length; i += LINE_LEN) {
-            const lineChunk = seq.slice(i, i + LINE_LEN);
-            // Prefix line number (right aligned to 9 chars like standard format)
-            const lineNum = (i + offset).toString().padStart(9, ' ');
-            
-            // Format chunks of 10
-            const chunks = [];
-            for (let j = 0; j < lineChunk.length; j += 10) {
-                chunks.push(lineChunk.slice(j, j + 10));
-            }
-            
-            let formattedLine = lineNum + " " + chunks.join(" ");
-            lines.push({ start: i, end: i + LINE_LEN, relativeStart: i, formattedLine, chunks: lineChunk });
-        }
-        
-        // This is a complex task: injecting HTML <mark> tags into a text blob properly without mutating react children haphazardly
-        // A simpler way for the report: output characters one by one with inline spans based on highlights
         const renderHighlightedChars = () => {
             const result = [];
-            let currentLine = [];
-            
+            let currentLine: React.ReactNode[] = [];
+
             for (let i = 0; i < seq.length; i++) {
-                // Determine if char is in any highlight
-                let activeHighlight = highlights.find(h => i >= h.start && i < h.end);
-                
-                let style: React.CSSProperties = {};
+                const activeHighlight = highlights.find(h => i >= h.start && i < h.end);
+                const style: React.CSSProperties = {};
                 if (activeHighlight) {
                     if (activeHighlight.color) style.color = activeHighlight.color;
                     if (activeHighlight.bgColor) style.backgroundColor = activeHighlight.bgColor;
                     if (activeHighlight.bold) style.fontWeight = 'bold';
                     if (activeHighlight.underline) style.textDecoration = 'underline';
                     if (activeHighlight.underline && activeHighlight.color) {
-                        // Make the underline explicitly red and thick for visibility on print
                         style.textDecorationColor = activeHighlight.color;
                         style.textDecorationThickness = '2px';
                     }
                 }
-                
-                // Add char
+
                 currentLine.push(<span key={`c${i}`} style={style}>{seq[i].toLowerCase()}</span>);
-                
-                // Add space every 10
+
                 if ((i + 1) % 10 === 0 && (i + 1) % 60 !== 0 && i !== seq.length - 1) {
                     currentLine.push(<span key={`s${i}`}> </span>);
                 }
-                
-                // End of line
+
                 if ((i + 1) % 60 === 0 || i === seq.length - 1) {
                     const lineNum = (i - (i % 60) + offset).toString().padStart(9, ' ').replace(/ /g, '\u00A0');
                     result.push(
@@ -113,9 +97,19 @@ export default function MOLigoReport(props: MOLigoProps) {
         return <div style={{ whiteSpace: 'preWrap' }}>{renderHighlightedChars()}</div>;
     };
 
+    const ThermoRow = ({ label, hairpinDg, hairpinRaw, dimerDg }: { label: string; hairpinDg?: number; hairpinRaw?: IdtRawResult | undefined; dimerDg?: number }) => (
+        <div style={{ display: 'flex', marginBottom: '6px' }}>
+            <div style={{ width: '180px', fontWeight: 'bold' }}>{label}</div>
+            <div style={{ flex: 1 }}>
+                Hairpin ΔG: {dgStr(hairpinDg)} (Tm: {tmStr(hairpinRaw)})&nbsp;&nbsp;|&nbsp;&nbsp;
+                Self-Dimer ΔG: {dgStr(dimerDg)}
+            </div>
+        </div>
+    );
+
     const reportNode = (
         <div className="printable-report" style={{ display: 'none', fontFamily: 'monospace', padding: '40px', fontSize: '11px', lineHeight: '1.4', color: 'black', backgroundColor: 'white' }}>
-            
+
             <div style={{ marginBottom: '20px' }}>
                 <div>Nový design vazba přímo na koule</div>
                 <div>{jobName || "Target Name Not Provided"}</div>
@@ -158,6 +152,40 @@ LENGTH          ${moligo2Seq.length}
 GC CONTENT      ${gcContent(moligo2Seq)} %`}
                 </pre>
             </div>
+
+            {reportData && (
+                <div style={{ marginBottom: '30px', borderTop: '1px solid black', paddingTop: '20px' }}>
+                    <div style={{ fontWeight: 'bold', marginBottom: '12px', fontSize: '13px' }}>Thermodynamic Analysis</div>
+                    <ThermoRow
+                        label="MOLIGO 1 (M1)"
+                        hairpinDg={reportData.moligo1?.hairpin?.DeltaG}
+                        hairpinRaw={reportData.moligo1?.hairpin?.raw}
+                        dimerDg={reportData.moligo1?.self_dimer?.DeltaG}
+                    />
+                    <ThermoRow
+                        label="MOLIGO 2 (M2)"
+                        hairpinDg={reportData.moligo2?.hairpin?.DeltaG}
+                        hairpinRaw={reportData.moligo2?.hairpin?.raw}
+                        dimerDg={reportData.moligo2?.self_dimer?.DeltaG}
+                    />
+                    <ThermoRow
+                        label="Forward Primer"
+                        hairpinDg={reportData.fwdPrimer?.hairpin?.DeltaG}
+                        hairpinRaw={reportData.fwdPrimer?.hairpin?.raw}
+                        dimerDg={reportData.fwdPrimer?.self_dimer?.DeltaG}
+                    />
+                    <ThermoRow
+                        label="Reverse Primer"
+                        hairpinDg={reportData.revPrimer?.hairpin?.DeltaG}
+                        hairpinRaw={reportData.revPrimer?.hairpin?.raw}
+                        dimerDg={reportData.revPrimer?.self_dimer?.DeltaG}
+                    />
+                    <div style={{ marginTop: '12px' }}>
+                        M1–M2 Hetero-Dimer ΔG: {dgStr(reportData.moligoPairwise?.DeltaG)}&nbsp;&nbsp;|&nbsp;&nbsp;
+                        Fwd–Rev Hetero-Dimer ΔG: {dgStr(reportData.primerPairwise?.DeltaG)}
+                    </div>
+                </div>
+            )}
 
             <div style={{ marginBottom: '30px', marginTop: '30px' }}>
                 <div style={{ display: 'flex', marginBottom: '10px' }}>
