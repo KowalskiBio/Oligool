@@ -2301,6 +2301,7 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                                     document.getElementById('flanking-primers-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
                                 }, 100);
                             }}
+                            moligoIdtResults={idtResults ? { m1: idtResults.m1, m2: idtResults.m2, pairwise: idtResults.pairwise } : undefined}
                             idtCredentials={idtCredentials}
                             idtAdvancedParams={idtAdvancedParams}
                         />
