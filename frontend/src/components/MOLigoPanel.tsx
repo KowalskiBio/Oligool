@@ -20,6 +20,7 @@ export interface MOLigoProps {
         clientSecret: string;
         username?: string;
         password?: string;
+        region?: 'us' | 'eu';
     };
     idtAdvancedParams?: {
         mv_conc: number;
