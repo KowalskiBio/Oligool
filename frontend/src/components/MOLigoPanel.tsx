@@ -406,9 +406,9 @@ export default function MOLigoPanel(props: MOLigoProps) {
                                 className="w-full p-1.5 text-[10px] border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 rounded focus:ring-red-500 focus:border-red-500 outline-none transition-colors"
                                 onChange={(e) => {
                                     const tag = TAG_DATABASE.find(t => t.partNumber === e.target.value);
-                                    if (tag) onTagChange?.(tag.complementary);
+                                    if (tag) onTagChange?.(tag.antiTag);
                                 }}
-                                value={TAG_DATABASE.find(t => t.complementary === tagSeq)?.partNumber || ""}
+                                value={TAG_DATABASE.find(t => t.antiTag === tagSeq)?.partNumber || ""}
                             >
                                 <option value="">-- Pick Database TAG --</option>
                                 {TAG_DATABASE.map(tag => (
@@ -428,13 +428,6 @@ export default function MOLigoPanel(props: MOLigoProps) {
                                 />
                             </div>
                         </div>
-                        {tagLen > 0 && (
-                            <div className="mt-3 border-t border-slate-100 dark:border-slate-700 pt-2 flex items-center justify-between">
-                                <span className="text-[10px] text-slate-500 font-mono truncate">
-                                    RC: {reverseComplement(tagSeq || "")}
-                                </span>
-                            </div>
-                        )}
                     </div>
 
                     {/* Forward Primer Input Box */}
