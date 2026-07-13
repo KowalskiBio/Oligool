@@ -30,6 +30,10 @@ function App() {
   const [idtClientSecret, setIdtClientSecret] = useState(() => localStorage.getItem('idt_client_secret') || '');
   const [idtUsername, setIdtUsername] = useState(() => localStorage.getItem('idt_username') || '');
   const [idtPassword, setIdtPassword] = useState(() => localStorage.getItem('idt_password') || '');
+  const [idtRegion, setIdtRegion] = useState<'us' | 'eu'>(() => {
+    const saved = localStorage.getItem('idt_region');
+    return saved === 'us' ? 'us' : 'eu';
+  });
   const [idtMgConc, setIdtMgConc] = useState(() => localStorage.getItem('idt_mg_conc') || '0');
   const [showSettings, setShowSettings] = useState(!localStorage.getItem('ncbi_api_key'));
   const [maxHitsPreset, setMaxHitsPreset] = useState(() => localStorage.getItem('max_hits_preset') || '50');
@@ -47,7 +51,7 @@ function App() {
 
   const [jobName, setJobName] = useState(() => localStorage.getItem('job_name') || 'Query');
   const [selectedPrimers, setSelectedPrimers] = useState<{ p1: { start: number, end: number }, p2: { start: number, end: number } } | null>(null);
-  const [selectedFlankingPrimers, setSelectedFlankingPrimers] = useState<{ fwd: { start: number; end: number } | null; rev: { start: number; end: number } | null } | null>(null);
+  const [selectedFlankingPrimers, setSelectedFlankingPrimers] = useState<{ fwd: { start: number; end: number } | null; rev: { start: number; end: number } | null; fwdName?: string; revName?: string } | null>(null);
   const [showSecrets, setShowSecrets] = useState(false);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [navigateTarget, setNavigateTarget] = useState<{ colStart: number; colEnd: number; ts: number } | null>(null);
@@ -91,6 +95,7 @@ function App() {
   useEffect(() => { localStorage.setItem('custom_hits', customHits); }, [customHits]);
   useEffect(() => { localStorage.setItem('job_name', jobName); }, [jobName]);
   useEffect(() => { localStorage.setItem('idt_mg_conc', idtMgConc); }, [idtMgConc]);
+  useEffect(() => { localStorage.setItem('idt_region', idtRegion); }, [idtRegion]);
   useEffect(() => {
     localStorage.setItem('autofind_treat_indels_as_mismatches', autofindTreatIndelsAsMismatches.toString());
   }, [autofindTreatIndelsAsMismatches]);
@@ -166,6 +171,11 @@ function App() {
     } else {
       localStorage.removeItem('idt_password');
     }
+  };
+
+  const handleIdtRegionChange = (val: 'us' | 'eu') => {
+    setIdtRegion(val);
+    localStorage.setItem('idt_region', val);
   };
 
   const steps: { key: Step; label: string }[] = [
@@ -647,8 +657,21 @@ function App() {
                     className="flex-1 rounded-lg border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-xs p-2 border font-mono"
                   />
                 </div>
+                <div className="flex items-center gap-3">
+                  <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase w-24">
+                    IDT Region
+                  </label>
+                  <select
+                    value={idtRegion}
+                    onChange={(e) => handleIdtRegionChange(e.target.value as 'us' | 'eu')}
+                    className="flex-1 rounded-lg border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-xs p-2 border font-mono"
+                  >
+                    <option value="eu">EU (eu.idtdna.com)</option>
+                    <option value="us">US (www.idtdna.com)</option>
+                  </select>
+                </div>
                 <p className="text-[10px] text-slate-400 dark:text-slate-500">
-                  Required for IDT OligoAnalyzer features. Obtain from <a href="https://www.idtdna.com/pages/scitools/plus-api" target="_blank" rel="noopener noreferrer" className="text-indigo-500 underline">IDT SciTools Plus API</a>.
+                  Required for IDT OligoAnalyzer features. Obtain from <a href="https://www.idtdna.com/pages/scitools/plus-api" target="_blank" rel="noopener noreferrer" className="text-indigo-500 underline">IDT SciTools Plus API</a>. US and EU accounts use separate IDT regions.
                 </p>
               </div>
             </div>
@@ -1033,7 +1056,8 @@ function App() {
                     clientSecret: idtClientSecret,
                     username: idtUsername,
                     password: idtPassword,
-                    mgConc: parseFloat(idtMgConc) || 0
+                    mgConc: parseFloat(idtMgConc) || 0,
+                    region: idtRegion
                   }}
                   alignment={alignment}
                   navigateTarget={navigateTarget}
