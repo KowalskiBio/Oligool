@@ -12,8 +12,6 @@ describe('dimerAsciiFromItem', () => {
   });
 
   it('draws vertical bonds for an offset self-dimer (suboptimal structure)', () => {
-    // Strider suboptimal self-dimer for CAACAAGGTCCGTGAGCTTC:
-    // the duplex is shifted, so the old (reversed) shift logic produced no bonds.
     const seq = 'CAACAAGGTCCGTGAGCTTC&CAACAAGGTCCGTGAGCTTC';
     const db = '....(((.((((.((.(((.&....))).)))).)).))).';
     const ascii = dimerAsciiFromItem(seq, db);
@@ -22,6 +20,17 @@ describe('dimerAsciiFromItem', () => {
     const bondLine = lines[1];
     const bonds = bondLine.replace(/\s/g, '');
     expect(bonds.length).toBeGreaterThan(0);
+  });
+
+  it('draws vertical bonds for the ATGTAATTGTTACATTATGTAATATTGT self-dimer', () => {
+    const seq = 'ATGTAATTGTTACATTATGTAATATTGT&ATGTAATTGTTACATTATGTAATATTGT';
+    const db = '.........((((((.((((((&...............)))))).))))))......';
+    const ascii = dimerAsciiFromItem(seq, db);
+    expect(ascii).toBeDefined();
+    const lines = ascii!.split('\n');
+    const bondLine = lines[1];
+    const bonds = bondLine.replace(/\s/g, '');
+    expect(bonds.length).toBe(12);
   });
 
   it('draws vertical bonds for an offset heterodimer', () => {
