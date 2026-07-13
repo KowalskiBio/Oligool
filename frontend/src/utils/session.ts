@@ -80,6 +80,8 @@ export interface OligoSnapshot {
 export interface FlankingPrimerSelection {
     fwd: { start: number; end: number } | null;
     rev: { start: number; end: number } | null;
+    fwdName?: string;
+    revName?: string;
 }
 
 /** Snapshot of the visible query sequence window shown in the MSA viewer. */

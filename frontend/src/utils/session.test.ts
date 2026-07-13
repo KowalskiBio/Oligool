@@ -152,6 +152,45 @@ describe('migrateSession', () => {
     expect(migrated.results.selectedSequence).toBeUndefined()
     expect(migrated.results.msaViewport).toBeUndefined()
   })
+
+  it('preserves flanking primer names through migrateSession', () => {
+    const withNames = {
+      ...baseSession,
+      flankingPrimers: {
+        fwd: { start: 10, end: 30 },
+        rev: { start: 100, end: 120 },
+        fwdName: 'Fwd_Left',
+        revName: 'Rev_Right',
+      },
+    }
+    const migrated = migrateSession(withNames)
+    expect(migrated.flankingPrimers).not.toBeNull()
+    expect(migrated.flankingPrimers!.fwd).toEqual({ start: 10, end: 30 })
+    expect(migrated.flankingPrimers!.rev).toEqual({ start: 100, end: 120 })
+    expect(migrated.flankingPrimers!.fwdName).toBe('Fwd_Left')
+    expect(migrated.flankingPrimers!.revName).toBe('Rev_Right')
+  })
+
+  it('missing flanking primer names load as undefined', () => {
+    const withoutNames = {
+      ...baseSession,
+      flankingPrimers: {
+        fwd: { start: 50, end: 70 },
+        rev: null,
+      },
+    }
+    const migrated = migrateSession(withoutNames)
+    expect(migrated.flankingPrimers).not.toBeNull()
+    expect(migrated.flankingPrimers!.fwd).toEqual({ start: 50, end: 70 })
+    expect(migrated.flankingPrimers!.rev).toBeNull()
+    expect(migrated.flankingPrimers!.fwdName).toBeUndefined()
+    expect(migrated.flankingPrimers!.revName).toBeUndefined()
+  })
+
+  it('handles null flankingPrimers in session', () => {
+    const migrated = migrateSession(baseSession)
+    expect(migrated.flankingPrimers).toBeNull()
+  })
 })
 
 describe('parseSessionText', () => {
