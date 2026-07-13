@@ -4,6 +4,12 @@ venv/
 __pycache__/
 *.pyc
 
+# Root-level venv artifacts (created if venv is initialized in repo root)
+/bin/
+/lib/
+/lib64
+/pyvenv.cfg
+
 # macOS metadata
 ._*
 .DS_Store
@@ -49,6 +55,7 @@ test_*.js
 
 # Downloaded Archives
 *.zip
+*.deb
 
 # OpenCode / OhMyOpenCode
 .omo/
