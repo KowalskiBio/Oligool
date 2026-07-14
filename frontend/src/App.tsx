@@ -1130,43 +1130,45 @@ function App() {
               </div>
               <div className="space-y-4 text-sm text-slate-700 dark:text-slate-300">
                 <section>
-                  <h3 className="font-semibold text-indigo-600 dark:text-indigo-400 mb-1">Autofind v MSA prohlížeči</h3>
+                  <h3 className="font-semibold text-indigo-600 dark:text-indigo-400 mb-1">Kompletní design report</h3>
                   <p>
-                    V horním MSA prohlížeči klikněte levým tlačítkem na řádek sekvence nějakého BLAST hitu.
-                    Vybraný hit a všechny nad ním se použijí pro analýzu mismatchů při autofindu;
-                    zásahy pod ním se ignorují.
-                    Zelená tečka a podbarvení řádků ukazují, které sekvence jsou zapojené.
-                    Autofind hledá nejdelší místo pro tvorbu oliga, které nemá mismatch.
+                    Nově si můžete vygenerovat úplný report o navrženém oligu: tlačítkem „Create a report“
+                    získáte PDF nebo TXT s parametry, sekvencemi, Tm a ΔG pro hairpiny, self-dimery
+                    a párové interakce. MOLigo schéma se nyní v reportu zobrazuje v sekvence režimu,
+                    takže vidíte jednotlivé báze přímo na obrázku.
                   </p>
                 </section>
                 <section>
-                  <h3 className="font-semibold text-indigo-600 dark:text-indigo-400 mb-1">Pevná pozice a Context Viewer</h3>
+                  <h3 className="font-semibold text-indigo-600 dark:text-indigo-400 mb-1">Ukládání a obnova relace</h3>
                   <p>
-                    Když si uzamknete pozici oliga a potom se podíváte jinam v sekvenci,
-                    Context Viewer už nezobrazuje nesmyslnou sekvenci.
-                    Zůstává ukotvený k původní sekvenci, dokud pozici sami neuvolníte nebo neupravíte.
+                    Relace se automaticky ukládají do localStorage a po načtení .oligool.json souboru
+                    se zobrazí náhled s možností obnovy. Uložené pozice si nově můžete obarvit,
+                    přidat k nim poznámky a exportovat je do CSV/TSV. Při obnovení se vrátíte přesně
+                    tam, kde jste skončili — včetně pozice a zoomu v MSA prohlížeči.
                   </p>
                 </section>
                 <section>
-                  <h3 className="font-semibold text-indigo-600 dark:text-indigo-400 mb-1">Odkazy do NCBI</h3>
+                  <h3 className="font-semibold text-indigo-600 dark:text-indigo-400 mb-1">MSA a BLAST: rychlejší orientace</h3>
                   <p>
-                    Kliknutím na název hitu v levém sloupci MSA vieweru se otevře příslušná stránka
-                    na NCBI v nové záložce.
+                    Kliknutím na řádek v tabulce BLAST hitů se MSA prohlížeč automaticky posune
+                    na příslušnou sekvenci. Kliknutím na název sekvence v MSA otevřete dialog
+                    s volbou mezi celogenomovým a kodónovým GenBank záznamem na NCBI.
                   </p>
                 </section>
                 <section>
-                  <h3 className="font-semibold text-indigo-600 dark:text-indigo-400 mb-1">Hra s králíkem</h3>
+                  <h3 className="font-semibold text-indigo-600 dark:text-indigo-400 mb-1">Nastavení IDT a flanking primerů</h3>
                   <p>
-                    Při čekání na BLAST si můžete zahrát načítací hru.
-                    Nově lze vybrat rychlost (Slow / Normal / Fast) a králíkem se pohybovat do stran
-                    pomocí kláves A/D nebo šipek. Střílejí se jen jednotlivé střely s rozestupy.
+                    V nastavení si nově vyberete IDT region (US/EU) a pojmenujete navržené flanking
+                    primery. Nastavení pro indely při autofindu se ukládá do relace, takže si ho
+                    nemusíte pamatovat pokaždé znovu.
                   </p>
                 </section>
                 <section>
-                  <h3 className="font-semibold text-indigo-600 dark:text-indigo-400 mb-1">Vzhled a drobnosti</h3>
+                  <h3 className="font-semibold text-indigo-600 dark:text-indigo-400 mb-1">Drobná vylepšení</h3>
                   <p>
-                    Panel pro přejmenování oligos má nyní stejné odsazení jako okolní prvky.
-                    Ukládání relace je stále ve vývoji — prosíme, mějte to na paměti.
+                    Vylepšili jsme vykreslování sekundárních struktur, opravili chybu při zapisování
+                    TAG sekvence a doladili výchozí sekvence forward/reverse primerů. Pod kapotou
+                    přibyly testy pro ukládání relací a práci s GenBank odkazy.
                   </p>
                 </section>
               </div>
