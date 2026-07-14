@@ -3,9 +3,12 @@ import MOLigoPanel from './MOLigoPanel';
 import FlankingPrimersPanel from './FlankingPrimersPanel';
 import HairpinSVG from './HairpinSVG';
 import DimerSVG from './DimerSVG';
+import QueryReport from './QueryReport';
 import { dimerAsciiFromItem } from './DimerAscii';
 import { PIN_COLORS, exportPositionsCSV, exportPositionsTSV } from '../utils/session';
 import type { OligoSnapshot, SavedPosition, FixedAbsCoords } from '../utils/session';
+import { buildCompleteReportTxt, downloadTxt, type CompleteReportData } from '../utils/report';
+import { reverseComplement } from '../utils/dna';
 
 /** Imperative handle App uses to pull QueryViewer's state when saving a session. */
 export interface QueryViewerHandle {
@@ -22,7 +25,14 @@ interface QueryViewerProps {
     data: { id: string; seq: string; start: number; end: number; fullSeq?: string; ungappedOffset?: number };
     jobName: string;
     onPrimersUpdate: (primers: { p1: { start: number, end: number }, p2: { start: number, end: number } } | null) => void;
-    onFlankingPrimersUpdate?: (primers: { fwd: { start: number, end: number } | null, rev: { start: number, end: number } | null } | null) => void;
+    onFlankingPrimersUpdate?: (primers: {
+        fwd: { start: number, end: number } | null,
+        rev: { start: number, end: number } | null,
+        fwdName?: string,
+        revName?: string,
+        fwdSeq?: string,
+        revSeq?: string
+    } | null) => void;
     onNavigateTo?: (colStart: number, colEnd: number) => void;
     /** Gapped column range selected by the user in MSAViewer for constrained oligo search */
     oligoRegion?: { startCol: number; endCol: number } | null;
@@ -185,6 +195,15 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
     const [searchOligo2Seq, setSearchOligo2Seq] = useState('');
     const [searchOligoError, setSearchOligoError] = useState<string | null>(null);
     const [showFlankingPrimers, setShowFlankingPrimers] = useState(false);
+    const [flankingPrimersData, setFlankingPrimersData] = useState<{
+        fwd: { start: number; end: number } | null;
+        rev: { start: number; end: number } | null;
+        fwdName?: string;
+        revName?: string;
+        fwdSeq?: string;
+        revSeq?: string;
+    } | null>(null);
+    const [showReportDialog, setShowReportDialog] = useState(false);
     const [interactiveFlankWindow, setInteractiveFlankWindow] = useState(200);
 
 
@@ -1066,6 +1085,149 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
             if (liveP2End - liveP2Start > 60) { if (dragState.type === 'left') liveP2Start = liveP2End - 60; else liveP2End = liveP2Start + 60; }
         }
     }
+
+    const handleFlankingPrimersUpdate = useCallback((data: {
+        fwd: { start: number; end: number } | null;
+        rev: { start: number; end: number } | null;
+        fwdName?: string;
+        revName?: string;
+        fwdSeq?: string;
+        revSeq?: string;
+    } | null) => {
+        setFlankingPrimersData(data);
+        onFlankingPrimersUpdate?.(data);
+    }, [onFlankingPrimersUpdate]);
+
+    const buildCompleteReport = (): CompleteReportData => {
+        const extractBestTm = (raw?: { IDT_Tm?: number; Tm?: number } | { IDT_Tm?: number; Tm?: number }[]): number | undefined => {
+            if (!raw) return undefined;
+            if (Array.isArray(raw)) {
+                for (const item of raw) {
+                    if (item.IDT_Tm !== undefined) return item.IDT_Tm;
+                    if (item.Tm !== undefined) return item.Tm;
+                }
+            } else {
+                if (raw.IDT_Tm !== undefined) return raw.IDT_Tm;
+                if (raw.Tm !== undefined) return raw.Tm;
+            }
+            return undefined;
+        };
+
+        const buildContextMap = (): CompleteReportData['contextMap'] => {
+            const regions: { start: number; end: number; label: string; color: string; textColor?: string }[] = [];
+
+            if (liveP1Start >= 0 && liveP1End > liveP1Start) {
+                regions.push({ start: liveP1Start, end: liveP1End, label: 'MOLigo 1', color: '#10b981', textColor: '#064e3b' });
+            }
+            if (liveP2Start >= 0 && liveP2End > liveP2Start) {
+                regions.push({ start: liveP2Start, end: liveP2End, label: 'MOLigo 2', color: '#f59e0b', textColor: '#78350f' });
+            }
+
+            const findPos = (seq: string, subseq: string): number => {
+                if (!seq || !subseq) return -1;
+                return seq.toUpperCase().indexOf(subseq.toUpperCase());
+            };
+
+            if (flankingPrimersData?.fwdSeq) {
+                const pos = findPos(fullSeq, flankingPrimersData.fwdSeq);
+                if (pos >= 0) {
+                    regions.push({ start: pos, end: pos + flankingPrimersData.fwdSeq.length, label: 'Flanking Fwd', color: '#3b82f6', textColor: '#1e3a8a' });
+                }
+            }
+            if (flankingPrimersData?.revSeq) {
+                const bindingSeq = reverseComplement(flankingPrimersData.revSeq);
+                const pos = findPos(fullSeq, bindingSeq);
+                if (pos >= 0) {
+                    regions.push({ start: pos, end: pos + bindingSeq.length, label: 'Flanking Rev', color: '#c084fc', textColor: '#581c87' });
+                }
+            }
+
+            if (regions.length === 0) return undefined;
+
+            const minStart = Math.min(...regions.map(r => r.start));
+            const maxEnd = Math.max(...regions.map(r => r.end));
+            const flank = Math.max(20, Math.min(interactiveFlankWindow, 200));
+            const windowStart = Math.max(0, minStart - flank);
+            const windowEnd = Math.min(fullSeq.length, maxEnd + flank);
+
+            return {
+                sequence: fullSeq.substring(windowStart, windowEnd),
+                absStart: windowStart + 1,
+                regions: regions.map(r => ({
+                    start: r.start - windowStart,
+                    end: r.end - windowStart,
+                    label: r.label,
+                    color: r.color,
+                    textColor: r.textColor,
+                })),
+            };
+        };
+
+        return {
+            jobName,
+            queryId: data.id,
+            targetSeq: fullSeq,
+            targetStart: data.start,
+            targetEnd: data.end,
+            searchParams,
+            advancedParams,
+            idtAdvancedParams,
+            moligo1Name: oligo1Name,
+            moligo1Seq: primers?.p1.seq ?? '',
+            moligo1Shift,
+            moligo1Len,
+            moligo2Name: oligo2Name,
+            moligo2Seq: primers?.p2.seq ?? '',
+            moligo2Shift,
+            moligo2Len,
+            tagSeq,
+            fwdPrimer,
+            revPrimer,
+            idtM1Hairpin: idtResults?.m1?.hairpin,
+            idtM1SelfDimer: idtResults?.m1?.self_dimer,
+            idtM1Analyze: idtResults?.m1?.analyze,
+            idtM1Tm: extractBestTm(idtResults?.m1?.analyze),
+            idtM2Hairpin: idtResults?.m2?.hairpin,
+            idtM2SelfDimer: idtResults?.m2?.self_dimer,
+            idtM2Analyze: idtResults?.m2?.analyze,
+            idtM2Tm: extractBestTm(idtResults?.m2?.analyze),
+            idtPairwise: idtResults?.pairwise,
+            savedPositions,
+            flankingFwdName: flankingPrimersData?.fwdName,
+            flankingFwdSeq: flankingPrimersData?.fwdSeq,
+            flankingFwdLen: flankingPrimersData?.fwdSeq?.length,
+            flankingFwdGc: flankingPrimersData?.fwdSeq ? ((flankingPrimersData.fwdSeq.match(/[GCgc]/g) || []).length / flankingPrimersData.fwdSeq.length) * 100 : undefined,
+            flankingFwdTm: undefined,
+            flankingRevName: flankingPrimersData?.revName,
+            flankingRevSeq: flankingPrimersData?.revSeq,
+            flankingRevLen: flankingPrimersData?.revSeq?.length,
+            flankingRevGc: flankingPrimersData?.revSeq ? ((flankingPrimersData.revSeq.match(/[GCgc]/g) || []).length / flankingPrimersData.revSeq.length) * 100 : undefined,
+            flankingRevTm: undefined,
+            contextMap: buildContextMap(),
+        };
+    };
+
+    const handleDownloadTxt = () => {
+        const reportData = buildCompleteReport();
+        const content = buildCompleteReportTxt(reportData);
+        const filename = `Oligool_Report_${(jobName || 'design').replace(/\s+/g, '_')}_${new Date().toISOString().slice(0, 10)}.txt`;
+        downloadTxt(content, filename);
+    };
+
+    const handlePrintPdf = () => {
+        buildCompleteReport();
+        setTimeout(() => window.print(), 300);
+    };
+
+    useEffect(() => {
+        const handleEscape = (e: KeyboardEvent) => {
+            if (e.key === 'Escape' && showReportDialog) {
+                setShowReportDialog(false);
+            }
+        };
+        window.addEventListener('keydown', handleEscape);
+        return () => window.removeEventListener('keydown', handleEscape);
+    }, [showReportDialog]);
 
     const renderSequence = () => {
         const renderOffset = fixedAbsCoords && fixedContextRef.current ? fixedContextRef.current.offset : offset;
@@ -2348,19 +2510,72 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                     isDarkMode={isDarkMode}
                     idtCredentials={idtCredentials}
                     idtAdvancedParams={idtAdvancedParams}
-                    onFlankingPrimersUpdate={onFlankingPrimersUpdate}
+                    onFlankingPrimersUpdate={handleFlankingPrimersUpdate}
                 />
                 <div className="px-5 py-4 bg-slate-50 dark:bg-slate-900/60 border-t border-slate-200 dark:border-slate-700 flex justify-end mt-4">
                     <button
-                        onClick={() => window.print()}
+                        onClick={() => setShowReportDialog(true)}
                         className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2.5 rounded-lg font-bold transition-all shadow-md active:scale-95 border border-indigo-500"
                     >
                         <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
                         </svg>
-                        Create PDF Report
+                        Create a report
                     </button>
                 </div>
+
+                {showReportDialog && (
+                    <div
+                        className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm animate-in fade-in duration-150"
+                        onClick={(e) => { if (e.target === e.currentTarget) setShowReportDialog(false); }}
+                        role="dialog"
+                        aria-modal="true"
+                        aria-labelledby="query-report-dialog-title"
+                    >
+                        <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl p-6 max-w-md w-full mx-4 border border-slate-200 dark:border-slate-700" onClick={(e) => e.stopPropagation()}>
+                            <div className="flex justify-between items-start mb-4">
+                                <h3 id="query-report-dialog-title" className="text-lg font-bold text-slate-800 dark:text-slate-100">Create a report</h3>
+                                <button
+                                    onClick={() => setShowReportDialog(false)}
+                                    className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors p-1 -mr-2 -mt-1"
+                                    aria-label="Close"
+                                >
+                                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                </button>
+                            </div>
+
+                            <p className="text-sm text-slate-600 dark:text-slate-400 mb-6">
+                                Export the complete design report with all procedure information.
+                            </p>
+
+                            <div className="flex flex-col gap-3">
+                                <button
+                                    onClick={handleDownloadTxt}
+                                    className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-lg font-medium transition-all text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 border border-slate-200 dark:border-slate-600"
+                                >
+                                    <span>📝</span>
+                                    Generate .txt
+                                </button>
+
+                                <button
+                                    onClick={handlePrintPdf}
+                                    className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-lg font-medium transition-all text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 border border-slate-200 dark:border-slate-600"
+                                >
+                                    <span>📄</span>
+                                    Generate .pdf
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {primers && (
+                    <div className="query-report-mount">
+                        <QueryReport data={buildCompleteReport()} />
+                    </div>
+                )}
             </div>
         )}
         </>

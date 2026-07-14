@@ -1,5 +1,5 @@
 import { createPortal } from 'react-dom';
-import type { CompleteReportData, IdtRawItem, IdtReportRawData } from '../utils/report';
+import type { CompleteReportData, IdtRawItem, IdtReportRawData, ReportContextMap, ReportContextRegion } from '../utils/report';
 import { calcGC, reverseComplement } from '../utils/report';
 import MOLigoSchematic from './MOLigoSchematic';
 import HairpinSVG from './HairpinSVG';
@@ -69,6 +69,67 @@ const renderIdtSvg = (item: IdtRawItem, seq1?: string, seq2?: string) => {
             ) : (
                 <HairpinSVG seq={seq} dotBracket={db} />
             )}
+        </div>
+    );
+};
+
+const ContextMap = ({ contextMap }: { contextMap?: ReportContextMap }) => {
+    if (!contextMap || !contextMap.sequence) return null;
+    const { sequence, absStart, regions } = contextMap;
+    const lineLen = 80;
+
+    const regionClass = (label: string): string => {
+        switch (label) {
+            case 'MOLigo 1': return 'bg-emerald-200 text-emerald-900';
+            case 'MOLigo 2': return 'bg-amber-200 text-amber-900';
+            case 'Flanking Fwd': return 'bg-blue-200 text-blue-900';
+            case 'Flanking Rev': return 'bg-purple-200 text-purple-900';
+            default: return 'bg-gray-200 text-gray-900';
+        }
+    };
+
+    const regionAt = (idx: number): ReportContextRegion | undefined =>
+        regions.find(r => idx >= r.start && idx < r.end);
+
+    const lines: string[] = [];
+    for (let i = 0; i < sequence.length; i += lineLen) {
+        lines.push(sequence.slice(i, i + lineLen));
+    }
+
+    return (
+        <div className="space-y-1">
+            <div className="flex flex-wrap gap-3 text-xs mb-2">
+                {regions.some(r => r.label === 'MOLigo 1') && (
+                    <div className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded-sm bg-emerald-200" /> MOLigo 1</div>
+                )}
+                {regions.some(r => r.label === 'MOLigo 2') && (
+                    <div className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded-sm bg-amber-200" /> MOLigo 2</div>
+                )}
+                {regions.some(r => r.label === 'Flanking Fwd') && (
+                    <div className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded-sm bg-blue-200" /> Flanking Fwd</div>
+                )}
+                {regions.some(r => r.label === 'Flanking Rev') && (
+                    <div className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded-sm bg-purple-200" /> Flanking Rev</div>
+                )}
+            </div>
+            {lines.map((line, lineIdx) => {
+                const lineStart = absStart + lineIdx * lineLen;
+                return (
+                    <div key={lineIdx} className="font-mono text-xs">
+                        <span className="text-gray-400 select-none inline-block w-24 text-right pr-3">{lineStart}</span>
+                        <span className="whitespace-pre">
+                            {line.split('').map((char, charIdx) => {
+                                const idx = lineIdx * lineLen + charIdx;
+                                const r = regionAt(idx);
+                                if (r) {
+                                    return <span key={idx} className={`${regionClass(r.label)} font-bold px-[1px]`}>{char}</span>;
+                                }
+                                return <span key={idx}>{char}</span>;
+                            })}
+                        </span>
+                    </div>
+                );
+            })}
         </div>
     );
 };
@@ -153,6 +214,13 @@ export default function QueryReport({ data }: QueryReportProps) {
                     <p className="text-sm text-gray-600">Length: {data.targetSeq.length} nt | GC: {fmtNum(calcGC(data.targetSeq))}%</p>
                     <p className="font-mono text-sm break-all bg-gray-50 p-3 rounded border border-gray-200 mt-2">{data.targetSeq}</p>
                 </div>
+
+                {data.contextMap && (
+                    <div className="mb-6">
+                        <h2 className="text-lg font-bold text-gray-800 mb-2 border-b border-gray-300 pb-1">CONTEXT MAP</h2>
+                        <ContextMap contextMap={data.contextMap} />
+                    </div>
+                )}
 
                 {(paramEntries.length > 0 || advancedEntries.length > 0 || data.idtAdvancedParams) && (
                     <div className="mb-6">

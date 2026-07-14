@@ -82,6 +82,35 @@ describe('QueryReport', () => {
         expect(schematicSvg?.textContent).toContain(baseData.moligo1Seq[0]);
     });
 
+    it('renders context map with colored moligo and flanking primer regions', () => {
+        const target = 'A'.repeat(30) + 'GC' + 'T'.repeat(30);
+        const m1 = target.slice(10, 18);
+        const m2 = target.slice(40, 48);
+        const fwdFlank = target.slice(0, 8);
+        const revFlank = target.slice(52, 60);
+        const data: CompleteReportData = {
+            ...baseData,
+            targetSeq: target,
+            contextMap: {
+                sequence: target.slice(0, 70),
+                absStart: 1,
+                regions: [
+                    { start: 0, end: 8, label: 'Flanking Fwd', color: '#3b82f6' },
+                    { start: 10, end: 18, label: 'MOLigo 1', color: '#10b981' },
+                    { start: 40, end: 48, label: 'MOLigo 2', color: '#f59e0b' },
+                    { start: 52, end: 60, label: 'Flanking Rev', color: '#c084fc' },
+                ],
+            },
+        };
+        render(<QueryReport data={data} />);
+        expect(screen.getByText('CONTEXT MAP')).toBeInTheDocument();
+        const report = document.querySelector('.query-report');
+        expect(report?.textContent).toContain(m1);
+        expect(report?.textContent).toContain(m2);
+        expect(report?.textContent).toContain(fwdFlank);
+        expect(report?.textContent).toContain(revFlank);
+    });
+
     it('renders saved positions', () => {
         const data: CompleteReportData = {
             ...baseData,

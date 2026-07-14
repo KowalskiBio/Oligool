@@ -103,6 +103,30 @@ export interface CompleteReportData {
     flankingRevLen?: number;
     flankingRevGc?: number;
     flankingRevTm?: number;
+
+    /** Visual context map showing moligos and flanking primers in the surrounding sequence. */
+    contextMap?: ReportContextMap;
+}
+
+export interface ReportContextRegion {
+    /** 0-based inclusive start, relative to contextMap.sequence. */
+    start: number;
+    /** 0-based exclusive end, relative to contextMap.sequence. */
+    end: number;
+    label: string;
+    /** Hex color or Tailwind background class. */
+    color: string;
+    /** Text color for letters inside the region. */
+    textColor?: string;
+}
+
+export interface ReportContextMap {
+    /** Sequence window containing all marked regions. */
+    sequence: string;
+    /** 1-based absolute start position of the window in the full ungapped sequence. */
+    absStart: number;
+    /** Marked regions within the window. */
+    regions: ReportContextRegion[];
 }
 
 const fmtNum = (v: number | undefined | null, digits = 1): string => {
@@ -171,6 +195,8 @@ const fmtThermoLine = (label: string, result?: IdtReportRawData): string => {
     return `${label}: ${parts.join(' | ')}`;
 };
 
+const CONTEXT_LINE_LEN = 80;
+
 const fmtStructureDetails = (title: string, result?: IdtReportRawData): string[] => {
     const items = rawItems(result);
     if (items.length === 0) return [];
@@ -194,6 +220,51 @@ const fmtStructureDetails = (title: string, result?: IdtReportRawData): string[]
         if (seq) out.push(`    Sequence: ${seq}`);
         if (db) out.push(`    Dot-Bracket: ${db}`);
     });
+    return out;
+};
+
+const markerLine = (len: number, regions: ReportContextRegion[], symbol: string, regionLabel: string): string => {
+    const chars = Array(len).fill(' ');
+    regions
+        .filter(r => r.label === regionLabel)
+        .forEach(r => {
+            for (let i = r.start; i < r.end && i < len; i++) {
+                chars[i] = symbol;
+            }
+        });
+    return chars.join('');
+};
+
+const fmtContextMap = (contextMap?: ReportContextMap): string[] => {
+    if (!contextMap || !contextMap.sequence) return [];
+    const { sequence, absStart, regions } = contextMap;
+    const out: string[] = [];
+    out.push(section('CONTEXT MAP'));
+    out.push(`Window: ${absStart} - ${absStart + sequence.length - 1} (${sequence.length} nt)`);
+
+    const legendParts: string[] = [];
+    if (regions.some(r => r.label === 'MOLigo 1')) legendParts.push('*1 = MOLigo 1');
+    if (regions.some(r => r.label === 'MOLigo 2')) legendParts.push('*2 = MOLigo 2');
+    if (regions.some(r => r.label === 'Flanking Fwd')) legendParts.push('*F = Flanking Forward');
+    if (regions.some(r => r.label === 'Flanking Rev')) legendParts.push('*R = Flanking Reverse');
+    if (legendParts.length > 0) out.push(`Legend: ${legendParts.join(' | ')}`);
+    out.push('');
+
+    for (let i = 0; i < sequence.length; i += CONTEXT_LINE_LEN) {
+        const lineSeq = sequence.slice(i, i + CONTEXT_LINE_LEN);
+        const lineStart = absStart + i;
+        out.push(`${String(lineStart).padStart(8, ' ')}  ${lineSeq}`);
+        if (regions.length > 0) {
+            const m1 = markerLine(lineSeq.length, regions, '*', 'MOLigo 1');
+            const m2 = markerLine(lineSeq.length, regions, '*', 'MOLigo 2');
+            const mf = markerLine(lineSeq.length, regions, '*', 'Flanking Fwd');
+            const mr = markerLine(lineSeq.length, regions, '*', 'Flanking Rev');
+            if (m1.trim()) out.push(`${' '.repeat(10)}M1 ${m1}`);
+            if (m2.trim()) out.push(`${' '.repeat(10)}M2 ${m2}`);
+            if (mf.trim()) out.push(`${' '.repeat(10)}F  ${mf}`);
+            if (mr.trim()) out.push(`${' '.repeat(10)}R  ${mr}`);
+        }
+    }
     return out;
 };
 
@@ -288,6 +359,8 @@ export const buildCompleteReportTxt = (data: CompleteReportData): string => {
     if (!data.flankingFwdSeq && !data.flankingRevSeq) {
         lines.push('No flanking primers designed yet.');
     }
+
+    lines.push(...fmtContextMap(data.contextMap));
 
     lines.push(section('FINAL ORDER SEQUENCES'));
     const fwdRC = data.fwdPrimer ? reverseComplement(data.fwdPrimer) : '';
