@@ -107,13 +107,13 @@ const ContextMap = ({ contextMap }: { contextMap?: ReportContextMap }) => {
 
     const lines: string[] = [];
     for (let i = 0; i < sequence.length; i += lineLen) {
-        lines.push(sequence.slice(i, i + lineLen));
+        lines.push(sequence.slice(i, i + lineLen).padEnd(lineLen, ' '));
     }
 
     const uniqueRegionLabels = Array.from(new Set(regions.map(r => r.label)));
 
     return (
-        <div className="bg-gray-50 rounded border border-gray-200 p-3">
+        <div className="bg-gray-50 rounded border border-gray-200 p-3 inline-block">
             <div className="flex flex-wrap gap-3 text-xs mb-3">
                 {uniqueRegionLabels.map(label => (
                     <div key={label} className="flex items-center gap-1">
@@ -128,12 +128,12 @@ const ContextMap = ({ contextMap }: { contextMap?: ReportContextMap }) => {
                     return (
                         <div key={lineIdx} className="font-mono text-xs whitespace-nowrap break-inside-avoid-page">
                             <span className="text-gray-400 select-none inline-block w-20 text-right pr-3 print:w-16">{lineStart}</span>
-                            <span className="whitespace-pre">
+                            <span className="whitespace-pre inline-block">
                                 {line.split('').map((char, charIdx) => {
                                     const idx = lineIdx * lineLen + charIdx;
                                     const r = regionAt(idx);
                                     if (r) {
-                                        return <span key={idx} className={`${regionClass(r.label)} font-bold px-[1px]`}>{char}</span>;
+                                        return <span key={idx} className={`${regionClass(r.label)} font-bold`}>{char}</span>;
                                     }
                                     return <span key={idx}>{char}</span>;
                                 })}
