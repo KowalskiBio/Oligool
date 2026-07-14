@@ -2512,70 +2512,73 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                     idtAdvancedParams={idtAdvancedParams}
                     onFlankingPrimersUpdate={handleFlankingPrimersUpdate}
                 />
-                <div className="px-5 py-4 bg-slate-50 dark:bg-slate-900/60 border-t border-slate-200 dark:border-slate-700 flex justify-end mt-4">
-                    <button
-                        onClick={() => setShowReportDialog(true)}
-                        className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2.5 rounded-lg font-bold transition-all shadow-md active:scale-95 border border-indigo-500"
-                    >
-                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
-                        </svg>
-                        Create a report
-                    </button>
+            </div>
+        )}
+
+        {primers && (
+            <div className="mt-8 px-5 py-4 flex justify-end">
+                <button
+                    onClick={() => setShowReportDialog(true)}
+                    className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2.5 rounded-lg font-bold transition-all shadow-md active:scale-95 border border-indigo-500"
+                >
+                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                    </svg>
+                    Create a report
+                </button>
+            </div>
+        )}
+
+        {showReportDialog && (
+            <div
+                className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm animate-in fade-in duration-150"
+                onClick={(e) => { if (e.target === e.currentTarget) setShowReportDialog(false); }}
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="query-report-dialog-title"
+            >
+                <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl p-6 max-w-md w-full mx-4 border border-slate-200 dark:border-slate-700" onClick={(e) => e.stopPropagation()}>
+                    <div className="flex justify-between items-start mb-4">
+                        <h3 id="query-report-dialog-title" className="text-lg font-bold text-slate-800 dark:text-slate-100">Create a report</h3>
+                        <button
+                            onClick={() => setShowReportDialog(false)}
+                            className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors p-1 -mr-2 -mt-1"
+                            aria-label="Close"
+                        >
+                            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </button>
+                    </div>
+
+                    <p className="text-sm text-slate-600 dark:text-slate-400 mb-6">
+                        Export the complete design report with all procedure information.
+                    </p>
+
+                    <div className="flex flex-col gap-3">
+                        <button
+                            onClick={handleDownloadTxt}
+                            className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-lg font-medium transition-all text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 border border-slate-200 dark:border-slate-600"
+                        >
+                            <span>📝</span>
+                            Generate .txt
+                        </button>
+
+                        <button
+                            onClick={handlePrintPdf}
+                            className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-lg font-medium transition-all text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 border border-slate-200 dark:border-slate-600"
+                        >
+                            <span>📄</span>
+                            Generate .pdf
+                        </button>
+                    </div>
                 </div>
+            </div>
+        )}
 
-                {showReportDialog && (
-                    <div
-                        className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm animate-in fade-in duration-150"
-                        onClick={(e) => { if (e.target === e.currentTarget) setShowReportDialog(false); }}
-                        role="dialog"
-                        aria-modal="true"
-                        aria-labelledby="query-report-dialog-title"
-                    >
-                        <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl p-6 max-w-md w-full mx-4 border border-slate-200 dark:border-slate-700" onClick={(e) => e.stopPropagation()}>
-                            <div className="flex justify-between items-start mb-4">
-                                <h3 id="query-report-dialog-title" className="text-lg font-bold text-slate-800 dark:text-slate-100">Create a report</h3>
-                                <button
-                                    onClick={() => setShowReportDialog(false)}
-                                    className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors p-1 -mr-2 -mt-1"
-                                    aria-label="Close"
-                                >
-                                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                    </svg>
-                                </button>
-                            </div>
-
-                            <p className="text-sm text-slate-600 dark:text-slate-400 mb-6">
-                                Export the complete design report with all procedure information.
-                            </p>
-
-                            <div className="flex flex-col gap-3">
-                                <button
-                                    onClick={handleDownloadTxt}
-                                    className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-lg font-medium transition-all text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 border border-slate-200 dark:border-slate-600"
-                                >
-                                    <span>📝</span>
-                                    Generate .txt
-                                </button>
-
-                                <button
-                                    onClick={handlePrintPdf}
-                                    className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-lg font-medium transition-all text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 border border-slate-200 dark:border-slate-600"
-                                >
-                                    <span>📄</span>
-                                    Generate .pdf
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                )}
-
-                {primers && (
-                    <div className="query-report-mount">
-                        <QueryReport data={buildCompleteReport()} />
-                    </div>
-                )}
+        {primers && (
+            <div className="query-report-mount">
+                <QueryReport data={buildCompleteReport()} />
             </div>
         )}
         </>
