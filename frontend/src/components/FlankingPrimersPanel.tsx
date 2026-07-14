@@ -40,7 +40,14 @@ interface Props {
     idtCredentials?: any;
     idtAdvancedParams?: any;
     gappedData?: { seq: string; start: number; ungappedOffset?: number };
-    onFlankingPrimersUpdate?: (primers: { fwd: { start: number, end: number } | null, rev: { start: number, end: number } | null, fwdName?: string, revName?: string } | null) => void;
+    onFlankingPrimersUpdate?: (primers: {
+        fwd: { start: number, end: number } | null,
+        rev: { start: number, end: number } | null,
+        fwdName?: string,
+        revName?: string,
+        fwdSeq?: string,
+        revSeq?: string
+    } | null) => void;
 }
 
 const API = ((import.meta.env.VITE_API_BASE as string) || '');
@@ -733,6 +740,8 @@ export default function FlankingPrimersPanel({
                 ...flankingPrimersForMSA,
                 fwdName: selFwd?.name || undefined,
                 revName: selRev?.name || undefined,
+                fwdSeq: selFwd?.sequence,
+                revSeq: selRev?.sequence,
             } : null);
         }
     }, [flankingPrimersForMSA, onFlankingPrimersUpdate, selFwd?.name, selRev?.name]);

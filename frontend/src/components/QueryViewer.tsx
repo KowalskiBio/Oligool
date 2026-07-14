@@ -1142,6 +1142,20 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                 }
             }
 
+            if (fwdPrimer) {
+                const bindingSeq = reverseComplement(fwdPrimer);
+                const pos = findPos(fullSeq, bindingSeq);
+                if (pos >= 0) {
+                    regions.push({ start: pos, end: pos + bindingSeq.length, label: 'Fwd Primer Binding', color: '#f472b6', textColor: '#831843' });
+                }
+            }
+            if (revPrimer) {
+                const pos = findPos(fullSeq, revPrimer);
+                if (pos >= 0) {
+                    regions.push({ start: pos, end: pos + revPrimer.length, label: 'Rev Primer Binding', color: '#a855f7', textColor: '#581c87' });
+                }
+            }
+
             if (regions.length === 0) return undefined;
 
             const minStart = Math.min(...regions.map(r => r.start));

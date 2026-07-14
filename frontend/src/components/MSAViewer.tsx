@@ -522,6 +522,7 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
 
     const drawMinimapBackground = useCallback(() => {
         if (!sequences.length) return;
+        if (availableWidth <= 0 || MINIMAP_HEIGHT <= 0) return;
         if (!offscreenMinimapRef.current) {
             offscreenMinimapRef.current = document.createElement('canvas');
         }
@@ -671,6 +672,7 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
     const drawMinimap = useCallback(() => {
         const cvs = minimapRef.current;
         if (!cvs || sequences.length === 0) return;
+        if (availableWidth <= 0 || MINIMAP_HEIGHT <= 0) return;
         const ctx = cvs.getContext('2d');
         if (!ctx) return;
 
@@ -685,7 +687,7 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
             drawMinimapBackground();
         }
 
-        if (offscreenMinimapRef.current) {
+        if (offscreenMinimapRef.current && offscreenMinimapRef.current.width > 0 && offscreenMinimapRef.current.height > 0) {
             ctx.drawImage(offscreenMinimapRef.current, 0, 0, availableWidth * dpr, MINIMAP_HEIGHT * dpr, 0, 0, availableWidth, MINIMAP_HEIGHT);
         }
 

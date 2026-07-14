@@ -35,13 +35,14 @@ Oligool/
 │       │   ├── MSAViewer.tsx         # Canvas-based MSA alignment viewer (largest file ~1733 lines)
 │       │   ├── QueryViewer.tsx       # Lower panel: query sequence + IDT primer analysis (~1770 lines)
 │       │   ├── FlankingPrimersPanel.tsx  # Flanking PCR primer design panel (~1010 lines)
-│       │   ├── MOLigoPanel.tsx       # MOLigo (internal splint) oligo designer (~535 lines)
-│       │   ├── MOLigoReport.tsx      # Printable PDF-style report for MOLigo results
-│       │   ├── BlastResults.tsx      # BLAST hit table + filtering UI
-│       │   ├── DimerSVG.tsx          # SVG renderer for dimer secondary structures
-│       │   ├── HairpinSVG.tsx        # SVG renderer for hairpin secondary structures
-│       │   └── RabbitGame.tsx        # Easter egg: rabbit game shown during BLAST wait
+│       │   ├── MOLigoPanel.tsx       # MOLigo (internal splint) oligo designer
+│       │   ├── QueryReport.tsx       # Hidden printable complete design report for PDF generation
+  │       │   ├── BlastResults.tsx      # BLAST hit table + filtering UI
+  │       │   ├── DimerSVG.tsx          # SVG renderer for dimer secondary structures
+  │       │   ├── HairpinSVG.tsx        # SVG renderer for hairpin secondary structures
+  │       │   └── RabbitGame.tsx        # Easter egg: rabbit game shown during BLAST wait
 │       ├── utils/dna.ts              # DNA utility functions (GC%, Tm, reverse complement, etc.)
+│       ├── utils/report.ts           # Complete design report text builder + download helper
 │       └── constants/tags.ts         # Shared tag/label constants
 ├── webview_app.py            # Desktop entry point (pywebview wrapping the FastAPI server)
 ├── oligool.spec              # PyInstaller spec for building .app / .exe
@@ -111,6 +112,11 @@ All endpoints are at `http://localhost:8000` (or the value of `VITE_API_BASE`).
 ### `MOLigoPanel` (~535 lines)
 - UI for designing internal MOLigo splint oligos by calling `/moligize`.
 - **Props:** defined in `MOLigoProps` interface (line 5).
+
+### `MOLigoReport`
+- Hidden printable component for MOLigo design report PDF generation.
+- Uses `@media print` CSS to ensure only the report content prints.
+- **Props:** `jobName`, `templateSeq`, `moligo1Seq`, `moligo2Seq`, `tagSeq`, `fwdPrimer`, `revPrimer`, `moligoIdtResults`.
 
 ### `DimerSVG` / `HairpinSVG`
 - Pure SVG renderers. Take a dot-bracket secondary structure string and render it.

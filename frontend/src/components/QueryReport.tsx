@@ -84,7 +84,21 @@ const ContextMap = ({ contextMap }: { contextMap?: ReportContextMap }) => {
             case 'MOLigo 2': return 'bg-amber-200 text-amber-900';
             case 'Flanking Fwd': return 'bg-blue-200 text-blue-900';
             case 'Flanking Rev': return 'bg-purple-200 text-purple-900';
+            case 'Fwd Primer Binding': return 'bg-pink-200 text-pink-900';
+            case 'Rev Primer Binding': return 'bg-fuchsia-200 text-fuchsia-900';
             default: return 'bg-gray-200 text-gray-900';
+        }
+    };
+
+    const regionSwatch = (label: string): string => {
+        switch (label) {
+            case 'MOLigo 1': return 'bg-emerald-200';
+            case 'MOLigo 2': return 'bg-amber-200';
+            case 'Flanking Fwd': return 'bg-blue-200';
+            case 'Flanking Rev': return 'bg-purple-200';
+            case 'Fwd Primer Binding': return 'bg-pink-200';
+            case 'Rev Primer Binding': return 'bg-fuchsia-200';
+            default: return 'bg-gray-200';
         }
     };
 
@@ -96,40 +110,38 @@ const ContextMap = ({ contextMap }: { contextMap?: ReportContextMap }) => {
         lines.push(sequence.slice(i, i + lineLen));
     }
 
+    const uniqueRegionLabels = Array.from(new Set(regions.map(r => r.label)));
+
     return (
-        <div className="space-y-1">
-            <div className="flex flex-wrap gap-3 text-xs mb-2">
-                {regions.some(r => r.label === 'MOLigo 1') && (
-                    <div className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded-sm bg-emerald-200" /> MOLigo 1</div>
-                )}
-                {regions.some(r => r.label === 'MOLigo 2') && (
-                    <div className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded-sm bg-amber-200" /> MOLigo 2</div>
-                )}
-                {regions.some(r => r.label === 'Flanking Fwd') && (
-                    <div className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded-sm bg-blue-200" /> Flanking Fwd</div>
-                )}
-                {regions.some(r => r.label === 'Flanking Rev') && (
-                    <div className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded-sm bg-purple-200" /> Flanking Rev</div>
-                )}
-            </div>
-            {lines.map((line, lineIdx) => {
-                const lineStart = absStart + lineIdx * lineLen;
-                return (
-                    <div key={lineIdx} className="font-mono text-xs">
-                        <span className="text-gray-400 select-none inline-block w-24 text-right pr-3">{lineStart}</span>
-                        <span className="whitespace-pre">
-                            {line.split('').map((char, charIdx) => {
-                                const idx = lineIdx * lineLen + charIdx;
-                                const r = regionAt(idx);
-                                if (r) {
-                                    return <span key={idx} className={`${regionClass(r.label)} font-bold px-[1px]`}>{char}</span>;
-                                }
-                                return <span key={idx}>{char}</span>;
-                            })}
-                        </span>
+        <div className="bg-gray-50 rounded border border-gray-200 p-3">
+            <div className="flex flex-wrap gap-3 text-xs mb-3">
+                {uniqueRegionLabels.map(label => (
+                    <div key={label} className="flex items-center gap-1">
+                        <span className={`inline-block w-3 h-3 rounded-sm ${regionSwatch(label)}`} />
+                        <span>{label}</span>
                     </div>
-                );
-            })}
+                ))}
+            </div>
+            <div className="space-y-1">
+                {lines.map((line, lineIdx) => {
+                    const lineStart = absStart + lineIdx * lineLen;
+                    return (
+                        <div key={lineIdx} className="font-mono text-xs">
+                            <span className="text-gray-400 select-none inline-block w-24 text-right pr-3">{lineStart}</span>
+                            <span className="whitespace-pre">
+                                {line.split('').map((char, charIdx) => {
+                                    const idx = lineIdx * lineLen + charIdx;
+                                    const r = regionAt(idx);
+                                    if (r) {
+                                        return <span key={idx} className={`${regionClass(r.label)} font-bold px-[1px]`}>{char}</span>;
+                                    }
+                                    return <span key={idx}>{char}</span>;
+                                })}
+                            </span>
+                        </div>
+                    );
+                })}
+            </div>
         </div>
     );
 };

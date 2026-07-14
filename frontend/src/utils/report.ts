@@ -223,16 +223,22 @@ const fmtStructureDetails = (title: string, result?: IdtReportRawData): string[]
     return out;
 };
 
-const markerLine = (len: number, regions: ReportContextRegion[], symbol: string, regionLabel: string): string => {
-    const chars = Array(len).fill(' ');
-    regions
-        .filter(r => r.label === regionLabel)
-        .forEach(r => {
-            for (let i = r.start; i < r.end && i < len; i++) {
-                chars[i] = symbol;
-            }
-        });
-    return chars.join('');
+const REGION_SYMBOLS: Record<string, string> = {
+    'MOLigo 1': '1',
+    'MOLigo 2': '2',
+    'Flanking Fwd': 'F',
+    'Flanking Rev': 'R',
+    'Fwd Primer Binding': 'f',
+    'Rev Primer Binding': 'r',
+};
+
+const REGION_PRIORITY: Record<string, number> = {
+    'MOLigo 1': 1,
+    'MOLigo 2': 2,
+    'Flanking Fwd': 3,
+    'Flanking Rev': 4,
+    'Fwd Primer Binding': 5,
+    'Rev Primer Binding': 6,
 };
 
 const fmtContextMap = (contextMap?: ReportContextMap): string[] => {
@@ -243,26 +249,34 @@ const fmtContextMap = (contextMap?: ReportContextMap): string[] => {
     out.push(`Window: ${absStart} - ${absStart + sequence.length - 1} (${sequence.length} nt)`);
 
     const legendParts: string[] = [];
-    if (regions.some(r => r.label === 'MOLigo 1')) legendParts.push('*1 = MOLigo 1');
-    if (regions.some(r => r.label === 'MOLigo 2')) legendParts.push('*2 = MOLigo 2');
-    if (regions.some(r => r.label === 'Flanking Fwd')) legendParts.push('*F = Flanking Forward');
-    if (regions.some(r => r.label === 'Flanking Rev')) legendParts.push('*R = Flanking Reverse');
+    Object.entries(REGION_SYMBOLS).forEach(([label, symbol]) => {
+        if (regions.some(r => r.label === label)) {
+            legendParts.push(`${symbol} = ${label}`);
+        }
+    });
     if (legendParts.length > 0) out.push(`Legend: ${legendParts.join(' | ')}`);
     out.push('');
 
     for (let i = 0; i < sequence.length; i += CONTEXT_LINE_LEN) {
         const lineSeq = sequence.slice(i, i + CONTEXT_LINE_LEN);
         const lineStart = absStart + i;
+        const offset = i;
+        const markers = Array(lineSeq.length).fill(' ');
+        for (let j = 0; j < lineSeq.length; j++) {
+            const absIdx = offset + j;
+            let best: ReportContextRegion | null = null;
+            for (const r of regions) {
+                if (absIdx >= r.start && absIdx < r.end) {
+                    if (!best || (REGION_PRIORITY[r.label] ?? 99) < (REGION_PRIORITY[best.label] ?? 99)) {
+                        best = r;
+                    }
+                }
+            }
+            if (best) markers[j] = REGION_SYMBOLS[best.label] ?? '?';
+        }
         out.push(`${String(lineStart).padStart(8, ' ')}  ${lineSeq}`);
-        if (regions.length > 0) {
-            const m1 = markerLine(lineSeq.length, regions, '*', 'MOLigo 1');
-            const m2 = markerLine(lineSeq.length, regions, '*', 'MOLigo 2');
-            const mf = markerLine(lineSeq.length, regions, '*', 'Flanking Fwd');
-            const mr = markerLine(lineSeq.length, regions, '*', 'Flanking Rev');
-            if (m1.trim()) out.push(`${' '.repeat(10)}M1 ${m1}`);
-            if (m2.trim()) out.push(`${' '.repeat(10)}M2 ${m2}`);
-            if (mf.trim()) out.push(`${' '.repeat(10)}F  ${mf}`);
-            if (mr.trim()) out.push(`${' '.repeat(10)}R  ${mr}`);
+        if (markers.some(m => m !== ' ')) {
+            out.push(`${' '.repeat(10)}   ${markers.join('')}`);
         }
     }
     return out;
