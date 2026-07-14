@@ -13,53 +13,70 @@ interface BlastResultsProps {
     filteredHits?: BlastHit[];
     showMatches?: boolean;
     onToggleShowMatches?: () => void;
+    onHitClick?: (hit: BlastHit) => void;
 }
 
-const HitRow: React.FC<{ hit: BlastHit; idx: number; dimmed?: boolean }> = ({ hit, idx, dimmed }) => (
-    <tr
-        className={`hover:bg-indigo-50/50 dark:hover:bg-indigo-900/20 transition-colors ${
-            idx % 2 === 0 ? 'bg-white dark:bg-slate-800' : 'bg-slate-50/50 dark:bg-slate-800/50'
-        } ${dimmed ? 'opacity-60' : ''}`}
-    >
-        <td className="px-4 py-2.5 text-slate-400 dark:text-slate-500 font-mono text-xs">{idx + 1}</td>
-        <td className="px-4 py-2.5">
-            <a
-                href={`https://www.ncbi.nlm.nih.gov/nuccore/${hit.accession}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 font-mono text-xs font-medium hover:underline"
-            >
-                {hit.accession}
-            </a>
-        </td>
-        <td className="px-4 py-2.5 text-slate-700 dark:text-slate-300 max-w-md truncate" title={hit.description}>
-            {hit.description}
-        </td>
-        <td className="px-4 py-2.5 text-right font-mono text-xs text-slate-600 dark:text-slate-400">
-            {hit.evalue.toExponential(1)}
-        </td>
-        <td className="px-4 py-2.5 text-right">
-            <span
-                className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${
-                    hit.identity >= 100
-                        ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400'
-                        : hit.identity >= 95
-                        ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
-                        : hit.identity >= 80
-                        ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400'
-                        : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
-                }`}
-            >
-                {hit.identity}%
-            </span>
-        </td>
-        <td className="px-4 py-2.5 text-right font-mono text-xs text-slate-600 dark:text-slate-400">
-            {hit.query_cover}%
-        </td>
-    </tr>
-);
+const HitRow: React.FC<{ hit: BlastHit; idx: number; dimmed?: boolean; onHitClick?: (hit: BlastHit) => void }> = ({ hit, idx, dimmed, onHitClick }) => {
+    const handleRowClick = (e: React.MouseEvent<HTMLTableRowElement>) => {
+        if (!onHitClick) return;
 
-const BlastResults: React.FC<BlastResultsProps> = ({ hits, filteredHits = [], showMatches = false, onToggleShowMatches }) => {
+        const target = e.target as HTMLElement;
+        const anchor = target.closest('a');
+        if (anchor?.getAttribute('href')?.includes('ncbi.nlm.nih.gov')) {
+            return;
+        }
+
+        onHitClick(hit);
+    };
+
+    return (
+        <tr
+            onClick={handleRowClick}
+            className={`hover:bg-indigo-100/50 dark:hover:bg-indigo-900/30 transition-colors cursor-pointer ${
+                idx % 2 === 0 ? 'bg-white dark:bg-slate-800' : 'bg-slate-50/50 dark:bg-slate-800/50'
+            } ${dimmed ? 'opacity-60' : ''}`}
+        >
+            <td className="px-4 py-2.5 text-slate-400 dark:text-slate-500 font-mono text-xs">{idx + 1}</td>
+            <td className="px-4 py-2.5">
+                <a
+                    href={`https://www.ncbi.nlm.nih.gov/nuccore/${hit.accession}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 font-mono text-xs font-medium hover:underline"
+                    onClick={e => e.stopPropagation()}
+                >
+                    {hit.accession}
+                </a>
+            </td>
+            <td className="px-4 py-2.5 text-slate-700 dark:text-slate-300 max-w-md truncate" title={hit.description}>
+                {hit.description}
+            </td>
+            <td className="px-4 py-2.5 text-right font-mono text-xs text-slate-600 dark:text-slate-400">
+                {hit.evalue.toExponential(1)}
+            </td>
+            <td className="px-4 py-2.5 text-right">
+                <span
+                    className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${
+                        hit.identity >= 100
+                            ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400'
+                            : hit.identity >= 95
+                            ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                            : hit.identity >= 80
+                            ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400'
+                            : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+                    }`}
+                >
+                    {hit.identity}%
+                </span>
+            </td>
+            <td className="px-4 py-2.5 text-right font-mono text-xs text-slate-600 dark:text-slate-400">
+                {hit.query_cover}%
+            </td>
+        </tr>
+    );
+};
+
+const BlastResults: React.FC<BlastResultsProps> = ({ hits, filteredHits = [], showMatches = false, onToggleShowMatches, onHitClick }) => {
     const [isCollapsed, setIsCollapsed] = useState(true);
 
     const safeHits = hits || [];
@@ -131,7 +148,7 @@ const BlastResults: React.FC<BlastResultsProps> = ({ hits, filteredHits = [], sh
                         </thead>
                         <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
                             {hits.map((hit, idx) => (
-                                <HitRow key={hit.accession + idx} hit={hit} idx={idx} />
+                                <HitRow key={hit.accession + idx} hit={hit} idx={idx} onHitClick={onHitClick} />
                             ))}
                             {showMatches && filteredHits.length > 0 && (
                                 <>
@@ -141,7 +158,7 @@ const BlastResults: React.FC<BlastResultsProps> = ({ hits, filteredHits = [], sh
                                         </td>
                                     </tr>
                                     {filteredHits.map((hit, idx) => (
-                                        <HitRow key={hit.accession + idx} hit={hit} idx={hits.length + idx} dimmed />
+                                        <HitRow key={hit.accession + idx} hit={hit} idx={hits.length + idx} dimmed onHitClick={onHitClick} />
                                     ))}
                                 </>
                             )}

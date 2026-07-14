@@ -81,6 +81,9 @@ class BlastHit(BaseModel):
     evalue: float
     identity: float
     query_cover: float
+    sstart: Optional[int] = None
+    send: Optional[int] = None
+    rank: Optional[int] = None
 
 
 @app.post("/search")
@@ -138,6 +141,9 @@ async def search_and_align(request: SearchRequest):
                     "evalue": h["evalue"],
                     "identity": h["identity"],
                     "query_cover": h["query_cover"],
+                    "sstart": h.get("sstart"),
+                    "send": h.get("send"),
+                    "rank": h.get("rank"),
                 }
                 for h in blast_hits
             ]
@@ -149,6 +155,9 @@ async def search_and_align(request: SearchRequest):
                     "evalue": h["evalue"],
                     "identity": h["identity"],
                     "query_cover": h["query_cover"],
+                    "sstart": h.get("sstart"),
+                    "send": h.get("send"),
+                    "rank": h.get("rank"),
                 }
                 for h in filtered_hits
             ]

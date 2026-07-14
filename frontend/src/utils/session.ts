@@ -15,6 +15,9 @@ export interface BlastHit {
     evalue: number;
     identity: number;
     query_cover: number;
+    sstart?: number;
+    send?: number;
+    rank?: number;
 }
 
 export interface BlastMeta {

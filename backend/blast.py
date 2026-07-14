@@ -169,7 +169,9 @@ def _parse_blast_xml(xml_text: str) -> Tuple[List[Dict], int]:
     query_len = int(query_len_el.text) if query_len_el is not None and query_len_el.text else 0
 
     # Iterate through hits
+    rank = 0
     for hit in root.findall(".//Hit"):
+        rank += 1
         hit_accession = _get_text(hit, "Hit_accession")
         hit_def = _get_text(hit, "Hit_def")
 
@@ -182,6 +184,8 @@ def _parse_blast_xml(xml_text: str) -> Tuple[List[Dict], int]:
         align_len = int(_get_text(hsp, "Hsp_align-len", "1"))
         evalue = float(_get_text(hsp, "Hsp_evalue", "999"))
         hsp_sbjct = _get_text(hsp, "Hsp_hseq", "")
+        hsp_hit_from = int(_get_text(hsp, "Hsp_hit-from", "1"))
+        hsp_hit_to = int(_get_text(hsp, "Hsp_hit-to", "1"))
 
         identity_pct = round((identity / align_len) * 100, 1) if align_len > 0 else 0
         query_cover_pct = round((align_len / query_len) * 100, 1) if query_len > 0 else 0
@@ -197,6 +201,9 @@ def _parse_blast_xml(xml_text: str) -> Tuple[List[Dict], int]:
                 "identity": identity_pct,
                 "query_cover": query_cover_pct,
                 "sequence": subject_seq,
+                "sstart": hsp_hit_from,
+                "send": hsp_hit_to,
+                "rank": rank,
             })
 
     return hits, query_len

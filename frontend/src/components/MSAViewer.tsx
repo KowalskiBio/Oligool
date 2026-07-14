@@ -53,11 +53,14 @@ interface MSAViewerProps {
     autofindTreatIndelsAsMismatches?: boolean;
     /** Called when the user toggles the "count indels as mismatches" option. */
     onAutofindTreatIndelsAsMismatchesChange?: (value: boolean) => void;
+    blastRid?: string;
+    hitRanges?: Record<string, { sstart: number; send: number; rank: number }>;
 }
 
 export interface MSAViewerHandle {
     getViewportSnapshot: () => { scrollLeft: number; scrollTop: number; viewFraction: number; viewMode: 'bars' | 'letters' };
     applyViewportSnapshot: (viewport: { scrollLeft: number; scrollTop: number; viewFraction: number; viewMode: 'bars' | 'letters' }) => void;
+    scrollToRow: (rowIndex: number) => void;
 }
 
 /* ── constants ────────────────────────────────────────── */
@@ -77,7 +80,7 @@ const MINIMAP_HEIGHT = MINIMAP_GC_H + MINIMAP_RULER_H + 50 + MINIMAP_HANDLE_H;
 const MAIN_GC_TRACK_H = 40;
 const MAIN_MSA_TRACK_H = 30;
 
-const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVisibleQueryChange, primers, flankingPrimers, isDarkMode, navigateTarget, onOligoRegionSelect, onAutofindRegionSelect, onFlankingPrimerClick, selectedAccessions, onSelectionChange, restoredRegion, showAutofindUI = true, autofindTreatIndelsAsMismatches = false, onAutofindTreatIndelsAsMismatchesChange }, ref) => {
+const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVisibleQueryChange, primers, flankingPrimers, isDarkMode, navigateTarget, onOligoRegionSelect, onAutofindRegionSelect, onFlankingPrimerClick, selectedAccessions, onSelectionChange, restoredRegion, showAutofindUI = true, autofindTreatIndelsAsMismatches = false, onAutofindTreatIndelsAsMismatchesChange, blastRid = '', hitRanges = {} }, ref) => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const hoverOverlayRef = useRef<HTMLCanvasElement>(null);
     const minimapRef = useRef<HTMLCanvasElement>(null);
@@ -115,6 +118,7 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
     const [viewMode, setViewMode] = useState<'bars' | 'letters'>('bars');
     const [copyFeedback, setCopyFeedback] = useState('');
     const [selectionRange, setSelectionRange] = useState<{ start: number; end: number } | null>(null);
+    const [ncbiModalAccession, setNcbiModalAccession] = useState<string | null>(null);
     const hoverColRef = useRef<number | null>(null);
     const hoverRafRef = useRef<number>(0);
     const redrawRef = useRef<() => void>(() => { });
@@ -143,6 +147,16 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
                 scrollRef.current.scrollTop = viewport.scrollTop;
             }
             targetScrollRef.current = viewport.scrollLeft;
+        },
+        scrollToRow: (rowIndex: number) => {
+            const el = scrollRef.current;
+            if (!el || rowIndex < 0) return;
+            const headerH = MAIN_GC_TRACK_H + MAIN_MSA_TRACK_H + RULER_HEIGHT;
+            const rowY = headerH + rowIndex * ROW_HEIGHT;
+            const maxScroll = Math.max(0, el.scrollHeight - el.clientHeight);
+            const targetScroll = Math.max(0, Math.min(maxScroll, rowY - el.clientHeight / 2 + ROW_HEIGHT / 2));
+            el.scrollTop = targetScroll;
+            setScrollTop(targetScroll);
         },
     }), [scrollLeft, scrollTop, viewFraction, viewMode]);
 
@@ -1549,7 +1563,7 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
         if (x < labelWidth && row > 0) {
             const accession = sequences[row].accession;
             if (accession) {
-                window.open(`https://www.ncbi.nlm.nih.gov/nuccore/${accession}`, '_blank', 'noopener,noreferrer');
+                setNcbiModalAccession(accession);
             }
             return;
         }
@@ -1874,6 +1888,69 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
                     }}
                 >
                     {labelHoverInfo.text}
+                </div>
+            )}
+            {/* ── NCBI link choice modal ── */}
+            {ncbiModalAccession && (
+                <div
+                    className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
+                    onClick={() => setNcbiModalAccession(null)}
+                >
+                    <div
+                        className="max-w-sm w-full bg-white dark:bg-slate-800 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-700 p-6"
+                        onClick={e => e.stopPropagation()}
+                    >
+                        <div className="flex items-center justify-between mb-4">
+                            <h3 className="text-base font-semibold text-slate-800 dark:text-slate-200">
+                                Open NCBI record
+                            </h3>
+                            <button
+                                onClick={() => setNcbiModalAccession(null)}
+                                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-xl leading-none"
+                            >
+                                &times;
+                            </button>
+                        </div>
+                        <p className="text-sm text-slate-600 dark:text-slate-400 mb-5 font-mono break-all">
+                            {ncbiModalAccession}
+                        </p>
+                        <div className="space-y-3">
+                            <button
+                                onClick={() => {
+                                    const range = hitRanges[ncbiModalAccession];
+                                    const parts = ['report=genbank', 'log$=nuclalign'];
+                                    if (range?.rank !== undefined) parts.push(`blast_rank=${range.rank}`);
+                                    if (blastRid) parts.push(`RID=${blastRid}`);
+                                    const url = `https://www.ncbi.nlm.nih.gov/nucleotide/${ncbiModalAccession}?${parts.join('&')}`;
+                                    window.open(url, '_blank', 'noopener,noreferrer');
+                                    setNcbiModalAccession(null);
+                                }}
+                                className="w-full px-4 py-2.5 text-sm font-medium rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 transition-colors"
+                            >
+                                Whole genome
+                            </button>
+                            {hitRanges[ncbiModalAccession] && (
+                                <button
+                                    onClick={() => {
+                                        const range = hitRanges[ncbiModalAccession];
+                                        if (!range) return;
+                                        const parts = ['report=genbank', 'log$=nuclalign', `blast_rank=${range.rank}`];
+                                        if (blastRid) parts.push(`RID=${blastRid}`);
+                                        parts.push(`from=${range.sstart}`, `to=${range.send}`);
+                                        const url = `https://www.ncbi.nlm.nih.gov/nucleotide/${ncbiModalAccession}?${parts.join('&')}`;
+                                        window.open(url, '_blank', 'noopener,noreferrer');
+                                        setNcbiModalAccession(null);
+                                    }}
+                                    className="w-full px-4 py-2.5 text-sm font-medium rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-600 transition-colors"
+                                >
+                                    Coding region
+                                </button>
+                            )}
+                        </div>
+                        <p className="mt-4 text-xs text-slate-500 dark:text-slate-400">
+                            Choose whether to view the complete genome record or just the BLAST-aligned coding region.
+                        </p>
+                    </div>
                 </div>
             )}
         </div >

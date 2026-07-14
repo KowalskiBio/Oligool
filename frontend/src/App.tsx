@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import MSAViewer, { type MSAViewerHandle } from './components/MSAViewer';
 import QueryViewer, { type QueryViewerHandle, type ImportedSession } from './components/QueryViewer';
 import BlastResults from './components/BlastResults';
@@ -13,6 +13,9 @@ interface BlastHit {
   evalue: number;
   identity: number;
   query_cover: number;
+  sstart?: number;
+  send?: number;
+  rank?: number;
 }
 
 function App() {
@@ -65,6 +68,7 @@ function App() {
 
   const queryViewerRef = useRef<QueryViewerHandle>(null);
   const msaViewerRef = useRef<MSAViewerHandle>(null);
+  const msaViewerContainerRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const importNonceRef = useRef(0);
   const [importedSession, setImportedSession] = useState<ImportedSession | null>(null);
@@ -449,6 +453,50 @@ function App() {
       return !filteredAccessions.has(header.trim().split(/\s/)[0]);
     }).join('');
   })();
+
+  const hitRanges = useMemo(() => {
+    const ranges: Record<string, { sstart: number; send: number; rank: number }> = {};
+    for (const hit of blastHits) {
+      if (hit.sstart !== undefined && hit.send !== undefined && hit.rank !== undefined) {
+        ranges[hit.accession] = { sstart: hit.sstart, send: hit.send, rank: hit.rank };
+      }
+    }
+    for (const hit of filteredHits) {
+      if (hit.sstart !== undefined && hit.send !== undefined && hit.rank !== undefined) {
+        ranges[hit.accession] = { sstart: hit.sstart, send: hit.send, rank: hit.rank };
+      }
+    }
+    return ranges;
+  }, [blastHits, filteredHits]);
+
+  const handleHitClick = useCallback((hit: BlastHit) => {
+    if (!visibleAlignment) return;
+
+    const lines = visibleAlignment.trim().split('\n');
+    const alignmentAccessions: string[] = [];
+
+    for (const line of lines) {
+      if (line.startsWith('>')) {
+        const header = line.substring(1).trim();
+        const parts = header.split(/\s+/);
+        if (parts.length > 0) {
+          alignmentAccessions.push(parts[0]);
+        }
+      }
+    }
+
+    const hitIndex = alignmentAccessions.indexOf(hit.accession);
+    if (hitIndex === -1) return;
+
+    const autofindSelections = new Set<string>();
+    for (let i = 1; i <= hitIndex && i < alignmentAccessions.length; i++) {
+      autofindSelections.add(alignmentAccessions[i]);
+    }
+
+    setAutofindSelectedAccessions(autofindSelections);
+    msaViewerRef.current?.scrollToRow(hitIndex);
+    msaViewerContainerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, [visibleAlignment]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-indigo-50/30 dark:from-slate-900 dark:to-slate-950 py-8 px-4 sm:px-6 lg:px-8 transition-colors duration-200">
@@ -1009,33 +1057,38 @@ function App() {
               filteredHits={filteredHits}
               showMatches={showMatches}
               onToggleShowMatches={() => setShowMatches(v => !v)}
+              onHitClick={handleHitClick}
             />
           )}
 
           {/* MSA Viewer */}
           {visibleAlignment && (
             <>
-              <MSAViewer
-                ref={msaViewerRef}
-                alignment={visibleAlignment}
-                onVisibleQueryChange={setSelectedSequence}
-                jobName={jobName}
-                primers={selectedPrimers}
-                flankingPrimers={selectedFlankingPrimers}
-                isDarkMode={isDarkMode}
-                navigateTarget={navigateTarget}
-                restoredRegion={restoredRegion}
-                onOligoRegionSelect={(startCol, endCol) => setOligoRegion({ startCol, endCol })}
-                onAutofindRegionSelect={(colStart, colEnd) => {
-                  setNavigateTarget({ colStart, colEnd, ts: Date.now() });
-                  setOligoRegion({ startCol: colStart, endCol: colEnd });
-                  setAutofindRegion({ startCol: colStart, endCol: colEnd });
-                }}
-                selectedAccessions={autofindSelectedAccessions}
-                onSelectionChange={setAutofindSelectedAccessions}
-                autofindTreatIndelsAsMismatches={autofindTreatIndelsAsMismatches}
-                onAutofindTreatIndelsAsMismatchesChange={setAutofindTreatIndelsAsMismatches}
-              />
+              <div ref={msaViewerContainerRef}>
+                <MSAViewer
+                  ref={msaViewerRef}
+                  alignment={visibleAlignment}
+                  onVisibleQueryChange={setSelectedSequence}
+                  jobName={jobName}
+                  primers={selectedPrimers}
+                  flankingPrimers={selectedFlankingPrimers}
+                  isDarkMode={isDarkMode}
+                  navigateTarget={navigateTarget}
+                  restoredRegion={restoredRegion}
+                  onOligoRegionSelect={(startCol, endCol) => setOligoRegion({ startCol, endCol })}
+                  onAutofindRegionSelect={(colStart, colEnd) => {
+                    setNavigateTarget({ colStart, colEnd, ts: Date.now() });
+                    setOligoRegion({ startCol: colStart, endCol: colEnd });
+                    setAutofindRegion({ startCol: colStart, endCol: colEnd });
+                  }}
+                  selectedAccessions={autofindSelectedAccessions}
+                  onSelectionChange={setAutofindSelectedAccessions}
+                  autofindTreatIndelsAsMismatches={autofindTreatIndelsAsMismatches}
+                  onAutofindTreatIndelsAsMismatchesChange={setAutofindTreatIndelsAsMismatches}
+                  blastRid={blastMeta?.rid ?? ''}
+                  hitRanges={hitRanges}
+                />
+              </div>
               {step === 'done' && selectedSequence && (
                 <QueryViewer
                   key={`qv-${importNonceRef.current}`}
