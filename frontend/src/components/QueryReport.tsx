@@ -76,7 +76,7 @@ const renderIdtSvg = (item: IdtRawItem, seq1?: string, seq2?: string) => {
 const ContextMap = ({ contextMap }: { contextMap?: ReportContextMap }) => {
     if (!contextMap || !contextMap.sequence) return null;
     const { sequence, absStart, regions } = contextMap;
-    const lineLen = 80;
+    const lineLen = 60;
 
     const regionClass = (label: string): string => {
         switch (label) {
@@ -126,8 +126,8 @@ const ContextMap = ({ contextMap }: { contextMap?: ReportContextMap }) => {
                 {lines.map((line, lineIdx) => {
                     const lineStart = absStart + lineIdx * lineLen;
                     return (
-                        <div key={lineIdx} className="font-mono text-xs">
-                            <span className="text-gray-400 select-none inline-block w-24 text-right pr-3">{lineStart}</span>
+                        <div key={lineIdx} className="font-mono text-xs whitespace-nowrap break-inside-avoid-page">
+                            <span className="text-gray-400 select-none inline-block w-20 text-right pr-3 print:w-16">{lineStart}</span>
                             <span className="whitespace-pre">
                                 {line.split('').map((char, charIdx) => {
                                     const idx = lineIdx * lineLen + charIdx;
