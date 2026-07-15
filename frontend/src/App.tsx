@@ -528,7 +528,7 @@ function App() {
                 title="Kliknutím zobrazíte novinky a návod k použití"
                 className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800 whitespace-nowrap cursor-pointer hover:bg-amber-200 dark:hover:bg-amber-900/50 transition-colors"
               >
-                under development
+                v0.9.3 beta
               </button>
               {sessionMsg && (
                 <span
