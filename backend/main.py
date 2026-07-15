@@ -975,6 +975,9 @@ async def design_flanking_primers(req: FlankingPrimerParams):
         "dna_conc":  req.dna_conc,
     }
 
+    overlap_buffer_factor = 5
+    primers_request_count = req.num_return * overlap_buffer_factor
+
     p3_global = {
         "PRIMER_OPT_SIZE":            req.opt_size,
         "PRIMER_MIN_SIZE":            req.min_size,
@@ -984,7 +987,7 @@ async def design_flanking_primers(req: FlankingPrimerParams):
         "PRIMER_MAX_TM":              req.max_tm,
         "PRIMER_MIN_GC":              req.min_gc,
         "PRIMER_MAX_GC":              req.max_gc,
-        "PRIMER_NUM_RETURN":          req.num_return,
+        "PRIMER_NUM_RETURN":          primers_request_count,
         "PRIMER_EXPLAIN_FLAG":        1,
         "PRIMER_PICK_INTERNAL_OLIGO": 0,
         "PRIMER_SALT_MONOVALENT":     req.mv_conc,
@@ -1022,6 +1025,43 @@ async def design_flanking_primers(req: FlankingPrimerParams):
             "homodimer":{"structure_found": bool(getattr(hd, "structure_found", False)), "tm": _round(getattr(hd, "tm", None), 1), "dg": _round((getattr(hd, "dg", None) or 0) / 1000, 2)},
         }
 
+    def _pick_diverse_primers(primers, max_count, min_gap=0):
+        picked = []
+        picked_set = set()
+
+        for idx, p in enumerate(primers):
+            interval = p.get("interval")
+            if not interval or len(interval) < 2:
+                continue
+            s, e = interval[0], interval[1]
+            overlaps = False
+            for q in picked:
+                qs, qe = q["interval"][0], q["interval"][1]
+                if e <= qs:
+                    if qs - e < min_gap:
+                        overlaps = True
+                        break
+                elif qe <= s:
+                    if s - qe < min_gap:
+                        overlaps = True
+                        break
+                else:
+                    overlaps = True
+                    break
+            if not overlaps:
+                picked.append(p)
+                picked_set.add(idx)
+                if len(picked) >= max_count:
+                    return picked
+
+        for idx, p in enumerate(primers):
+            if idx in picked_set:
+                continue
+            picked.append(p)
+            if len(picked) >= max_count:
+                break
+        return picked
+
     results = {"forward": {"num_returned": 0, "primers": [], "explain": ""},
                "reverse": {"num_returned": 0, "primers": [], "explain": ""},
                "pair_metrics": None}
@@ -1038,7 +1078,7 @@ async def design_flanking_primers(req: FlankingPrimerParams):
         n_l = int(up_res.get("PRIMER_LEFT_NUM_RETURNED", 0) or 0)
         results["forward"]["num_returned"] = n_l
         results["forward"]["explain"] = up_res.get("PRIMER_LEFT_EXPLAIN", "")
-        for i in range(min(req.num_return, n_l)):
+        for i in range(min(primers_request_count, n_l)):
             s   = up_res.get(f"PRIMER_LEFT_{i}_SEQUENCE")
             pos = up_res.get(f"PRIMER_LEFT_{i}")
             a   = _analyze(s)
@@ -1056,6 +1096,9 @@ async def design_flanking_primers(req: FlankingPrimerParams):
                 "hairpin_th": _round(up_res.get(f"PRIMER_LEFT_{i}_HAIRPIN_TH"), 1),
             }
             results["forward"]["primers"].append(a)
+        results["forward"]["primers"] = _pick_diverse_primers(
+            results["forward"]["primers"], req.num_return, min_gap=0)
+        results["forward"]["num_returned"] = len(results["forward"]["primers"])
 
     # ── REVERSE (Right flank → picks RIGHT primer from first flank_window bp) ──
     if downstream and len(downstream) >= req.min_size:
@@ -1069,7 +1112,7 @@ async def design_flanking_primers(req: FlankingPrimerParams):
         n_r = int(down_res.get("PRIMER_RIGHT_NUM_RETURNED", 0) or 0)
         results["reverse"]["num_returned"] = n_r
         results["reverse"]["explain"] = down_res.get("PRIMER_RIGHT_EXPLAIN", "")
-        for i in range(min(req.num_return, n_r)):
+        for i in range(min(primers_request_count, n_r)):
             s   = down_res.get(f"PRIMER_RIGHT_{i}_SEQUENCE")
             pos = down_res.get(f"PRIMER_RIGHT_{i}")
             a   = _analyze(s)
@@ -1087,6 +1130,9 @@ async def design_flanking_primers(req: FlankingPrimerParams):
                 "hairpin_th": _round(down_res.get(f"PRIMER_RIGHT_{i}_HAIRPIN_TH"), 1),
             }
             results["reverse"]["primers"].append(a)
+        results["reverse"]["primers"] = _pick_diverse_primers(
+            results["reverse"]["primers"], req.num_return, min_gap=0)
+        results["reverse"]["num_returned"] = len(results["reverse"]["primers"])
 
     # ── Pair heterodimer QC ──
     if results["forward"]["primers"] and results["reverse"]["primers"]:
