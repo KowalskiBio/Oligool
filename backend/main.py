@@ -1152,6 +1152,79 @@ async def design_flanking_primers(req: FlankingPrimerParams):
     return results
 
 
+class PrimerAnalyzeRequest(BaseModel):
+    sequence: str
+    mv_conc: float = 50.0
+    dv_conc: float = 3.0
+    dntp_conc: float = 0.8
+    dna_conc: float = 400.0
+
+
+@app.post("/primers/analyze")
+async def analyze_primer_sequence(req: PrimerAnalyzeRequest):
+    """Return Primer3 Tm, GC%, hairpin and homodimer for a single primer sequence.
+
+    This endpoint powers the manual primer-selection path in the frontend so that
+    the displayed "P3 Tm" is the real Primer3 thermodynamic Tm instead of a
+    simple GC-based approximation.
+    """
+    try:
+        import primer3
+    except ImportError:
+        raise HTTPException(status_code=500, detail="primer3-py not installed")
+
+    s = req.sequence.upper().replace(" ", "").replace("\n", "")
+    if not s:
+        raise HTTPException(status_code=400, detail="Sequence is empty")
+
+    kwargs = {
+        "mv_conc": req.mv_conc,
+        "dv_conc": req.dv_conc,
+        "dntp_conc": req.dntp_conc,
+        "dna_conc": req.dna_conc,
+    }
+
+    try:
+        tm = primer3.bindings.calc_tm(s, **kwargs)
+    except TypeError:
+        tm = primer3.bindings.calc_tm(s)
+    try:
+        hp = primer3.bindings.calc_hairpin(s, temp_c=25.0, **kwargs)
+    except TypeError:
+        hp = primer3.bindings.calc_hairpin(s)
+    try:
+        hd = primer3.bindings.calc_homodimer(s, temp_c=25.0, **kwargs)
+    except TypeError:
+        hd = primer3.bindings.calc_homodimer(s)
+
+    gc = 100.0 * sum(1 for b in s if b in "GC") / len(s)
+
+    def _round(x, nd=1):
+        if x is None:
+            return None
+        try:
+            return round(float(x), nd)
+        except (ValueError, TypeError):
+            return None
+
+    return {
+        "sequence": s,
+        "length": len(s),
+        "gc_percent": _round(gc, 1),
+        "tm": _round(tm, 1),
+        "hairpin": {
+            "structure_found": bool(getattr(hp, "structure_found", False)),
+            "tm": _round(getattr(hp, "tm", None), 1),
+            "dg": _round((getattr(hp, "dg", None) or 0) / 1000, 2),
+        },
+        "homodimer": {
+            "structure_found": bool(getattr(hd, "structure_found", False)),
+            "tm": _round(getattr(hd, "tm", None), 1),
+            "dg": _round((getattr(hd, "dg", None) or 0) / 1000, 2),
+        },
+    }
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("backend.main:app", host="0.0.0.0", port=8000, reload=True)

@@ -7,7 +7,7 @@ interface DesignedPrimer {
     sequence: string;
     length: number;
     gc_percent: number;
-    tm: number;
+    tm: number | null;
     hairpin: { structure_found: boolean; tm: number | null; dg: number | null };
     homodimer: { structure_found: boolean; tm: number | null; dg: number | null };
     primer3: { tm: number | null; gc_percent: number | null; self_any: number | null; self_end: number | null; hairpin_th: number | null };
@@ -173,14 +173,15 @@ export default function FlankingPrimersPanel({
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [oligoStart, oligoEnd]);
 
-    const designManual = () => {
+    const designManual = async () => {
         if (manualLeftStart === null && manualRightStart === null) {
             setError("Select a manual region in the sequence below first.");
             return;
         }
-        
+
         setError('');
-        
+        setLoading(true);
+
         const revComp = (s: string) => {
             const map: any = { A: 'T', T: 'A', C: 'G', G: 'C', a: 't', t: 'a', c: 'g', g: 'c' };
             return s.split('').reverse().map(c => map[c] || c).join('');
@@ -192,76 +193,106 @@ export default function FlankingPrimersPanel({
             return Number(((gc / seq.length) * 100).toFixed(1));
         };
 
-        const calcTm = (seq: string) => {
-            if (!seq) return 0;
-            const gc = seq.match(/[GCgc]/g)?.length || 0;
-            const at = seq.length - gc;
-            let tm = 0;
-            if (seq.length < 14) tm = (at * 2) + (gc * 4);
-            else tm = 64.9 + 41 * (gc - 16.4) / seq.length;
-            return Number(tm.toFixed(1));
-        };
-        
         const newResult: DesignResult = {
             forward: { num_returned: 0, explain: "", primers: [] },
             reverse: { num_returned: 0, explain: "", primers: [] },
             pair_metrics: null
         };
-        
-        let fwdSeq = null;
-        let revSeq = null;
-        let fwdPrimerObj = null;
-        let revPrimerObj = null;
+
+        let fwdSeq: string | null = null;
+        let revSeq: string | null = null;
+        let fwdPrimerObj: DesignedPrimer | null = null;
+        let revPrimerObj: DesignedPrimer | null = null;
 
         if (manualLeftStart !== null && manualLeftEnd !== null) {
             fwdSeq = rawSeq.substring(manualLeftStart, manualLeftEnd);
             const gc = calcGC(fwdSeq);
-            const tm = calcTm(fwdSeq);
             fwdPrimerObj = {
                 sequence: fwdSeq,
                 length: fwdSeq.length,
                 interval: [manualLeftStart, manualLeftEnd] as [number, number],
-                tm: tm, gc_percent: gc,
-                primer3: { tm: tm, gc_percent: gc, self_any: null, self_end: null, hairpin_th: null },
+                tm: null, gc_percent: gc,
+                primer3: { tm: null, gc_percent: gc, self_any: null, self_end: null, hairpin_th: null },
                 hairpin: { structure_found: false, tm: null, dg: null },
                 homodimer: { structure_found: false, tm: null, dg: null }
             };
             newResult.forward.primers.push(fwdPrimerObj);
             newResult.forward.num_returned = 1;
         }
-        
+
         if (manualRightStart !== null && manualRightEnd !== null) {
             const fwdStrandSeq = rawSeq.substring(manualRightStart, manualRightEnd);
             revSeq = revComp(fwdStrandSeq);
             const gc = calcGC(revSeq);
-            const tm = calcTm(revSeq);
             revPrimerObj = {
                 sequence: revSeq,
                 length: revSeq.length,
                 interval: [manualRightStart, manualRightEnd] as [number, number],
-                tm: tm, gc_percent: gc,
-                primer3: { tm: tm, gc_percent: gc, self_any: null, self_end: null, hairpin_th: null },
+                tm: null, gc_percent: gc,
+                primer3: { tm: null, gc_percent: gc, self_any: null, self_end: null, hairpin_th: null },
                 hairpin: { structure_found: false, tm: null, dg: null },
                 homodimer: { structure_found: false, tm: null, dg: null }
             };
             newResult.reverse.primers.push(revPrimerObj);
             newResult.reverse.num_returned = 1;
         }
-        
+
         setResult(newResult);
-        
+
         if (fwdPrimerObj) {
-            setSelFwd(fwdPrimerObj as any);
+            setSelFwd(fwdPrimerObj);
             analyzeIndividual(fwdPrimerObj.sequence);
         } else {
             setSelFwd(null);
         }
-        
+
         if (revPrimerObj) {
-            setSelRev(revPrimerObj as any);
+            setSelRev(revPrimerObj);
             analyzeIndividual(revPrimerObj.sequence);
         } else {
             setSelRev(null);
+        }
+
+        try {
+            const analyses: Promise<void>[] = [];
+            if (fwdPrimerObj) {
+                analyses.push((async () => {
+                    const data = await analyzePrimerP3(fwdPrimerObj!.sequence);
+                    fwdPrimerObj!.tm = data.tm;
+                    fwdPrimerObj!.gc_percent = data.gc_percent;
+                    fwdPrimerObj!.primer3 = {
+                        tm: data.tm,
+                        gc_percent: data.gc_percent,
+                        self_any: null,
+                        self_end: null,
+                        hairpin_th: data.hairpin.tm
+                    };
+                    fwdPrimerObj!.hairpin = data.hairpin;
+                    fwdPrimerObj!.homodimer = data.homodimer;
+                })());
+            }
+            if (revPrimerObj) {
+                analyses.push((async () => {
+                    const data = await analyzePrimerP3(revPrimerObj!.sequence);
+                    revPrimerObj!.tm = data.tm;
+                    revPrimerObj!.gc_percent = data.gc_percent;
+                    revPrimerObj!.primer3 = {
+                        tm: data.tm,
+                        gc_percent: data.gc_percent,
+                        self_any: null,
+                        self_end: null,
+                        hairpin_th: data.hairpin.tm
+                    };
+                    revPrimerObj!.hairpin = data.hairpin;
+                    revPrimerObj!.homodimer = data.homodimer;
+                })());
+            }
+            await Promise.all(analyses);
+            setResult({ ...newResult });
+        } catch (e: any) {
+            setError(e.message || 'Primer3 Tm analysis failed');
+        } finally {
+            setLoading(false);
         }
     };
 
@@ -421,11 +452,30 @@ export default function FlankingPrimersPanel({
         }
     };
 
+    const analyzePrimerP3 = useCallback(async (seq: string) => {
+        const res = await fetch(API + '/primers/analyze', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                sequence: seq,
+                mv_conc: mvConc,
+                dv_conc: dvConc,
+                dntp_conc: dntpConc,
+                dna_conc: dnaConc,
+            }),
+        });
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            throw new Error(err.detail || 'Primer3 analysis failed');
+        }
+        return await res.json();
+    }, [mvConc, dvConc, dntpConc, dnaConc]);
+
     // Stable ref for values read inside the drag effect's mouseup closure.
     // The closure must not be recreated on every render while dragging.
-    const latestRef = useRef({ idtCredentials, selFwd, selRev, analyzeIndividual, runProductAnalysis });
+    const latestRef = useRef({ idtCredentials, selFwd, selRev, analyzeIndividual, runProductAnalysis, analyzePrimerP3 });
     useEffect(() => {
-        latestRef.current = { idtCredentials, selFwd, selRev, analyzeIndividual, runProductAnalysis };
+        latestRef.current = { idtCredentials, selFwd, selRev, analyzeIndividual, runProductAnalysis, analyzePrimerP3 };
     });
 
     useEffect(() => {
@@ -542,14 +592,6 @@ export default function FlankingPrimersPanel({
         return Number(((seq.match(/[GCgc]/g)?.length || 0) / seq.length * 100).toFixed(1));
     };
 
-    const calcTmLocal = (seq: string) => {
-        if (!seq) return 0;
-        const gc = seq.match(/[GCgc]/g)?.length || 0;
-        const at = seq.length - gc;
-        const tm = seq.length < 14 ? at * 2 + gc * 4 : 64.9 + 41 * (gc - 16.4) / seq.length;
-        return Number(tm.toFixed(1));
-    };
-
     // These must be above liveFwdInterval/liveRevInterval which reference them
     const fwdInterval = selFwd?.interval as [number, number] | undefined;
     const revInterval = selRev?.interval as [number, number] | undefined;
@@ -600,19 +642,40 @@ export default function FlankingPrimersPanel({
                 const fwdStrandSeq = rawSeq.substring(newStart, newEnd);
                 const seq = id === 'fwd' ? fwdStrandSeq : revComp(fwdStrandSeq);
                 const gc = calcGCLocal(seq);
-                const tm = calcTmLocal(seq);
                 const existingName = id === 'fwd' ? latestRef.current.selFwd?.name : latestRef.current.selRev?.name;
                 const updated: DesignedPrimer = {
                     sequence: seq, length: seq.length, interval: newInterval,
-                    gc_percent: gc, tm,
-                    primer3: { tm, gc_percent: gc, self_any: null, self_end: null, hairpin_th: null },
+                    gc_percent: gc, tm: null,
+                    primer3: { tm: null, gc_percent: gc, self_any: null, self_end: null, hairpin_th: null },
                     hairpin: { structure_found: false, tm: null, dg: null },
                     homodimer: { structure_found: false, tm: null, dg: null },
                     name: existingName,
                 };
 
                 // Set loading states immediately so the debounce window shows "Analyzing...".
-                const { idtCredentials: creds, selFwd: sf, selRev: sr, analyzeIndividual: analyzeInd, runProductAnalysis: runProd } = latestRef.current;
+                const { idtCredentials: creds, selFwd: sf, selRev: sr, analyzeIndividual: analyzeInd, runProductAnalysis: runProd, analyzePrimerP3: p3Analyze } = latestRef.current;
+
+                (async () => {
+                    try {
+                        const data = await p3Analyze(seq);
+                        updated.tm = data.tm;
+                        updated.gc_percent = data.gc_percent;
+                        updated.primer3 = {
+                            tm: data.tm,
+                            gc_percent: data.gc_percent,
+                            self_any: null,
+                            self_end: null,
+                            hairpin_th: data.hairpin.tm
+                        };
+                        updated.hairpin = data.hairpin;
+                        updated.homodimer = data.homodimer;
+                        if (id === 'fwd') setSelFwd({ ...updated });
+                        else setSelRev({ ...updated });
+                    } catch (err) {
+                        console.error('Primer3 drag analysis failed', err);
+                    }
+                })();
+
                 if (creds && updated.sequence) {
                     // Prevent immediate pair-effect from running
                     skipNextPairEffectRef.current = true;

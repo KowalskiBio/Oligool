@@ -81,6 +81,7 @@ interface OligizeResponse {
 }
 
 const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function QueryViewer({ data, jobName, onPrimersUpdate, onFlankingPrimersUpdate, onNavigateTo, oligoRegion, autofindRegion, idtCredentials, alignment, navigateTarget, isDarkMode, importedSession }, ref) {
+    const API_BASE = ((import.meta.env.VITE_API_BASE as string) || '');
     const [copyFeedback, setCopyFeedback] = useState('');
 
     // IDT Analysis State
@@ -145,6 +146,8 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
             dna_conc: 500.0
         };
     });
+    const advancedParamsRef = useRef(advancedParams);
+    useEffect(() => { advancedParamsRef.current = advancedParams; }, [advancedParams]);
     const [idtAdvancedParams, setIdtAdvancedParams] = useState(() => {
         const saved = localStorage.getItem('idt_advanced_params');
         if (saved) return JSON.parse(saved);
@@ -272,7 +275,7 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
             const s = foundPos - ungappedOff;
             const gcCount = (seq.match(/[GC]/g) || []).length;
             const gcPct = (gcCount / seq.length) * 100;
-            const tm = calcTm(seq);
+            const tm = estimateTm(seq);
             return { start: s, end: s + seq.length, seq, len: seq.length, tm, gc: gcPct };
         };
 
@@ -291,7 +294,7 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
         setIsAutoSearchNeeded(false);
 
         const toGappedAbs = (u: number) => data.start + mapUngappedToGapped(u - ungappedOff, data.seq) + 1;
-        setFixedAbsCoords({
+        const next: FixedAbsCoords = {
             p1AbsStart: o1 ? toGappedAbs(foundP1) : 1,
             p1AbsEnd: o1 ? toGappedAbs(foundP1 + o1.length) : 1,
             p2AbsStart: o2 ? toGappedAbs(foundP2) : 1,
@@ -299,7 +302,9 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
             p1Seq: o1 || '', p2Seq: o2 || '',
             p1Tm: p1.tm, p2Tm: p2.tm,
             p1Gc: p1.gc, p2Gc: p2.gc,
-        });
+        };
+        setFixedAbsCoords(next);
+        refreshFixedPrimer3Tms(next);
 
         const p1GStart = mapUngappedToGapped(p1.start, data.seq);
         const p1GEnd = mapUngappedToGapped(p1.end, data.seq);
@@ -378,12 +383,12 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
         const newAbsStart = fc.start + newRelStart + 1;
         const newAbsEnd = fc.start + newRelEnd + 1;
         const gc = calcGc(newSeq);
-        const tm = calcTm(newSeq);
-        if (id === 'p1') {
-            setFixedAbsCoords({ ...fixedAbsCoords, p1AbsStart: newAbsStart, p1AbsEnd: newAbsEnd, p1Seq: newSeq, p1Tm: tm, p1Gc: gc });
-        } else {
-            setFixedAbsCoords({ ...fixedAbsCoords, p2AbsStart: newAbsStart, p2AbsEnd: newAbsEnd, p2Seq: newSeq, p2Tm: tm, p2Gc: gc });
-        }
+        const tm = estimateTm(newSeq);
+        const next = id === 'p1'
+            ? { ...fixedAbsCoords, p1AbsStart: newAbsStart, p1AbsEnd: newAbsEnd, p1Seq: newSeq, p1Tm: tm, p1Gc: gc }
+            : { ...fixedAbsCoords, p2AbsStart: newAbsStart, p2AbsEnd: newAbsEnd, p2Seq: newSeq, p2Tm: tm, p2Gc: gc };
+        setFixedAbsCoords(next);
+        refreshFixedPrimer3Tms(next as FixedAbsCoords);
         return newSeq.length;
     };
 
@@ -633,7 +638,7 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
         return u;
     };
 
-    const calcTm = (seq: string): number => {
+    const estimateTm = (seq: string): number => {
         if (!seq) return 0;
         const gc = (seq.match(/[GCgc]/g) || []).length;
         const tm = seq.length < 14
@@ -641,6 +646,43 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
             : 64.9 + 41 * (gc - 16.4) / seq.length;
         return Math.round(tm * 10) / 10;
     };
+
+    const refreshFixedPrimer3Tms = useCallback(async (fac: FixedAbsCoords) => {
+        const params = advancedParamsRef.current;
+        const p1Seq = fac.p1Seq;
+        const p2Seq = fac.p2Seq;
+        const analyze = async (seq: string) => {
+            const res = await fetch(API_BASE + '/primers/analyze', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    sequence: seq,
+                    mv_conc: Number(params.salt_mono),
+                    dv_conc: Number(params.salt_div),
+                    dntp_conc: Number(params.dntp_conc),
+                    dna_conc: Number(params.dna_conc),
+                }),
+            });
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({}));
+                throw new Error(err.detail || 'Primer3 analysis failed');
+            }
+            return await res.json();
+        };
+        const [p1Data, p2Data] = await Promise.all([
+            p1Seq ? analyze(p1Seq) : null,
+            p2Seq ? analyze(p2Seq) : null,
+        ]);
+        setFixedAbsCoords(prev => {
+            if (!prev) return prev;
+            if (prev.p1Seq !== p1Seq || prev.p2Seq !== p2Seq) return prev;
+            return {
+                ...prev,
+                p1Tm: p1Data ? p1Data.tm : prev.p1Tm,
+                p2Tm: p2Data ? p2Data.tm : prev.p2Tm,
+            };
+        });
+    }, []);
 
     // Snapshot of the current absolute oligo pair (for save). Mirrors pinPosition's mapping.
     const computeCurrentOligo = (): FixedAbsCoords | null => {
@@ -1017,13 +1059,17 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                         if (!fixedContextRef.current) {
                             captureFixedContext();
                         }
-                        setFixedAbsCoords({
+                        const prevFac = fac || fixedAbsCoords;
+                        const next: FixedAbsCoords = {
                             p1AbsStart: toGappedAbs(p1S), p1AbsEnd: toGappedAbs(p1E),
                             p2AbsStart: toGappedAbs(p2S), p2AbsEnd: toGappedAbs(p2E),
                             p1Seq, p2Seq,
-                            p1Tm: calcTm(p1Seq), p2Tm: calcTm(p2Seq),
+                            p1Tm: p1Seq === prevFac?.p1Seq ? (prevFac?.p1Tm ?? estimateTm(p1Seq)) : estimateTm(p1Seq),
+                            p2Tm: p2Seq === prevFac?.p2Seq ? (prevFac?.p2Tm ?? estimateTm(p2Seq)) : estimateTm(p2Seq),
                             p1Gc: calcGcF(p1Seq), p2Gc: calcGcF(p2Seq),
-                        });
+                        };
+                        setFixedAbsCoords(next);
+                        refreshFixedPrimer3Tms(next);
                     }
                 }
             }
