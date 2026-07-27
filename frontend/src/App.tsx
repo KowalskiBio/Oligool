@@ -528,7 +528,7 @@ function App() {
                 title="Kliknutím zobrazíte novinky a návod k použití"
                 className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800 whitespace-nowrap cursor-pointer hover:bg-amber-200 dark:hover:bg-amber-900/50 transition-colors"
               >
-                v0.9.3 beta
+                v0.9.4 beta
               </button>
               {sessionMsg && (
                 <span
@@ -1130,45 +1130,29 @@ function App() {
               </div>
               <div className="space-y-4 text-sm text-slate-700 dark:text-slate-300">
                 <section>
-                  <h3 className="font-semibold text-indigo-600 dark:text-indigo-400 mb-1">Kompletní design report</h3>
+                  <h3 className="font-semibold text-indigo-600 dark:text-indigo-400 mb-1">MOLigo schéma a kopírovatelné sekvence</h3>
                   <p>
-                    Nově si můžete vygenerovat úplný report o navrženém oligu: tlačítkem „Create a report“
-                    získáte PDF nebo TXT s parametry, sekvencemi, Tm a ΔG pro hairpiny, self-dimery
-                    a párové interakce. MOLigo schéma se nyní v reportu zobrazuje v sekvence režimu,
-                    takže vidíte jednotlivé báze přímo na obrázku.
+                    Z MOLigo provenance schématu jsme odstranili režim tvarů — nyní se vždy zobrazuje
+                    pouze sekvencí režim s jednotlivými bázemi. Přímo nad tlačítkem „Proceed with the Design“
+                    najdete dva boxy s finálními sekvencemi oligonukleotidů: levý oligo (reverse primer + Oligo 2)
+                    a pravý oligo (Oligo 1 + TAG + forward primer). Každý box má tlačítko pro jednoduché zkopírování.
+                    TAG sekvence je v pravém oligu zvýrazněna malými písmeny.
                   </p>
                 </section>
                 <section>
-                  <h3 className="font-semibold text-indigo-600 dark:text-indigo-400 mb-1">Ukládání a obnova relace</h3>
+                  <h3 className="font-semibold text-indigo-600 dark:text-indigo-400 mb-1">Sekundární struktury a ASCII stabilita</h3>
                   <p>
-                    Relace se automaticky ukládají do localStorage a po načtení .oligool.json souboru
-                    se zobrazí náhled s možností obnovy. Uložené pozice si nově můžete obarvit,
-                    přidat k nim poznámky a exportovat je do CSV/TSV. Při obnovení se vrátíte přesně
-                    tam, kde jste skončili — včetně pozice a zoomu v MSA prohlížeči.
-                  </p>
-                </section>
-                <section>
-                  <h3 className="font-semibold text-indigo-600 dark:text-indigo-400 mb-1">MSA a BLAST: rychlejší orientace</h3>
-                  <p>
-                    Kliknutím na řádek v tabulce BLAST hitů se MSA prohlížeč automaticky posune
-                    na příslušnou sekvenci. Kliknutím na název sekvence v MSA otevřete dialog
-                    s volbou mezi celogenomovým a kodónovým GenBank záznamem na NCBI.
-                  </p>
-                </section>
-                <section>
-                  <h3 className="font-semibold text-indigo-600 dark:text-indigo-400 mb-1">Nastavení IDT a flanking primerů</h3>
-                  <p>
-                    V nastavení si nově vyberete IDT region (US/EU) a pojmenujete navržené flanking
-                    primery. Nastavení pro indely při autofindu se ukládá do relace, takže si ho
-                    nemusíte pamatovat pokaždé znovu.
+                    Sekce IDT analýzy se přejmenovala na „Secondary structures“ a tlačítka pro analýzu
+                    nyní nesou název „Structural analysis“ / „Re-run Structural analysis“. ASCII schéma
+                    sekundárních struktur se už nemění okamžitě při úpravě délky oligos — zobrazuje
+                    původní analyzovanou sekvenci, dokud uživatel neklikne na „Re-run Structural analysis“.
                   </p>
                 </section>
                 <section>
                   <h3 className="font-semibold text-indigo-600 dark:text-indigo-400 mb-1">Drobná vylepšení</h3>
                   <p>
-                    Vylepšili jsme vykreslování sekundárních struktur, opravili chybu při zapisování
-                    TAG sekvence a doladili výchozí sekvence forward/reverse primerů. Pod kapotou
-                    přibyly testy pro ukládání relací a práci s GenBank odkazy.
+                    Opravili jsme označení koncentrace Mg²⁺ na správné jednotky (mM) a doladili
+                    uživatelské rozhraní pro konzistentnější pojmenování funkcí.
                   </p>
                 </section>
               </div>

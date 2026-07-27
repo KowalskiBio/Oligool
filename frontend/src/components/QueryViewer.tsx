@@ -87,6 +87,7 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
     // IDT Analysis State
     const [isIdtLoading, setIsIdtLoading] = useState(false);
     const [idtResults, setIdtResults] = useState<IdtData | null>(null);
+    const [idtAnalyzedSeqs, setIdtAnalyzedSeqs] = useState<{ p1: string; p2: string } | null>(null);
     const [idtError, setIdtError] = useState<string | null>(null);
 
     // Controls - Shift Logic
@@ -563,6 +564,7 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                 });
             } else {
                 setIdtResults(null);
+                setIdtAnalyzedSeqs(null);
                 setIdtError(null);
                 onPrimersUpdate(null);
                 regionSeqContextRef.current = null;
@@ -1413,6 +1415,7 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
 
             const results = await aRes.json();
             setIdtResults(results);
+            setIdtAnalyzedSeqs({ p1, p2 });
         } catch (err: any) {
             setIdtError(err.message);
         } finally {
@@ -2413,7 +2416,7 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                     {primers && idtCredentials && (
                         <div className="mt-4 border-t border-slate-100 dark:border-slate-700 pt-4">
                             <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
-                                <h4 className="text-sm font-bold text-slate-400 uppercase tracking-widest">IDT OligoAnalyzer Results</h4>
+                                <h4 className="text-sm font-bold text-slate-400 uppercase tracking-widest">Secondary structures</h4>
                                 <div className="flex items-center gap-3">
                                     <div className="flex items-center gap-1.5">
                                         <label className="text-[10px] font-bold text-slate-400 uppercase">Mg²⁺ (mM)</label>
@@ -2434,8 +2437,8 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                                         />
                                     </div>
                                     {!isIdtLoading && (
-                                        <button onClick={() => { setIdtResults(null); setIdtError(null); setTimeout(runIdtAnalysis, 0); }} className={`text-xs font-bold px-3 py-1.5 rounded transition-colors border ${idtResults ? 'bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 border-amber-200 dark:border-amber-800 hover:bg-amber-100' : 'bg-indigo-50 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-400 border-indigo-200 dark:border-indigo-800 hover:bg-indigo-100'}`}>
-                                            {idtResults ? '↻ Re-run IDT Analysis' : 'Run Full IDT Analysis'}
+                                        <button onClick={() => { setIdtResults(null); setIdtAnalyzedSeqs(null); setIdtError(null); setTimeout(runIdtAnalysis, 0); }} className={`text-xs font-bold px-3 py-1.5 rounded transition-colors border ${idtResults ? 'bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 border-amber-200 dark:border-amber-800 hover:bg-amber-100' : 'bg-indigo-50 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-400 border-indigo-200 dark:border-indigo-800 hover:bg-indigo-100'}`}>
+                                            {idtResults ? '↻ Re-run Structural analysis' : 'Run Structural analysis'}
                                         </button>
                                     )}
                                     {isIdtLoading && <div className="animate-pulse text-xs text-indigo-500 font-medium">Analyzing with IDT API...</div>}
@@ -2446,19 +2449,19 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                                     <div className="bg-slate-50 dark:bg-slate-900/40 p-3 rounded border border-slate-100 dark:border-slate-800">
                                         <div className="text-xs font-bold text-slate-500 uppercase mb-1">Oligo 2 Stability</div>
-                                        {renderIdtCard("Hairpin ΔG", idtResults.m2.hairpin, primers.p2.seq)}
-                                        {renderIdtCard("Self-Dimer ΔG", idtResults.m2.self_dimer, primers.p2.seq)}
+                                        {renderIdtCard("Hairpin ΔG", idtResults.m2.hairpin, idtAnalyzedSeqs?.p2 ?? primers.p2.seq)}
+                                        {renderIdtCard("Self-Dimer ΔG", idtResults.m2.self_dimer, idtAnalyzedSeqs?.p2 ?? primers.p2.seq)}
                                         <div className="text-[10px] text-slate-400 mt-1 italic">kcal/mol</div>
                                     </div>
                                     <div className="bg-slate-50 dark:bg-slate-900/40 p-3 rounded border border-slate-100 dark:border-slate-800">
                                         <div className="text-xs font-bold text-slate-500 uppercase mb-1">Oligo 1 Stability</div>
-                                        {renderIdtCard("Hairpin ΔG", idtResults.m1.hairpin, primers.p1.seq)}
-                                        {renderIdtCard("Self-Dimer ΔG", idtResults.m1.self_dimer, primers.p1.seq)}
+                                        {renderIdtCard("Hairpin ΔG", idtResults.m1.hairpin, idtAnalyzedSeqs?.p1 ?? primers.p1.seq)}
+                                        {renderIdtCard("Self-Dimer ΔG", idtResults.m1.self_dimer, idtAnalyzedSeqs?.p1 ?? primers.p1.seq)}
                                         <div className="text-[10px] text-slate-400 mt-1 italic">kcal/mol</div>
                                     </div>
                                     <div className="bg-indigo-50/30 dark:bg-indigo-900/20 p-3 rounded border border-indigo-100/50 dark:border-indigo-900/30">
                                         <div className="text-xs font-bold text-indigo-500 uppercase mb-1">Cross-Dimer Pairwise</div>
-                                        {renderIdtCard("Hetero-Dimer ΔG", idtResults.pairwise, primers.p1.seq, primers.p2.seq)}
+                                        {renderIdtCard("Hetero-Dimer ΔG", idtResults.pairwise, idtAnalyzedSeqs?.p1 ?? primers.p1.seq, idtAnalyzedSeqs?.p2 ?? primers.p2.seq)}
                                         <div className="text-[10px] text-slate-400 mt-1 italic">kcal/mol</div>
                                     </div>
                                 </div>

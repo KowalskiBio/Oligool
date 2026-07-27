@@ -283,7 +283,6 @@ export default function QueryReport({ data }: QueryReportProps) {
                         tagSeq={data.tagSeq}
                         fwdPrimer={data.fwdPrimer}
                         revPrimer={data.revPrimer}
-                        seqMode={true}
                     />
                 </div>
 

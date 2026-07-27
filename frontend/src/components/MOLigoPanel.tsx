@@ -66,14 +66,21 @@ export default function MOLigoPanel(props: MOLigoProps) {
         onTagChange, onFwdChange, onRevChange, onProceed
     } = props;
 
-    const [isSeqMode, setIsSeqMode] = useState(() => localStorage.getItem('moligo_prov_seq_mode') === 'true');
     const [isSchematicOpen, setIsSchematicOpen] = useState(() => localStorage.getItem('moligo_prov_schematic_open') !== 'false');
+    const [copiedLabel, setCopiedLabel] = useState<string | null>(null);
 
     const fwdRCSeq = reverseComplement(fwdPrimer || "");
 
-    useEffect(() => {
-        localStorage.setItem('moligo_prov_seq_mode', String(isSeqMode));
-    }, [isSeqMode]);
+    const leftOligoSeq = (revPrimer || "") + moligo2Seq;
+    const rightOligoSeq = moligo1Seq + (tagSeq || "").toLowerCase() + (fwdPrimer || "");
+
+    const copyToClipboard = (text: string, label: string) => {
+        if (!navigator.clipboard) return;
+        navigator.clipboard.writeText(text).then(() => {
+            setCopiedLabel(label);
+            setTimeout(() => setCopiedLabel(null), 1500);
+        }).catch(() => undefined);
+    };
 
     useEffect(() => {
         localStorage.setItem('moligo_prov_schematic_open', String(isSchematicOpen));
@@ -97,17 +104,6 @@ export default function MOLigoPanel(props: MOLigoProps) {
                     </svg>
                     <span className="text-sm font-bold text-slate-500 uppercase tracking-widest group-hover:text-slate-700 transition-colors">MOLigo Provenance Schematic</span>
                 </div>
-                {isSchematicOpen && (
-                    <button
-                        onClick={(e) => { e.stopPropagation(); setIsSeqMode(!isSeqMode); }}
-                        className={`px-4 py-1.5 text-xs font-bold rounded-full border transition-all uppercase tracking-tight ${isSeqMode
-                            ? 'bg-indigo-600 border-indigo-600 text-white shadow-md shadow-indigo-200 dark:shadow-indigo-900/20'
-                            : 'bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-400 hover:border-indigo-400 hover:text-indigo-600'
-                            }`}
-                    >
-                        {isSeqMode ? '🔡 Shape Mode' : '🔡 Seq Mode'}
-                    </button>
-                )}
             </div>
 
             {/* ── SVG Schematic & Legend ── */}
@@ -120,7 +116,6 @@ export default function MOLigoPanel(props: MOLigoProps) {
                         tagSeq={tagSeq}
                         fwdPrimer={fwdPrimer}
                         revPrimer={revPrimer}
-                        seqMode={isSeqMode}
                     />
                 </div>
             )}
@@ -210,6 +205,56 @@ export default function MOLigoPanel(props: MOLigoProps) {
                                 </span>
                             </div>
                         )}
+                    </div>
+                </div>
+
+                {/* ── Copyable Final Oligos ── */}
+                <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-4 max-w-[85rem] mx-auto px-2 md:px-6">
+                    <div className="bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 p-3 shadow-sm">
+                        <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center gap-2 text-xs font-bold text-slate-500 uppercase tracking-wider">
+                                <span className="w-2 h-2 rounded-full bg-purple-400" />
+                                <span className="w-2 h-2 rounded-full bg-amber-400" />
+                                <span>Left Oligo</span>
+                            </div>
+                            <span className="text-[10px] font-mono text-slate-400 font-bold">{leftOligoSeq.length}nt</span>
+                        </div>
+                        <div className="relative">
+                            <div className="bg-slate-50 dark:bg-slate-900/50 p-2.5 rounded border border-slate-200 dark:border-slate-700 font-mono text-xs text-slate-700 dark:text-slate-300 break-all pr-16">
+                                {leftOligoSeq || <span className="text-slate-400 italic">Enter reverse primer and Oligo 2...</span>}
+                            </div>
+                            <button
+                                onClick={() => copyToClipboard(leftOligoSeq, 'left')}
+                                disabled={!leftOligoSeq}
+                                className="absolute right-1.5 top-1/2 -translate-y-1/2 px-2 py-1 text-[10px] font-bold rounded border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:border-indigo-400 hover:text-indigo-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                            >
+                                {copiedLabel === 'left' ? 'Copied!' : 'Copy'}
+                            </button>
+                        </div>
+                    </div>
+
+                    <div className="bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 p-3 shadow-sm">
+                        <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center gap-2 text-xs font-bold text-slate-500 uppercase tracking-wider">
+                                <span className="w-2 h-2 rounded-full bg-emerald-400" />
+                                <span className="w-2 h-2 rounded-full bg-red-400" />
+                                <span className="w-2 h-2 rounded-full bg-pink-400" />
+                                <span>Right Oligo</span>
+                            </div>
+                            <span className="text-[10px] font-mono text-slate-400 font-bold">{rightOligoSeq.length}nt</span>
+                        </div>
+                        <div className="relative">
+                            <div className="bg-slate-50 dark:bg-slate-900/50 p-2.5 rounded border border-slate-200 dark:border-slate-700 font-mono text-xs text-slate-700 dark:text-slate-300 break-all pr-16">
+                                {rightOligoSeq || <span className="text-slate-400 italic">Enter Oligo 1, TAG, and forward primer...</span>}
+                            </div>
+                            <button
+                                onClick={() => copyToClipboard(rightOligoSeq, 'right')}
+                                disabled={!rightOligoSeq}
+                                className="absolute right-1.5 top-1/2 -translate-y-1/2 px-2 py-1 text-[10px] font-bold rounded border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:border-indigo-400 hover:text-indigo-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                            >
+                                {copiedLabel === 'right' ? 'Copied!' : 'Copy'}
+                            </button>
+                        </div>
                     </div>
                 </div>
 

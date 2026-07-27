@@ -7,7 +7,6 @@ interface MOLigoSchematicProps {
     tagSeq?: string;
     fwdPrimer?: string;
     revPrimer?: string;
-    seqMode?: boolean;
 }
 
 const C = {
@@ -27,7 +26,6 @@ export default function MOLigoSchematic({
     tagSeq,
     fwdPrimer,
     revPrimer,
-    seqMode = false,
 }: MOLigoSchematicProps) {
     const fwdRCSeq = reverseComplement(fwdPrimer || '');
 
@@ -161,34 +159,32 @@ export default function MOLigoSchematic({
 
                     <rect x={tmplX0} y={tmplY} width={tmplW} height={stH}
                         rx="3" fill={C.tmplFill} stroke={C.tmpl} strokeWidth="1.5"
-                        opacity={seqMode ? 0.3 : 1} />
+                        opacity={0.3} />
 
                     <text x={tmplX0 - 6} y={tmplY + stH / 2 + 3} textAnchor="end"
                         fontSize="9" fontWeight="bold" fill={C.tmpl}>5'</text>
                     <text x={tmplX1 + 6} y={tmplY + stH / 2 + 3} textAnchor="start"
                         fontSize="9" fontWeight="bold" fill={C.tmpl}>3'</text>
 
-                    <g opacity={seqMode ? 0.15 : 0.85}>
+                    <g opacity={0.15}>
                         {revLen > 0 && <polygon points={polyRevP} fill={C.revP} />}
                         <polygon points={polyM2} fill={C.m2} />
                     </g>
 
-                    <g opacity={seqMode ? 0.15 : 0.85}>
+                    <g opacity={0.15}>
                         <polygon points={polyM1} fill={C.m1} />
                         {tagLen > 0 && <polygon points={polyTAG} fill={C.tag} />}
                         {fwdLen > 0 && <polygon points={polyFwdRC} fill={C.fwdRC} />}
                     </g>
 
-                    {seqMode && (
-                        <g>
-                            {renderSeqChars(tmplFwd, { x: tmplX0, y: tmplY + stH / 2 }, { x: tmplX1, y: tmplY + stH / 2 }, C.tmpl)}
-                            {renderSeqChars(revPrimer || '', L, C_left, C.revP)}
-                            {renderSeqChars(moligo2Seq, C_left, R, C.m2)}
-                            {renderSeqChars(moligo1Seq, R, C_right, C.m1)}
-                            {renderSeqChars(tagSeq || '', C_right, S_right, C.tag)}
-                            {renderSeqChars(fwdRCSeq, S_right, F, C.fwdRC)}
-                        </g>
-                    )}
+                    <g>
+                        {renderSeqChars(tmplFwd, { x: tmplX0, y: tmplY + stH / 2 }, { x: tmplX1, y: tmplY + stH / 2 }, C.tmpl)}
+                        {renderSeqChars(revPrimer || '', L, C_left, C.revP)}
+                        {renderSeqChars(moligo2Seq, C_left, R, C.m2)}
+                        {renderSeqChars(moligo1Seq, R, C_right, C.m1)}
+                        {renderSeqChars(tagSeq || '', C_right, S_right, C.tag)}
+                        {renderSeqChars(fwdRCSeq, S_right, F, C.fwdRC)}
+                    </g>
 
                     {Array.from({ length: 20 }).map((_, i) => {
                         const tickX = tmplX0 + (i + 0.5) * (tmplW / 20);
