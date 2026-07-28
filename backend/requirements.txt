@@ -9,4 +9,6 @@ requests>=2.25.0
 # 0.3.2). Tan-Chen TBI salt correction for stems ≥6 bp is available upstream.
 # Dimer Tm and suboptimal dimer enumeration are available upstream from v0.7.0.
 # The v0.7.0 ThermoEngine.subopt() salt bug is fixed in upstream v1.1.0.
-strider-dna @ git+https://github.com/EmilioVenegas/strider.git@v1.1.0
+# strider.duplex_tm (primer3-style duplex Tm with Na/Mg/dNTP/oligo-conc params)
+# was added upstream in v1.2.0.
+strider-dna @ git+https://github.com/EmilioVenegas/strider.git@v1.2.0

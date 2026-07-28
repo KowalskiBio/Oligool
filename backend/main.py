@@ -16,6 +16,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, StreamingResponse
 import asyncio
 import logging
+import math
 
 
 app = FastAPI()
@@ -220,6 +221,40 @@ async def align_sequences(request: AlignmentRequest):
 
 from typing import Dict
 
+# Strider duplex Tm alongside primer3 calc_tm; None means "not available" (UI shows —).
+try:
+    from strider import melting_temperature as _strider_melting_temperature
+except Exception as _exc:
+    logging.warning("Strider duplex Tm unavailable (need strider-dna >= 1.2.0 in %s): %s — tm_strider will be null", sys.executable, _exc)
+    _strider_melting_temperature = None
+
+
+def strider_duplex_tm(seq, *, mv_conc, dv_conc, dntp_conc, dna_conc):
+    """Duplex Tm (°C) from strider. Args use primer3 units: salts/dNTP in mM, DNA in nM.
+
+    Uses strider's NN engine with the von Ahsen (2001) sodium-equivalent recipe
+    for Mg2+ (the same conversion primer3/IDT/Biopython use), instead of
+    strider.duplex_tm, whose mixed-regime salt correction is broken (6-10 °C low;
+    upstream issue EmilioVenegas/strider#10). Revert to plain duplex_tm once a
+    fixed strider release ships.
+    """
+    if _strider_melting_temperature is None or not seq:
+        return None
+    try:
+        free_mg_mM = max(0.0, float(dv_conc) - float(dntp_conc))
+        sodium_eq_M = (float(mv_conc) + 120.0 * math.sqrt(free_mg_mM)) / 1000.0
+        tm = _strider_melting_temperature(
+            seq,
+            strand_conc_M=float(dna_conc) * 1e-9,
+            sodium_M=sodium_eq_M,
+            magnesium_M=0.0,
+        )
+    except Exception:
+        logging.exception("strider duplex_tm failed for %s", seq)
+        return None
+    return round(tm, 1)
+
+
 class MoligizeRequest(BaseModel):
     sequence: str
     moligo1_shift: int = 0
@@ -338,11 +373,13 @@ async def moligize_sequence(request: MoligizeRequest):
         l1 = l2 = len(window_seq) // 2
 
     def get_stats(s, start_idx, end_idx):
-        if not s: return {"seq": "", "len": 0, "tm": 0, "gc": 0, "start": 0, "end": 0}
+        if not s: return {"seq": "", "len": 0, "tm": 0, "tm_strider": None, "gc": 0, "start": 0, "end": 0}
         return {
             "seq": s,
             "len": len(s),
             "tm": round(primer3.calc_tm(s, **TM_PARAMS), 1),
+            "tm_strider": strider_duplex_tm(s, mv_conc=TM_PARAMS['mv_conc'], dv_conc=TM_PARAMS['dv_conc'],
+                                            dntp_conc=TM_PARAMS['dntp_conc'], dna_conc=TM_PARAMS['dna_conc']),
             "gc": round((s.count("G") + s.count("C")) / len(s) * 100, 1),
             "start": start_idx,
             "end": end_idx
@@ -1021,6 +1058,7 @@ async def design_flanking_primers(req: FlankingPrimerParams):
             "length":     len(s),
             "gc_percent": _round(_gc(s), 1),
             "tm":         _round(tm, 1),
+            "tm_strider": strider_duplex_tm(s, **kwargs),
             "hairpin":  {"structure_found": bool(getattr(hp, "structure_found", False)), "tm": _round(getattr(hp, "tm", None), 1), "dg": _round((getattr(hp, "dg", None) or 0) / 1000, 2)},
             "homodimer":{"structure_found": bool(getattr(hd, "structure_found", False)), "tm": _round(getattr(hd, "tm", None), 1), "dg": _round((getattr(hd, "dg", None) or 0) / 1000, 2)},
         }
@@ -1212,6 +1250,7 @@ async def analyze_primer_sequence(req: PrimerAnalyzeRequest):
         "length": len(s),
         "gc_percent": _round(gc, 1),
         "tm": _round(tm, 1),
+        "tm_strider": strider_duplex_tm(s, **kwargs),
         "hairpin": {
             "structure_found": bool(getattr(hp, "structure_found", False)),
             "tm": _round(getattr(hp, "tm", None), 1),
