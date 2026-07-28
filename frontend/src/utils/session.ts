@@ -32,6 +32,7 @@ export interface FixedAbsCoords {
     p2AbsStart: number; p2AbsEnd: number;
     p1Seq: string; p2Seq: string;
     p1Tm: number; p2Tm: number;
+    p1TmStrider?: number | null; p2TmStrider?: number | null;
     p1Gc: number; p2Gc: number;
 }
 
@@ -40,8 +41,8 @@ export interface SavedPosition {
     id: string;
     label: string;
     createdAt: number;
-    p1: { start: number; end: number; seq: string; gc: number; tm: number };
-    p2: { start: number; end: number; seq: string; gc: number; tm: number };
+    p1: { start: number; end: number; seq: string; gc: number; tm: number; tm_strider?: number | null };
+    p2: { start: number; end: number; seq: string; gc: number; tm: number; tm_strider?: number | null };
     p1AbsStart: number; p1AbsEnd: number;
     p2AbsStart: number; p2AbsEnd: number;
     moligo1Shift: number; moligo2Shift: number;
@@ -186,6 +187,7 @@ function normalizePrimer(primer: unknown): SavedPosition['p1'] {
         seq: typeof p.seq === 'string' ? p.seq : '',
         gc: typeof p.gc === 'number' ? p.gc : 0,
         tm: typeof p.tm === 'number' ? p.tm : 0,
+        tm_strider: typeof p.tm_strider === 'number' ? p.tm_strider : null,
     };
 }
 

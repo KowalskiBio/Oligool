@@ -62,6 +62,7 @@ interface IdtData {
 interface Primer {
     seq: string;
     tm: number;
+    tm_strider?: number | null;
     tm_ok?: boolean;
     len: number;
     len_ok?: boolean;
@@ -245,6 +246,7 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                 p1AbsStart, p1AbsEnd, p2AbsStart, p2AbsEnd,
                 p1Seq: primers.p1.seq, p2Seq: primers.p2.seq,
                 p1Tm: primers.p1.tm, p2Tm: primers.p2.tm,
+                p1TmStrider: primers.p1.tm_strider ?? null, p2TmStrider: primers.p2.tm_strider ?? null,
                 p1Gc: primers.p1.gc, p2Gc: primers.p2.gc
             };
         });
@@ -302,6 +304,7 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
             p2AbsEnd: o2 ? toGappedAbs(foundP2 + o2.length) : 1,
             p1Seq: o1 || '', p2Seq: o2 || '',
             p1Tm: p1.tm, p2Tm: p2.tm,
+            p1TmStrider: null, p2TmStrider: null,
             p1Gc: p1.gc, p2Gc: p2.gc,
         };
         setFixedAbsCoords(next);
@@ -412,8 +415,8 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
             id: `pos_${Date.now()}_${Math.random().toString(36).slice(2)}`,
             label: `Position ${savedPositions.length + 1}`,
             createdAt: Date.now(),
-            p1: { start: primers.p1.start, end: primers.p1.end, seq: primers.p1.seq, gc: calcGc(primers.p1.seq), tm: primers.p1.tm },
-            p2: { start: primers.p2.start, end: primers.p2.end, seq: primers.p2.seq, gc: calcGc(primers.p2.seq), tm: primers.p2.tm },
+            p1: { start: primers.p1.start, end: primers.p1.end, seq: primers.p1.seq, gc: calcGc(primers.p1.seq), tm: primers.p1.tm, tm_strider: primers.p1.tm_strider ?? null },
+            p2: { start: primers.p2.start, end: primers.p2.end, seq: primers.p2.seq, gc: calcGc(primers.p2.seq), tm: primers.p2.tm, tm_strider: primers.p2.tm_strider ?? null },
             p1AbsStart, p1AbsEnd, p2AbsStart, p2AbsEnd,
             moligo1Shift, moligo2Shift, moligo1Len, moligo2Len,
             notes: '',
@@ -427,13 +430,16 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
     const restorePosition = (pos: SavedPosition) => {
         // Lock instantly to the exact absolute genomic sequence, bypassing backend searches completely.
         captureFixedContext();
-        setFixedAbsCoords({
+        const restored: FixedAbsCoords = {
             p1AbsStart: pos.p1AbsStart, p1AbsEnd: pos.p1AbsEnd,
             p2AbsStart: pos.p2AbsStart, p2AbsEnd: pos.p2AbsEnd,
             p1Seq: pos.p1.seq, p2Seq: pos.p2.seq,
             p1Tm: pos.p1.tm, p2Tm: pos.p2.tm,
+            p1TmStrider: pos.p1.tm_strider ?? null, p2TmStrider: pos.p2.tm_strider ?? null,
             p1Gc: pos.p1.gc, p2Gc: pos.p2.gc
-        });
+        };
+        setFixedAbsCoords(restored);
+        refreshFixedPrimer3Tms(restored);
         // Restore slider state so the UI inputs reflect reality
         setMoligo1Shift(pos.moligo1Shift);
         setMoligo2Shift(pos.moligo2Shift);
@@ -560,6 +566,7 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                     p2AbsEnd:   prev.start + mapUngappedToGapped(primers.p2.end,   prev.seq) + 1,
                     p1Seq: primers.p1.seq, p2Seq: primers.p2.seq,
                     p1Tm: primers.p1.tm, p2Tm: primers.p2.tm,
+                    p1TmStrider: primers.p1.tm_strider ?? null, p2TmStrider: primers.p2.tm_strider ?? null,
                     p1Gc: primers.p1.gc, p2Gc: primers.p2.gc,
                 });
             } else {
@@ -609,6 +616,9 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
         if (s.currentOligo) {
             captureFixedContext();
             setFixedAbsCoords(s.currentOligo);
+            // Recalculate P3 + Strider Tm for the restored sequences (saved files may
+            // predate tm_strider or carry values from different chemistry params).
+            refreshFixedPrimer3Tms(s.currentOligo);
             setIsAutoSearchNeeded(false);
         } else {
             fixedContextRef.current = null;
@@ -682,6 +692,8 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                 ...prev,
                 p1Tm: p1Data ? p1Data.tm : prev.p1Tm,
                 p2Tm: p2Data ? p2Data.tm : prev.p2Tm,
+                p1TmStrider: p1Data ? (p1Data.tm_strider ?? null) : (prev.p1TmStrider ?? null),
+                p2TmStrider: p2Data ? (p2Data.tm_strider ?? null) : (prev.p2TmStrider ?? null),
             };
         });
     }, []);
@@ -840,8 +852,8 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                     const p2Start = toCtx(fixedAbsCoords.p2AbsStart);
                     const p2End = toCtx(fixedAbsCoords.p2AbsEnd);
                     const fauxResponse: OligizeResponse = {
-                        p1: { start: p1Start, end: p1End, seq: fixedAbsCoords.p1Seq, len: fixedAbsCoords.p1Seq.length, tm: fixedAbsCoords.p1Tm, gc: fixedAbsCoords.p1Gc },
-                        p2: { start: p2Start, end: p2End, seq: fixedAbsCoords.p2Seq, len: fixedAbsCoords.p2Seq.length, tm: fixedAbsCoords.p2Tm, gc: fixedAbsCoords.p2Gc },
+                        p1: { start: p1Start, end: p1End, seq: fixedAbsCoords.p1Seq, len: fixedAbsCoords.p1Seq.length, tm: fixedAbsCoords.p1Tm, tm_strider: fixedAbsCoords.p1TmStrider ?? null, gc: fixedAbsCoords.p1Gc },
+                        p2: { start: p2Start, end: p2End, seq: fixedAbsCoords.p2Seq, len: fixedAbsCoords.p2Seq.length, tm: fixedAbsCoords.p2Tm, tm_strider: fixedAbsCoords.p2TmStrider ?? null, gc: fixedAbsCoords.p2Gc },
                         split_idx: 0,
                         tm_diff_ok: Math.abs(fixedAbsCoords.p1Tm - fixedAbsCoords.p2Tm) <= Number(searchParams.tm_diff),
                         params_not_met: false,
@@ -1068,6 +1080,8 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                             p1Seq, p2Seq,
                             p1Tm: p1Seq === prevFac?.p1Seq ? (prevFac?.p1Tm ?? estimateTm(p1Seq)) : estimateTm(p1Seq),
                             p2Tm: p2Seq === prevFac?.p2Seq ? (prevFac?.p2Tm ?? estimateTm(p2Seq)) : estimateTm(p2Seq),
+                            p1TmStrider: p1Seq === prevFac?.p1Seq ? (prevFac?.p1TmStrider ?? null) : null,
+                            p2TmStrider: p2Seq === prevFac?.p2Seq ? (prevFac?.p2TmStrider ?? null) : null,
                             p1Gc: calcGcF(p1Seq), p2Gc: calcGcF(p2Seq),
                         };
                         setFixedAbsCoords(next);
@@ -1938,9 +1952,14 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                                         <span>Len: <b className={primers.p2.len_ok === false ? "text-red-500 font-bold" : "text-emerald-500 font-bold"}>{primers.p2.len}</b></span>
                                         <span>GC: <b className={primers.p2.gc_ok === false ? "text-red-500 font-bold" : "text-emerald-500 font-bold"}>{primers.p2.gc != null ? primers.p2.gc.toFixed(1) : ((primers.p2.seq.match(/[GCgc]/g) || []).length / primers.p2.seq.length * 100).toFixed(1)}%</b></span>
                                         <span title="Primer3 Tm">P3 Tm: <b className={primers.p2.tm_ok === false ? "text-red-500 font-bold" : "text-emerald-500 font-bold"}>{primers.p2.tm}°C</b></span>
+                                        {primers.p2.tm_strider != null && (
+                                            <span title="Strider duplex Tm" className="bg-teal-100 dark:bg-teal-900/40 text-teal-700 dark:text-teal-300 px-1.5 py-0.5 rounded border border-teal-200 dark:border-teal-800 inline-flex flex-col items-center leading-tight whitespace-nowrap">
+                                                <span>Strider Tm</span><b className="font-bold">{primers.p2.tm_strider.toFixed(1)}°C</b>
+                                            </span>
+                                        )}
                                         {idtResults?.m2?.analyze && (
-                                            <span title="IDT Tm" className="bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300 px-1.5 py-0.5 rounded border border-purple-200 dark:border-purple-800">
-                                                IDT Tm: <b className="font-bold">{extractTm(idtResults.m2.analyze)?.toFixed(1) || 'N/A'}°C</b>
+                                            <span title="IDT Tm" className="bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300 px-1.5 py-0.5 rounded border border-purple-200 dark:border-purple-800 inline-flex flex-col items-center leading-tight whitespace-nowrap">
+                                                <span>IDT Tm</span><b className="font-bold">{extractTm(idtResults.m2.analyze)?.toFixed(1) || 'N/A'}°C</b>
                                             </span>
                                         )}
                                         <span title="Tm Difference" className="text-[10px] opacity-80 flex items-center gap-1">
@@ -1980,9 +1999,14 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                                         <span>Len: <b className={primers.p1.len_ok === false ? "text-red-500 font-bold" : "text-emerald-500 font-bold"}>{primers.p1.len}</b></span>
                                         <span>GC: <b className={primers.p1.gc_ok === false ? "text-red-500 font-bold" : "text-emerald-500 font-bold"}>{primers.p1.gc != null ? primers.p1.gc.toFixed(1) : ((primers.p1.seq.match(/[GCgc]/g) || []).length / primers.p1.seq.length * 100).toFixed(1)}%</b></span>
                                         <span title="Primer3 Tm">P3 Tm: <b className={primers.p1.tm_ok === false ? "text-red-500 font-bold" : "text-emerald-500 font-bold"}>{primers.p1.tm}°C</b></span>
+                                        {primers.p1.tm_strider != null && (
+                                            <span title="Strider duplex Tm" className="bg-teal-100 dark:bg-teal-900/40 text-teal-700 dark:text-teal-300 px-1.5 py-0.5 rounded border border-teal-200 dark:border-teal-800 inline-flex flex-col items-center leading-tight whitespace-nowrap">
+                                                <span>Strider Tm</span><b className="font-bold">{primers.p1.tm_strider.toFixed(1)}°C</b>
+                                            </span>
+                                        )}
                                         {idtResults?.m1?.analyze && (
-                                            <span title="IDT Tm" className="bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300 px-1.5 py-0.5 rounded border border-purple-200 dark:border-purple-800">
-                                                IDT Tm: <b className="font-bold">{extractTm(idtResults.m1.analyze)?.toFixed(1) || 'N/A'}°C</b>
+                                            <span title="IDT Tm" className="bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300 px-1.5 py-0.5 rounded border border-purple-200 dark:border-purple-800 inline-flex flex-col items-center leading-tight whitespace-nowrap">
+                                                <span>IDT Tm</span><b className="font-bold">{extractTm(idtResults.m1.analyze)?.toFixed(1) || 'N/A'}°C</b>
                                             </span>
                                         )}
                                         <span title="Tm Difference" className="text-[10px] opacity-80 flex items-center gap-1">
