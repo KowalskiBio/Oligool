@@ -8,6 +8,7 @@ interface DesignedPrimer {
     length: number;
     gc_percent: number;
     tm: number | null;
+    tm_strider: number | null;
     hairpin: { structure_found: boolean; tm: number | null; dg: number | null };
     homodimer: { structure_found: boolean; tm: number | null; dg: number | null };
     primer3: { tm: number | null; gc_percent: number | null; self_any: number | null; self_end: number | null; hairpin_th: number | null };
@@ -211,7 +212,7 @@ export default function FlankingPrimersPanel({
                 sequence: fwdSeq,
                 length: fwdSeq.length,
                 interval: [manualLeftStart, manualLeftEnd] as [number, number],
-                tm: null, gc_percent: gc,
+                tm: null, tm_strider: null, gc_percent: gc,
                 primer3: { tm: null, gc_percent: gc, self_any: null, self_end: null, hairpin_th: null },
                 hairpin: { structure_found: false, tm: null, dg: null },
                 homodimer: { structure_found: false, tm: null, dg: null }
@@ -228,7 +229,7 @@ export default function FlankingPrimersPanel({
                 sequence: revSeq,
                 length: revSeq.length,
                 interval: [manualRightStart, manualRightEnd] as [number, number],
-                tm: null, gc_percent: gc,
+                tm: null, tm_strider: null, gc_percent: gc,
                 primer3: { tm: null, gc_percent: gc, self_any: null, self_end: null, hairpin_th: null },
                 hairpin: { structure_found: false, tm: null, dg: null },
                 homodimer: { structure_found: false, tm: null, dg: null }
@@ -259,6 +260,7 @@ export default function FlankingPrimersPanel({
                 analyses.push((async () => {
                     const data = await analyzePrimerP3(fwdPrimerObj!.sequence);
                     fwdPrimerObj!.tm = data.tm;
+                    fwdPrimerObj!.tm_strider = data.tm_strider ?? null;
                     fwdPrimerObj!.gc_percent = data.gc_percent;
                     fwdPrimerObj!.primer3 = {
                         tm: data.tm,
@@ -275,6 +277,7 @@ export default function FlankingPrimersPanel({
                 analyses.push((async () => {
                     const data = await analyzePrimerP3(revPrimerObj!.sequence);
                     revPrimerObj!.tm = data.tm;
+                    revPrimerObj!.tm_strider = data.tm_strider ?? null;
                     revPrimerObj!.gc_percent = data.gc_percent;
                     revPrimerObj!.primer3 = {
                         tm: data.tm,
@@ -645,7 +648,7 @@ export default function FlankingPrimersPanel({
                 const existingName = id === 'fwd' ? latestRef.current.selFwd?.name : latestRef.current.selRev?.name;
                 const updated: DesignedPrimer = {
                     sequence: seq, length: seq.length, interval: newInterval,
-                    gc_percent: gc, tm: null,
+                    gc_percent: gc, tm: null, tm_strider: null,
                     primer3: { tm: null, gc_percent: gc, self_any: null, self_end: null, hairpin_th: null },
                     hairpin: { structure_found: false, tm: null, dg: null },
                     homodimer: { structure_found: false, tm: null, dg: null },
@@ -659,6 +662,7 @@ export default function FlankingPrimersPanel({
                     try {
                         const data = await p3Analyze(seq);
                         updated.tm = data.tm;
+                        updated.tm_strider = data.tm_strider ?? null;
                         updated.gc_percent = data.gc_percent;
                         updated.primer3 = {
                             tm: data.tm,
@@ -914,7 +918,7 @@ export default function FlankingPrimersPanel({
                         </button>
                     </div>
                 </div>
-                <div className="grid grid-cols-5 gap-2 text-[10px] text-slate-500 dark:text-slate-400">
+                <div className="grid grid-cols-6 gap-2 text-[10px] text-slate-500 dark:text-slate-400">
                     <div><span className="font-bold text-slate-600 dark:text-slate-300">Len</span><br />{p.length} bp</div>
                     <div className="flex gap-2 items-center">
                         <div><span className="font-bold text-slate-600 dark:text-slate-300">P3 Tm</span><br />{p.tm ?? p.primer3?.tm ?? '—'}°C</div>
@@ -924,6 +928,7 @@ export default function FlankingPrimersPanel({
                             </div>
                         )}
                     </div>
+                    <div><span className="font-bold text-slate-600 dark:text-slate-300" title="Strider duplex Tm">Strider Tm</span><br />{p.tm_strider != null ? `${p.tm_strider.toFixed(1)}°C` : '—'}</div>
                     <div><span className="font-bold text-slate-600 dark:text-slate-300">GC</span><br />{p.gc_percent ?? p.primer3?.gc_percent ?? '—'}%</div>
                     <div><span className="font-bold text-slate-600 dark:text-slate-300">Hairpin Tm</span><br /><span className={p.hairpin.structure_found ? 'text-amber-500' : 'text-emerald-500'}>{p.hairpin.structure_found ? `${p.primer3?.hairpin_th ?? '—'}°C` : 'None'}</span></div>
                     <div><span className="font-bold text-slate-600 dark:text-slate-300">Self-dimer</span><br /><span className={statusDg(p.homodimer?.dg)}>{p.homodimer?.dg !== null ? `${p.homodimer.dg} kcal` : 'OK'}</span></div>
