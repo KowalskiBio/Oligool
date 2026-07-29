@@ -47,11 +47,29 @@ interface Props {
         fwdName?: string,
         revName?: string,
         fwdSeq?: string,
-        revSeq?: string
+        revSeq?: string,
+        amplicon?: number
     } | null) => void;
 }
 
 const API = ((import.meta.env.VITE_API_BASE as string) || '');
+
+type PreviewMSAProps = React.ComponentProps<typeof MSAViewer>;
+
+// Hands the one-shot zoom to the embedded viewer only after it has measured its
+// real width and label column (~200ms). Delivered at mount it would compute the
+// centering with default metrics and, being deliberately one-shot, never retry —
+// which is why the preview used to open on the wrong spot. The wrapper remounts
+// with every preview open, so the delivery re-arms each time.
+function DelayedNavMSA(props: PreviewMSAProps) {
+    const [nav, setNav] = useState<PreviewMSAProps['navigateTarget']>(null);
+    useEffect(() => {
+        const t: ReturnType<typeof setTimeout> = setTimeout(() => setNav(props.navigateTarget ?? null), 200);
+        return () => clearTimeout(t);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+    return <MSAViewer {...props} navigateTarget={nav} />;
+}
 
 export default function FlankingPrimersPanel({
     rawSeq, oligoStart, oligoEnd,
@@ -90,6 +108,18 @@ export default function FlankingPrimersPanel({
 
     const [fwdName, setFwdName] = useState('');
     const [revName, setRevName] = useState('');
+
+    // Preview modal: shows a candidate's binding site without selecting it, so
+    // no IDT analysis runs until the user explicitly clicks "Use". The MSA
+    // payload is frozen at open time (see openPreview).
+    const [previewPrimer, setPreviewPrimer] = useState<{
+        primer: DesignedPrimer;
+        side: 'fwd' | 'rev';
+        ts: number;
+        msaFlanking: { fwd: { start: number; end: number } | null; rev: { start: number; end: number } | null } | null;
+        msaNav: { colStart: number; colEnd: number; ts: number } | null;
+        msaAlignment: string | null;
+    } | null>(null);
 
     const [copyFb, setCopyFb] = useState('');
     const doCopy = (text: string, key: string) => {
@@ -540,16 +570,20 @@ export default function FlankingPrimersPanel({
                                 </div>
                             )}
                             {/* Provenance: IDT vs Strider, ΔG + Tm (mirrors the oligo card). */}
-                            <div className="flex flex-col gap-0.5 text-[9px] text-slate-400 font-medium px-1">
-                                <div className="flex justify-between items-center">
-                                    <span>IDT ΔG: <b className={getIdtStatusColor(topDg)}>{topDg != null ? `${topDg > 0 ? '+' : ''}${topDg.toFixed(2)}` : 'N/A'}</b></span>
-                                    <span>Strider ΔG: <b className={item.Local_DeltaG != null ? (item.Local_DeltaG <= 0 ? "text-amber-500" : "text-slate-400") : "text-slate-500"}>{item.Local_DeltaG != null ? `${item.Local_DeltaG > 0 ? '+' : ''}${item.Local_DeltaG.toFixed(2)}` : 'N/A'}</b></span>
+                            {(!item.DotBracket && topDg == null && item.Local_DeltaG == null) ? (
+                                <div className="text-[9px] text-slate-400 italic text-center px-1 py-0.5">No stable structure found</div>
+                            ) : (
+                                <div className="flex flex-col gap-0.5 text-[9px] text-slate-400 font-medium px-1">
+                                    <div className="flex justify-between items-center">
+                                        <span>IDT ΔG: <b className={getIdtStatusColor(topDg)}>{topDg != null ? `${topDg > 0 ? '+' : ''}${topDg.toFixed(2)}` : 'N/A'}</b></span>
+                                        <span>Strider ΔG: <b className={item.Local_DeltaG != null ? (item.Local_DeltaG <= 0 ? "text-amber-500" : "text-slate-400") : "text-slate-500"}>{item.Local_DeltaG != null ? `${item.Local_DeltaG > 0 ? '+' : ''}${item.Local_DeltaG.toFixed(2)}` : 'N/A'}</b></span>
+                                    </div>
+                                    <div className="flex justify-between items-center">
+                                        <span>IDT Tm: <b className="text-slate-500">{item.IDT_Tm != null ? `${Number(item.IDT_Tm).toFixed(1)}°C` : 'N/A'}</b></span>
+                                        <span>Strider Tm: <b className="text-slate-500">{item.Local_Tm != null ? `${item.Local_Tm.toFixed(1)}°C` : 'N/A'}</b></span>
+                                    </div>
                                 </div>
-                                <div className="flex justify-between items-center">
-                                    <span>IDT Tm: <b className="text-slate-500">{item.IDT_Tm != null ? `${Number(item.IDT_Tm).toFixed(1)}°C` : 'N/A'}</b></span>
-                                    <span>Strider Tm: <b className="text-slate-500">{item.Local_Tm != null ? `${item.Local_Tm.toFixed(1)}°C` : 'N/A'}</b></span>
-                                </div>
-                            </div>
+                            )}
                         </div>
                     ))}
                 </div>
@@ -598,6 +632,40 @@ export default function FlankingPrimersPanel({
     // These must be above liveFwdInterval/liveRevInterval which reference them
     const fwdInterval = selFwd?.interval as [number, number] | undefined;
     const revInterval = selRev?.interval as [number, number] | undefined;
+
+    // Amplicon size: forward primer + template between the primers + reverse primer.
+    // Intervals are rawSeq coordinates, [start, end) end-exclusive, so this span
+    // equals len(fwd) + intervening bases + len(rev).
+    const ampliconBp = (fwdInterval && revInterval && revInterval[1] > fwdInterval[0])
+        ? revInterval[1] - fwdInterval[0]
+        : null;
+
+    const moligoStart = Math.min(p1Start, p2Start);
+    const moligoEnd = Math.max(p1End, p2End);
+
+    const getPrimerInterval = (p: DesignedPrimer, side: 'fwd' | 'rev'): [number, number] | null => {
+        if (p.interval) return p.interval;
+        const binding = side === 'fwd' ? p.sequence : revComp(p.sequence);
+        const pos = rawSeq.toUpperCase().indexOf(binding.toUpperCase());
+        return pos >= 0 ? [pos, pos + binding.length] : null;
+    };
+
+    // Bracket suffix per spec: forward "(80–60)" = the primer spans 60–80 bp
+    // upstream of the MOLigo start; reverse "(50–70)" = 50–70 bp past its end.
+    const relativeMOLigoPos = (p: DesignedPrimer, side: 'fwd' | 'rev'): string | null => {
+        const iv = getPrimerInterval(p, side);
+        if (!iv) return null;
+        return side === 'fwd'
+            ? `(${moligoStart - iv[0]}–${moligoStart - iv[1]})`
+            : `(${iv[0] - moligoEnd}–${iv[1] - moligoEnd})`;
+    };
+
+    useEffect(() => {
+        if (!previewPrimer) return;
+        const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setPreviewPrimer(null); };
+        window.addEventListener('keydown', onKey);
+        return () => window.removeEventListener('keydown', onKey);
+    }, [previewPrimer]);
 
     const handleFlankMouseDown = (e: React.MouseEvent, id: 'fwd' | 'rev', type: 'move' | 'left' | 'right') => {
         e.preventDefault();
@@ -809,14 +877,64 @@ export default function FlankingPrimersPanel({
                 revName: selRev?.name || undefined,
                 fwdSeq: selFwd?.sequence,
                 revSeq: selRev?.sequence,
+                amplicon: ampliconBp ?? undefined,
             } : null);
         }
-    }, [flankingPrimersForMSA, onFlankingPrimersUpdate, selFwd?.name, selRev?.name]);
+    }, [flankingPrimersForMSA, onFlankingPrimersUpdate, selFwd?.name, selRev?.name, ampliconBp]);
 
     const gappedOligoPrimers = oligoPrimers ? {
         p1: { start: mapToGapped(oligoPrimers.p1.start), end: mapToGapped(oligoPrimers.p1.end) },
         p2: { start: mapToGapped(oligoPrimers.p2.start), end: mapToGapped(oligoPrimers.p2.end) }
     } : null;
+
+    // Preview MSA shows the query record plus at most 14 hit records, so the
+    // viewer stays compact no matter how many homologs were aligned.
+    const sliceAlignmentForPreview = (fasta: string): string => {
+        const records = fasta.split(/^>/m).filter(r => r.trim().length > 0);
+        return records.slice(0, 15).map(r => `>${r}`).join('');
+    };
+
+    // Freezes the modal's MSA payload at open time: navigateTarget is a one-shot
+    // zoom keyed on object identity, so anything recomputed per render would keep
+    // yanking the scroll position back while the user pans the alignment. The
+    // zoom-fit target spans everything relevant: previewed primer, the selected
+    // partner (if any), and both MOLigos.
+    const openPreview = (p: DesignedPrimer, side: 'fwd' | 'rev') => {
+        const ts = Date.now();
+        const iv = getPrimerInterval(p, side);
+        if (!iv) {
+            setPreviewPrimer({ primer: p, side, ts, msaFlanking: null, msaNav: null, msaAlignment: null });
+            return;
+        }
+        const g: [number, number] = [mapRawToFullGapped(iv[0]), mapRawToFullGapped(iv[1])];
+        const partnerSide = side === 'fwd' ? 'rev' : 'fwd';
+        const partner = side === 'fwd' ? selRev : selFwd;
+        const pIv = partner ? getPrimerInterval(partner, partnerSide) : null;
+        const pg: [number, number] | null = pIv ? [mapRawToFullGapped(pIv[0]), mapRawToFullGapped(pIv[1])] : null;
+        // Zoom-fit covers the previewed primer, the selected partner (if any),
+        // and both MOLigos — everything the user needs in view at once. MOLigo
+        // columns must come from mapRawToFullGapped (stable, full-alignment),
+        // never the viewport-relative mapToGapped used by gappedOligoPrimers.
+        const moligoG = oligoPrimers ? {
+            p1: { start: mapRawToFullGapped(oligoPrimers.p1.start), end: mapRawToFullGapped(oligoPrimers.p1.end) },
+            p2: { start: mapRawToFullGapped(oligoPrimers.p2.start), end: mapRawToFullGapped(oligoPrimers.p2.end) },
+        } : null;
+        const spanStarts = moligoG
+            ? [g[0], pg?.[0], moligoG.p1.start, moligoG.p2.start].filter((v): v is number => v != null)
+            : [g[0], ...(pg ? [pg[0]] : [])];
+        const spanEnds = moligoG
+            ? [g[1], pg?.[1], moligoG.p1.end, moligoG.p2.end].filter((v): v is number => v != null)
+            : [g[1], ...(pg ? [pg[1]] : [])];
+        setPreviewPrimer({
+            primer: p, side, ts,
+            msaFlanking: {
+                fwd: side === 'fwd' ? { start: g[0], end: g[1] } : (pg ? { start: pg[0], end: pg[1] } : null),
+                rev: side === 'rev' ? { start: g[0], end: g[1] } : (pg ? { start: pg[0], end: pg[1] } : null),
+            },
+            msaNav: { colStart: Math.max(0, Math.min(...spanStarts) - 30), colEnd: Math.max(...spanEnds) + 30, ts },
+            msaAlignment: alignment ? sliceAlignmentForPreview(alignment) : null,
+        });
+    };
 
     const renderStaticSeq = () => {
         const chars = rawSeq.substring(viewStart, viewEnd).split('');
@@ -873,6 +991,49 @@ export default function FlankingPrimersPanel({
         );
     };
 
+    // Read-only mirror of renderStaticSeq's highlight scheme, windowed to the
+    // MOLigos plus the previewed primer with a small flank, without drag handlers.
+    // An already-selected partner primer (opposite side) is rendered too, so the
+    // user previews the candidate in its eventual pair context; the previewed
+    // candidate is underlined to tell it apart from the selected partner.
+    const renderPreviewSeq = (iv: [number, number], side: 'fwd' | 'rev', partnerIv: [number, number] | null, partnerSide: 'fwd' | 'rev' | null) => {
+        const FLANK = 50;
+        const LINE = 100;
+        const winStart = Math.max(0, Math.min(moligoStart, iv[0], partnerIv?.[0] ?? Infinity) - FLANK);
+        const winEnd = Math.min(rawSeq.length, Math.max(moligoEnd, iv[1], partnerIv?.[1] ?? -Infinity) + FLANK);
+        const primerCn = side === 'fwd'
+            ? 'bg-emerald-300 dark:bg-emerald-700/60 text-emerald-900 dark:text-emerald-200 font-bold underline'
+            : 'bg-teal-300 dark:bg-teal-700/60 text-teal-900 dark:text-teal-200 font-bold underline';
+        const partnerCn = partnerSide === 'fwd'
+            ? 'bg-emerald-300 dark:bg-emerald-700/60 text-emerald-900 dark:text-emerald-200 font-bold'
+            : 'bg-teal-300 dark:bg-teal-700/60 text-teal-900 dark:text-teal-200 font-bold';
+        const rows = [];
+        for (let rowStart = winStart; rowStart < winEnd; rowStart += LINE) {
+            const row = rawSeq.slice(rowStart, Math.min(rowStart + LINE, winEnd));
+            rows.push(
+                <div key={rowStart} className="flex">
+                    <span className="text-slate-400 mr-4 select-none whitespace-pre">{String(rowStart + 1).padStart(6, ' ')}</span>
+                    <span className="whitespace-pre">
+                        {row.split('').map((char, j) => {
+                            const i = rowStart + j;
+                            const isP1 = i >= p1Start && i < p1End;
+                            const isP2 = i >= p2Start && i < p2End;
+                            const isPrimer = i >= iv[0] && i < iv[1];
+                            const isPartner = partnerIv && i >= partnerIv[0] && i < partnerIv[1];
+                            let cn = 'text-slate-500 dark:text-slate-400';
+                            if (isP1) cn = 'bg-green-200 dark:bg-green-900/40 text-green-900 dark:text-green-300 font-bold';
+                            if (isP2) cn = 'bg-amber-200 dark:bg-amber-900/40 text-amber-900 dark:text-amber-300 font-bold';
+                            if (isPartner) cn = partnerCn;
+                            if (isPrimer) cn = primerCn;
+                            return <span key={i} className={cn}>{char}</span>;
+                        })}
+                    </span>
+                </div>
+            );
+        }
+        return <div className="font-mono text-xs leading-relaxed space-y-1 min-w-max">{rows}</div>;
+    };
+
     // ── Primer result card ───────────────────────────────────────────────────
     const renderCard = (p: DesignedPrimer, side: 'fwd' | 'rev', idx: number) => {
         const isSelected = side === 'fwd' ? selFwd?.sequence === p.sequence : selRev?.sequence === p.sequence;
@@ -883,6 +1044,7 @@ export default function FlankingPrimersPanel({
             return 'text-emerald-500 font-bold';
         };
         const copyKey = `${side}-${idx}`;
+        const relPos = relativeMOLigoPos(p, side);
 
         const indivResult = idtResultsIndiv[p.sequence];
         const isAnal = analyzingIndiv[p.sequence];
@@ -894,11 +1056,20 @@ export default function FlankingPrimersPanel({
                         <span className="font-bold text-slate-500 dark:text-slate-400 text-[10px] uppercase tracking-wider">#{idx + 1}</span>
                         {p.name && <span className="font-bold text-amber-600 dark:text-amber-400 text-[10px] uppercase tracking-wider">{p.name}</span>}
                         <span className="font-mono text-slate-700 dark:text-slate-200 break-all">{p.sequence}</span>
+                        {relPos && (
+                            <span className="font-mono text-[10px] text-slate-400 dark:text-slate-500 whitespace-nowrap" title="Distance from the MOLigo region (bp)">
+                                {relPos}
+                            </span>
+                        )}
                     </div>
                     <div className="flex gap-1 flex-shrink-0">
                         <button onClick={() => doCopy(p.sequence, copyKey)}
                             className="text-[10px] px-2 py-0.5 rounded border border-slate-200 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors font-bold">
                             {copyFb === copyKey ? 'Copied' : 'Copy'}
+                        </button>
+                        <button onClick={() => openPreview(p, side)}
+                            className="text-[10px] px-2 py-0.5 rounded border border-indigo-200 dark:border-indigo-700 text-indigo-600 dark:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-colors font-bold">
+                            Preview
                         </button>
                         <button onClick={() => {
                             if (!isSelected) {
@@ -1025,14 +1196,29 @@ export default function FlankingPrimersPanel({
                         </div>
                     </div>
                     
-                    <div 
-                        ref={containerRef} 
+                    <div
+                        ref={containerRef}
                         onMouseUp={handleMouseUp}
                         className="p-4 overflow-y-auto overflow-x-hidden bg-white dark:bg-slate-800 relative"
                     >
                         {renderStaticSeq()}
                     </div>
                 </div>
+
+                {/* ── Amplicon Length ── */}
+                {ampliconBp != null && (
+                    <div className="rounded-xl border border-emerald-200 dark:border-emerald-800/50 bg-emerald-50/60 dark:bg-emerald-900/10 px-4 py-3 flex items-center justify-between shadow-sm">
+                        <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">
+                            Amplicon Length
+                        </span>
+                        <span
+                            className="text-base font-bold font-mono text-emerald-700 dark:text-emerald-300"
+                            title="Amplicon size: forward primer + template between primers + reverse primer"
+                        >
+                            {ampliconBp.toLocaleString()} bp
+                        </span>
+                    </div>
+                )}
 
                 {/* ── Primer3 Parameters ── */}
                 <div className="rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
@@ -1198,6 +1384,92 @@ export default function FlankingPrimersPanel({
                     </div>
                 )}
             </div>
+
+            {/* ── Primer Binding Preview Modal ── */}
+            {previewPrimer && (() => {
+                const iv = getPrimerInterval(previewPrimer.primer, previewPrimer.side);
+                const relPos = relativeMOLigoPos(previewPrimer.primer, previewPrimer.side);
+                const sideLabel = previewPrimer.side === 'fwd' ? 'Forward' : 'Reverse';
+                // The already-selected opposite-side primer, if any — shown in the
+                // context view and used for the live preview amplicon size.
+                const partnerSide = previewPrimer.side === 'fwd' ? 'rev' : 'fwd';
+                const partner = previewPrimer.side === 'fwd' ? selRev : selFwd;
+                const partnerIv = partner ? getPrimerInterval(partner, partnerSide) : null;
+                const previewAmplicon = iv && partnerIv
+                    ? (previewPrimer.side === 'fwd'
+                        ? (partnerIv[1] > iv[0] ? partnerIv[1] - iv[0] : null)
+                        : (iv[1] > partnerIv[0] ? iv[1] - partnerIv[0] : null))
+                    : null;
+                // Enforce the ~2/3 MSA vs ~1/3 context split: the MSA block is this
+                // cap plus its 116px minimap; 96px accounts for header and legend.
+                const msaMaxHeight = Math.max(120, Math.floor((window.innerHeight * 0.92 - 96) * (2 / 3)) - 116);
+                return (
+                    <div
+                        className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm animate-in fade-in duration-150"
+                        onClick={(e) => { if (e.target === e.currentTarget) setPreviewPrimer(null); }}
+                        role="dialog"
+                        aria-modal="true"
+                        aria-label={`${sideLabel} primer binding site preview`}
+                    >
+                        <div
+                            className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl max-w-4xl w-full mx-4 border border-slate-200 dark:border-slate-700 overflow-hidden h-[92vh] flex flex-col"
+                            onClick={(e) => e.stopPropagation()}
+                        >
+                            <div className="flex items-center justify-between gap-3 px-5 py-3 bg-slate-50 dark:bg-slate-900/60 border-b border-slate-200 dark:border-slate-700">
+                                <div className="flex items-center gap-2 min-w-0">
+                                    <span className={`text-sm font-bold uppercase tracking-widest flex-shrink-0 ${previewPrimer.side === 'fwd' ? 'text-emerald-600 dark:text-emerald-400' : 'text-teal-600 dark:text-teal-400'}`}>
+                                        {sideLabel} primer preview
+                                    </span>
+                                    <span className="font-mono text-xs text-slate-600 dark:text-slate-300 truncate">{previewPrimer.primer.sequence}</span>
+                                    {relPos && (
+                                        <span className="font-mono text-xs text-slate-400 flex-shrink-0" title="Distance from the MOLigo region (bp)">{relPos}</span>
+                                    )}
+                                    {previewAmplicon != null && (
+                                        <span
+                                            className="px-2.5 py-1 rounded-lg bg-emerald-100 dark:bg-emerald-900/40 border border-emerald-300 dark:border-emerald-700 text-emerald-700 dark:text-emerald-300 text-xs font-bold font-mono flex-shrink-0"
+                                            title="Amplicon size for the previewed pair: forward primer + template between primers + reverse primer"
+                                        >
+                                            Amplicon: {previewAmplicon.toLocaleString()} bp
+                                        </span>
+                                    )}
+                                </div>
+                                <button
+                                    onClick={() => setPreviewPrimer(null)}
+                                    className="text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 px-2 py-1 rounded hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors flex-shrink-0"
+                                >
+                                    ✕ Close
+                                </button>
+                            </div>
+                            {previewPrimer.msaAlignment && previewPrimer.msaFlanking && (
+                                <div className="flex-shrink-0 border-b border-slate-200 dark:border-slate-700">
+                                    <DelayedNavMSA
+                                        alignment={previewPrimer.msaAlignment}
+                                        primers={gappedOligoPrimers}
+                                        flankingPrimers={previewPrimer.msaFlanking}
+                                        isDarkMode={isDarkMode}
+                                        navigateTarget={previewPrimer.msaNav}
+                                        showAutofindUI={false}
+                                        maxHeight={msaMaxHeight}
+                                    />
+                                </div>
+                            )}
+                            <div className="flex-1 min-h-0 p-4 overflow-auto">
+                                {iv
+                                    ? renderPreviewSeq(iv, previewPrimer.side, partnerIv, partnerSide)
+                                    : <p className="text-xs text-red-500 font-medium">This primer could not be located on the template sequence.</p>}
+                            </div>
+                            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 px-5 py-2.5 border-t border-slate-100 dark:border-slate-700 text-[10px] font-bold text-slate-500 dark:text-slate-400">
+                                <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-green-300 dark:bg-green-700" /> MOLigo 1</span>
+                                <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-amber-300 dark:bg-amber-700" /> MOLigo 2</span>
+                                <span className="flex items-center gap-1.5"><span className={`w-2.5 h-2.5 rounded-sm ${previewPrimer.side === 'fwd' ? 'bg-emerald-400 dark:bg-emerald-600' : 'bg-teal-400 dark:bg-teal-600'}`} /> Previewed {sideLabel.toLowerCase()} primer (underlined)</span>
+                                {partnerIv && (
+                                    <span className="flex items-center gap-1.5"><span className={`w-2.5 h-2.5 rounded-sm ${partnerSide === 'fwd' ? 'bg-emerald-400 dark:bg-emerald-600' : 'bg-teal-400 dark:bg-teal-600'}`} /> Selected {partnerSide === 'fwd' ? 'forward' : 'reverse'} primer</span>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                );
+            })()}
         </div>
     );
 }

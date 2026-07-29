@@ -54,7 +54,7 @@ function App() {
 
   const [jobName, setJobName] = useState(() => localStorage.getItem('job_name') || 'Query');
   const [selectedPrimers, setSelectedPrimers] = useState<{ p1: { start: number, end: number }, p2: { start: number, end: number } } | null>(null);
-  const [selectedFlankingPrimers, setSelectedFlankingPrimers] = useState<{ fwd: { start: number; end: number } | null; rev: { start: number; end: number } | null; fwdName?: string; revName?: string } | null>(null);
+  const [selectedFlankingPrimers, setSelectedFlankingPrimers] = useState<{ fwd: { start: number; end: number } | null; rev: { start: number; end: number } | null; fwdName?: string; revName?: string; amplicon?: number } | null>(null);
   const [showSecrets, setShowSecrets] = useState(false);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [navigateTarget, setNavigateTarget] = useState<{ colStart: number; colEnd: number; ts: number } | null>(null);

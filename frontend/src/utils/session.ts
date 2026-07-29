@@ -86,6 +86,7 @@ export interface FlankingPrimerSelection {
     rev: { start: number; end: number } | null;
     fwdName?: string;
     revName?: string;
+    amplicon?: number;
 }
 
 /** Snapshot of the visible query sequence window shown in the MSA viewer. */

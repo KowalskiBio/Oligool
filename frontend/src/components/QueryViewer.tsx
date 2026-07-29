@@ -31,7 +31,8 @@ interface QueryViewerProps {
         fwdName?: string,
         revName?: string,
         fwdSeq?: string,
-        revSeq?: string
+        revSeq?: string,
+        amplicon?: number
     } | null) => void;
     onNavigateTo?: (colStart: number, colEnd: number) => void;
     /** Gapped column range selected by the user in MSAViewer for constrained oligo search */
@@ -207,6 +208,7 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
         revName?: string;
         fwdSeq?: string;
         revSeq?: string;
+        amplicon?: number;
     } | null>(null);
     const [showReportDialog, setShowReportDialog] = useState(false);
     const [interactiveFlankWindow, setInteractiveFlankWindow] = useState(200);
@@ -1155,6 +1157,7 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
         revName?: string;
         fwdSeq?: string;
         revSeq?: string;
+        amplicon?: number;
     } | null) => {
         setFlankingPrimersData(data);
         onFlankingPrimersUpdate?.(data);
@@ -2572,6 +2575,14 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
                         </svg>
                         <span className="text-sm font-bold text-slate-500 uppercase tracking-widest">Flanking Primers Provenance</span>
+                        {flankingPrimersData?.amplicon != null && (
+                            <span
+                                className="px-2.5 py-1 rounded-lg bg-emerald-100 dark:bg-emerald-900/40 border border-emerald-300 dark:border-emerald-700 text-emerald-700 dark:text-emerald-300 text-sm font-bold font-mono normal-case tracking-normal"
+                                title="Amplicon size: forward primer + template between primers + reverse primer"
+                            >
+                                Amplicon: {flankingPrimersData.amplicon.toLocaleString()} bp
+                            </span>
+                        )}
                     </div>
                     <button onClick={() => setShowFlankingPrimers(false)}
                         className="text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 px-2 py-1 rounded hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors">

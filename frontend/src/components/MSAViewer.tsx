@@ -55,6 +55,8 @@ interface MSAViewerProps {
     onAutofindTreatIndelsAsMismatchesChange?: (value: boolean) => void;
     blastRid?: string;
     hitRanges?: Record<string, { sstart: number; send: number; rank: number }>;
+    /** Caps the main alignment view height (px); minimap renders additionally below. Defaults to MAX_VIEWER_HEIGHT. */
+    maxHeight?: number;
 }
 
 export interface MSAViewerHandle {
@@ -80,7 +82,7 @@ const MINIMAP_HEIGHT = MINIMAP_GC_H + MINIMAP_RULER_H + 50 + MINIMAP_HANDLE_H;
 const MAIN_GC_TRACK_H = 40;
 const MAIN_MSA_TRACK_H = 30;
 
-const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVisibleQueryChange, primers, flankingPrimers, isDarkMode, navigateTarget, onOligoRegionSelect, onAutofindRegionSelect, onFlankingPrimerClick, selectedAccessions, onSelectionChange, restoredRegion, showAutofindUI = true, autofindTreatIndelsAsMismatches = false, onAutofindTreatIndelsAsMismatchesChange, blastRid = '', hitRanges = {} }, ref) => {
+const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVisibleQueryChange, primers, flankingPrimers, isDarkMode, navigateTarget, onOligoRegionSelect, onAutofindRegionSelect, onFlankingPrimerClick, selectedAccessions, onSelectionChange, restoredRegion, showAutofindUI = true, autofindTreatIndelsAsMismatches = false, onAutofindTreatIndelsAsMismatchesChange, blastRid = '', hitRanges = {}, maxHeight }, ref) => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const hoverOverlayRef = useRef<HTMLCanvasElement>(null);
     const minimapRef = useRef<HTMLCanvasElement>(null);
@@ -891,7 +893,7 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
         const ctx = cvs.getContext('2d');
         if (!ctx) return;
 
-        const canvasH = Math.min(totalH, MAX_VIEWER_HEIGHT);
+        const canvasH = Math.min(totalH, maxHeight ?? MAX_VIEWER_HEIGHT);
         const dpr = window.devicePixelRatio || 1;
         cvs.width = availableWidth * dpr;
         cvs.height = canvasH * dpr;
@@ -1824,7 +1826,7 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
             <div
                 ref={scrollRef}
                 className={`overflow-y-auto overscroll-contain relative ${viewFraction >= 0.99 ? 'overflow-x-hidden' : 'overflow-x-auto'}`}
-                style={{ height: `${Math.min(totalH, MAX_VIEWER_HEIGHT)}px` }}
+                style={{ height: `${Math.min(totalH, maxHeight ?? MAX_VIEWER_HEIGHT)}px` }}
                 onScroll={handleScroll}
                 onWheel={handleWheel}
             >
