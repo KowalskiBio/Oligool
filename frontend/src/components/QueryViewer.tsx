@@ -6,7 +6,7 @@ import DimerSVG from './DimerSVG';
 import QueryReport from './QueryReport';
 import { dimerAsciiFromItem } from './DimerAscii';
 import { PIN_COLORS, exportPositionsCSV, exportPositionsTSV } from '../utils/session';
-import type { OligoSnapshot, SavedPosition, FixedAbsCoords } from '../utils/session';
+import type { OligoSnapshot, SavedPosition, FixedAbsCoords, FlankingPanelState } from '../utils/session';
 import { buildCompleteReportTxt, downloadTxt, type CompleteReportData } from '../utils/report';
 import { reverseComplement } from '../utils/dna';
 
@@ -36,6 +36,10 @@ interface QueryViewerProps {
         revSeq?: string,
         amplicon?: number
     } | null) => void;
+    /** FlankingPrimersPanel state restored from a loaded session, forwarded to the panel. */
+    flankingPanelState?: FlankingPanelState | null;
+    /** Relays durable FlankingPrimersPanel state up to App for session saves. */
+    onFlankingPanelStateChange?: (state: FlankingPanelState) => void;
     onNavigateTo?: (colStart: number, colEnd: number) => void;
     /** Gapped column range selected by the user in MSAViewer for constrained oligo search */
     oligoRegion?: { startCol: number; endCol: number } | null;
@@ -84,7 +88,7 @@ interface OligizeResponse {
     param_warnings?: string[];
 }
 
-const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function QueryViewer({ data, jobName, queryHeader, onPrimersUpdate, onFlankingPrimersUpdate, onNavigateTo, oligoRegion, autofindRegion, idtCredentials, alignment, navigateTarget, isDarkMode, importedSession }, ref) {
+const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function QueryViewer({ data, jobName, queryHeader, onPrimersUpdate, onFlankingPrimersUpdate, flankingPanelState, onFlankingPanelStateChange, onNavigateTo, oligoRegion, autofindRegion, idtCredentials, alignment, navigateTarget, isDarkMode, importedSession }, ref) {
     const API_BASE = ((import.meta.env.VITE_API_BASE as string) || '');
     const [copyFeedback, setCopyFeedback] = useState('');
 
@@ -2626,6 +2630,8 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                     idtCredentials={idtCredentials}
                     idtAdvancedParams={idtAdvancedParams}
                     onFlankingPrimersUpdate={handleFlankingPrimersUpdate}
+                    restoredState={flankingPanelState ?? null}
+                    onPanelStateChange={onFlankingPanelStateChange}
                 />
             </div>
         )}

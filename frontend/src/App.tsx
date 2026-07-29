@@ -3,7 +3,7 @@ import MSAViewer, { type MSAViewerHandle } from './components/MSAViewer';
 import QueryViewer, { type QueryViewerHandle, type ImportedSession } from './components/QueryViewer';
 import BlastResults from './components/BlastResults';
 import RabbitGame from './components/RabbitGame';
-import { downloadSession, parseSessionText, OLIGOOL_SESSION_APP, OLIGOOL_SESSION_VERSION, type OligoolSession } from './utils/session';
+import { downloadSession, parseSessionText, OLIGOOL_SESSION_APP, OLIGOOL_SESSION_VERSION, type OligoolSession, type FlankingPanelState, type FlankingPrimerSelection } from './utils/session';
 import { parseSequenceHeader } from './utils/dna';
 
 type Step = 'input' | 'blasting' | 'aligning' | 'done';
@@ -56,7 +56,8 @@ function App() {
   const [jobName, setJobName] = useState(() => localStorage.getItem('job_name') || 'Query');
   const queryHeader = useMemo(() => parseSequenceHeader(input), [input]);
   const [selectedPrimers, setSelectedPrimers] = useState<{ p1: { start: number, end: number }, p2: { start: number, end: number } } | null>(null);
-  const [selectedFlankingPrimers, setSelectedFlankingPrimers] = useState<{ fwd: { start: number; end: number } | null; rev: { start: number; end: number } | null; fwdName?: string; revName?: string; amplicon?: number } | null>(null);
+  const [selectedFlankingPrimers, setSelectedFlankingPrimers] = useState<FlankingPrimerSelection | null>(null);
+const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState | null>(null);
   const [showSecrets, setShowSecrets] = useState(false);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [navigateTarget, setNavigateTarget] = useState<{ colStart: number; colEnd: number; ts: number } | null>(null);
@@ -283,6 +284,7 @@ function App() {
     setError('');
     setInput('');
     setSelectedFlankingPrimers(null);
+    setFlankingPanelState(null);
     setAutofindSelectedAccessions(new Set());
     setImportedSession(null);
   };
@@ -313,8 +315,9 @@ function App() {
       },
       oligo: queryViewerRef.current?.getSnapshot() ?? null,
       flankingPrimers: selectedFlankingPrimers ?? null,
+      flankingPanel: flankingPanelState ?? null,
     };
-  }, [alignment, blastHits, filteredHits, blastMeta, showMatches, jobName, input, organism, eValue, percIdentity, filterMatches, maxHitsPreset, customHits, autofindSelectedAccessions, autofindTreatIndelsAsMismatches, selectedFlankingPrimers, selectedSequence]);
+  }, [alignment, blastHits, filteredHits, blastMeta, showMatches, jobName, input, organism, eValue, percIdentity, filterMatches, maxHitsPreset, customHits, autofindSelectedAccessions, autofindTreatIndelsAsMismatches, selectedFlankingPrimers, selectedSequence, flankingPanelState]);
 
   // ── Restore a previously saved session, skipping the BLAST/MSA pipeline ──
   const applySession = useCallback((session: OligoolSession) => {
@@ -337,6 +340,7 @@ function App() {
     setSelectedPrimers(null);
     setOligoRegion(null);
     setSelectedFlankingPrimers(session.flankingPrimers || null);
+    setFlankingPanelState(session.flankingPanel ?? null);
     setError('');
 
     setSelectedSequence(session.results.selectedSequence ?? null);
@@ -1106,6 +1110,8 @@ function App() {
                   queryHeader={queryHeader}
                   onPrimersUpdate={setSelectedPrimers}
                   onFlankingPrimersUpdate={setSelectedFlankingPrimers}
+                  flankingPanelState={flankingPanelState}
+                  onFlankingPanelStateChange={setFlankingPanelState}
                   onNavigateTo={(colStart, colEnd) => {
                     setNavigateTarget({ colStart, colEnd, ts: Date.now() });
                     setRestoredRegion({ start: colStart, end: colEnd });

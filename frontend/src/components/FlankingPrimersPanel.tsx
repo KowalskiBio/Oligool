@@ -2,25 +2,10 @@ import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import MSAViewer from './MSAViewer';
 import DimerAscii from './DimerAscii';
 import HairpinSVG from './HairpinSVG';
+import { FLANKING_PANEL_DEFAULTS, type FlankingPanelState, type FlankingDesignedPrimer, type FlankingDesignResult } from '../utils/session';
 
-interface DesignedPrimer {
-    sequence: string;
-    length: number;
-    gc_percent: number;
-    tm: number | null;
-    tm_strider: number | null;
-    hairpin: { structure_found: boolean; tm: number | null; dg: number | null };
-    homodimer: { structure_found: boolean; tm: number | null; dg: number | null };
-    primer3: { tm: number | null; gc_percent: number | null; self_any: number | null; self_end: number | null; hairpin_th: number | null };
-    interval?: [number, number];
-    name?: string;
-}
-
-interface DesignResult {
-    forward: { num_returned: number; primers: DesignedPrimer[]; explain: string };
-    reverse: { num_returned: number; primers: DesignedPrimer[]; explain: string };
-    pair_metrics: { heterodimer: { structure_found: boolean; tm: number | null; dg: number | null } } | null;
-}
+type DesignedPrimer = FlankingDesignedPrimer;
+type DesignResult = FlankingDesignResult;
 
 interface OligoPrimers {
     p1: { start: number; end: number };
@@ -50,6 +35,10 @@ interface Props {
         revSeq?: string,
         amplicon?: number
     } | null) => void;
+    /** Panel state from a loaded session, applied once at mount (panel remounts per import). */
+    restoredState?: FlankingPanelState | null;
+    /** Publishes durable panel state upward so session saves capture the user's primer work. */
+    onPanelStateChange?: (state: FlankingPanelState) => void;
 }
 
 const API = ((import.meta.env.VITE_API_BASE as string) || '');
@@ -75,39 +64,41 @@ export default function FlankingPrimersPanel({
     rawSeq, oligoStart, oligoEnd,
     p1Start, p1End, p2Start, p2End,
     alignment, oligoPrimers, navigateTarget, isDarkMode,
-    idtCredentials, idtAdvancedParams, gappedData, onFlankingPrimersUpdate
+    idtCredentials, idtAdvancedParams, gappedData, onFlankingPrimersUpdate,
+    restoredState, onPanelStateChange
 }: Props) {
-    // Primer3 params
-    const [flankWindow, setFlankWindow] = useState(200);
-    const [optSize, setOptSize] = useState(20);
-    const [minSize, setMinSize] = useState(16);
-    const [maxSize, setMaxSize] = useState(27);
-    const [optTm, setOptTm] = useState(62.0);
-    const [minTm, setMinTm] = useState(57.0);
-    const [maxTm, setMaxTm] = useState(67.0);
-    const [minGc, setMinGc] = useState(20.0);
-    const [maxGc, setMaxGc] = useState(80.0);
-    const [numReturn, setNumReturn] = useState(5);
-    const [showAdv, setShowAdv] = useState(false);
-    const [mvConc, setMvConc] = useState(50.0);
-    const [dvConc, setDvConc] = useState(3);
-    const [dntpConc, setDntpConc] = useState(0.8);
-    const [dnaConc, setDnaConc] = useState(200.0);
+    // Primer3 params — initialized from a restored session when present
+    const rp = restoredState?.params ?? FLANKING_PANEL_DEFAULTS.params;
+    const [flankWindow, setFlankWindow] = useState(rp.flankWindow);
+    const [optSize, setOptSize] = useState(rp.optSize);
+    const [minSize, setMinSize] = useState(rp.minSize);
+    const [maxSize, setMaxSize] = useState(rp.maxSize);
+    const [optTm, setOptTm] = useState(rp.optTm);
+    const [minTm, setMinTm] = useState(rp.minTm);
+    const [maxTm, setMaxTm] = useState(rp.maxTm);
+    const [minGc, setMinGc] = useState(rp.minGc);
+    const [maxGc, setMaxGc] = useState(rp.maxGc);
+    const [numReturn, setNumReturn] = useState(rp.numReturn);
+    const [showAdv, setShowAdv] = useState(restoredState?.showAdv ?? false);
+    const [mvConc, setMvConc] = useState(rp.mvConc);
+    const [dvConc, setDvConc] = useState(rp.dvConc);
+    const [dntpConc, setDntpConc] = useState(rp.dntpConc);
+    const [dnaConc, setDnaConc] = useState(rp.dnaConc);
 
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
-    const [result, setResult] = useState<DesignResult | null>(null);
+    const [result, setResult] = useState<DesignResult | null>(restoredState?.result ?? null);
 
     // selected primer to "use"
-    const [selFwd, setSelFwd] = useState<DesignedPrimer | null>(null);
-    const [selRev, setSelRev] = useState<DesignedPrimer | null>(null);
+    const [selFwd, setSelFwd] = useState<DesignedPrimer | null>(restoredState?.selFwd ?? null);
+    const [selRev, setSelRev] = useState<DesignedPrimer | null>(restoredState?.selRev ?? null);
     // Debounce refs for IDT analysis after drag
     const idtDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const idtPairDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const skipNextPairEffectRef = useRef(false);
 
-    const [fwdName, setFwdName] = useState('');
-    const [revName, setRevName] = useState('');
+    const [fwdName, setFwdName] = useState(restoredState?.fwdName ?? '');
+    const [revName, setRevName] = useState(restoredState?.revName ?? '');
 
     // Preview modal: shows a candidate's binding site without selecting it, so
     // no IDT analysis runs until the user explicitly clicks "Use". The MSA
@@ -128,10 +119,10 @@ export default function FlankingPrimersPanel({
         else fb();
     };
 
-    const [manualLeftStart, setManualLeftStart] = useState<number | null>(null);
-    const [manualLeftEnd, setManualLeftEnd] = useState<number | null>(null);
-    const [manualRightStart, setManualRightStart] = useState<number | null>(null);
-    const [manualRightEnd, setManualRightEnd] = useState<number | null>(null);
+    const [manualLeftStart, setManualLeftStart] = useState<number | null>(restoredState?.manual.leftStart ?? null);
+    const [manualLeftEnd, setManualLeftEnd] = useState<number | null>(restoredState?.manual.leftEnd ?? null);
+    const [manualRightStart, setManualRightStart] = useState<number | null>(restoredState?.manual.rightStart ?? null);
+    const [manualRightEnd, setManualRightEnd] = useState<number | null>(restoredState?.manual.rightEnd ?? null);
 
     const handleRegionSelect = (startCol: number, endCol: number) => {
         const mStart = Math.min(p1Start, p2Start);
@@ -394,7 +385,7 @@ export default function FlankingPrimersPanel({
     }, [mapFullGappedToRaw, p1Start, p1End, p2Start, p2End]);
 
     const [isAnalyzing, setIsAnalyzing] = useState(false);
-    const [idtResults, setIdtResults] = useState<any>(null);
+    const [idtResults, setIdtResults] = useState<any>(restoredState?.pairIdtResults ?? null);
     const [analysisError, setAnalysisError] = useState<string | null>(null);
     const [isAnalysisExpanded, setIsAnalysisExpanded] = useState(true);
 
@@ -441,7 +432,7 @@ export default function FlankingPrimersPanel({
         }
     }, [idtCredentials, idtAdvancedParams]);
 
-    const [idtResultsIndiv, setIdtResultsIndiv] = useState<Record<string, any>>({});
+    const [idtResultsIndiv, setIdtResultsIndiv] = useState<Record<string, any>>(restoredState?.idtResultsIndiv ?? {});
     const [analyzingIndiv, setAnalyzingIndiv] = useState<Record<string, boolean>>({});
 
     const analyzeIndividual = async (seq: string) => {
@@ -881,6 +872,28 @@ export default function FlankingPrimersPanel({
             } : null);
         }
     }, [flankingPrimersForMSA, onFlankingPrimersUpdate, selFwd?.name, selRev?.name, ampliconBp]);
+
+    // Publish durable panel state for session saves. getPrimerInterval is resolved at
+    // emit time so restored primers keep absolute positions even if the design
+    // backend never returned coordinates for them.
+    useEffect(() => {
+        if (!onPanelStateChange) return;
+        const withResolvedInterval = (p: DesignedPrimer | null, side: 'fwd' | 'rev'): FlankingDesignedPrimer | null =>
+            p ? { ...p, interval: getPrimerInterval(p, side) ?? undefined } : null;
+        onPanelStateChange({
+            params: { flankWindow, optSize, minSize, maxSize, optTm, minTm, maxTm, minGc, maxGc, numReturn, mvConc, dvConc, dntpConc, dnaConc },
+            showAdv,
+            manual: { leftStart: manualLeftStart, leftEnd: manualLeftEnd, rightStart: manualRightStart, rightEnd: manualRightEnd },
+            result,
+            selFwd: withResolvedInterval(selFwd, 'fwd'),
+            selRev: withResolvedInterval(selRev, 'rev'),
+            fwdName,
+            revName,
+            idtResultsIndiv,
+            pairIdtResults: idtResults,
+        });
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [onPanelStateChange, rawSeq, flankWindow, optSize, minSize, maxSize, optTm, minTm, maxTm, minGc, maxGc, numReturn, showAdv, mvConc, dvConc, dntpConc, dnaConc, manualLeftStart, manualLeftEnd, manualRightStart, manualRightEnd, result, selFwd, selRev, fwdName, revName, idtResultsIndiv, idtResults]);
 
     const gappedOligoPrimers = oligoPrimers ? {
         p1: { start: mapToGapped(oligoPrimers.p1.start), end: mapToGapped(oligoPrimers.p1.end) },
