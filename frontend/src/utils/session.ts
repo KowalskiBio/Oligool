@@ -3,8 +3,11 @@
 // A session captures everything needed to resume work without re-running the
 // (slow) BLAST + MAFFT pipeline: the search inputs, the BLAST hits, the MSA
 // alignment, and — most importantly — the designed oligos, their pinned
-// positions, and the flanking-primer selection. Credentials are intentionally
-// NOT included (they live in localStorage and are machine-local / sensitive).
+// positions, and the flanking-primer work: the MSA highlight selection plus the
+// full FlankingPrimersPanel state (designed candidates, the primers the user
+// clicked "Use" on, their names, design parameters, manual regions, and any
+// IDT structural analysis already fetched). Credentials are intentionally NOT
+// included (they live in localStorage and are machine-local / sensitive).
 
 export const OLIGOOL_SESSION_APP = 'oligool';
 export const OLIGOOL_SESSION_VERSION = 1;
@@ -86,7 +89,56 @@ export interface FlankingPrimerSelection {
     rev: { start: number; end: number } | null;
     fwdName?: string;
     revName?: string;
+    fwdSeq?: string;
+    revSeq?: string;
     amplicon?: number;
+}
+
+/** A flanking-primer candidate as produced by the design pipeline (Primer3 or manual). */
+export interface FlankingDesignedPrimer {
+    sequence: string;
+    length: number;
+    gc_percent: number;
+    tm: number | null;
+    tm_strider: number | null;
+    hairpin: { structure_found: boolean; tm: number | null; dg: number | null };
+    homodimer: { structure_found: boolean; tm: number | null; dg: number | null };
+    primer3: { tm: number | null; gc_percent: number | null; self_any: number | null; self_end: number | null; hairpin_th: number | null };
+    interval?: [number, number];
+    name?: string;
+}
+
+export interface FlankingDesignResult {
+    forward: { num_returned: number; primers: FlankingDesignedPrimer[]; explain: string };
+    reverse: { num_returned: number; primers: FlankingDesignedPrimer[]; explain: string };
+    pair_metrics: { heterodimer: { structure_found: boolean; tm: number | null; dg: number | null } } | null;
+}
+
+/** Durable FlankingPrimersPanel state: everything needed to reopen the panel exactly as left. */
+export interface FlankingPanelState {
+    params: {
+        flankWindow: number;
+        optSize: number; minSize: number; maxSize: number;
+        optTm: number; minTm: number; maxTm: number;
+        minGc: number; maxGc: number;
+        numReturn: number;
+        mvConc: number; dvConc: number; dntpConc: number; dnaConc: number;
+    };
+    showAdv: boolean;
+    manual: {
+        leftStart: number | null; leftEnd: number | null;
+        rightStart: number | null; rightEnd: number | null;
+    };
+    result: FlankingDesignResult | null;
+    /** The candidates the user clicked "Use" on (null when unused). */
+    selFwd: FlankingDesignedPrimer | null;
+    selRev: FlankingDesignedPrimer | null;
+    fwdName: string;
+    revName: string;
+    /** Cached per-primer IDT structural analysis, keyed by sequence (API payloads). */
+    idtResultsIndiv?: Record<string, unknown>;
+    /** IDT pair (heterodimer/product) analysis for the selected fwd+rev pair. */
+    pairIdtResults?: unknown;
 }
 
 /** Snapshot of the visible query sequence window shown in the MSA viewer. */
@@ -134,6 +186,7 @@ export interface OligoolSession {
     };
     oligo: OligoSnapshot | null;
     flankingPrimers: FlankingPrimerSelection | null;
+    flankingPanel?: FlankingPanelState | null;
 }
 
 /** Build a filesystem-safe filename like `My_Gene_20260611.oligool.json`. */
@@ -209,6 +262,90 @@ function normalizeSavedPosition(pos: Partial<SavedPosition>): SavedPosition {
         moligo2Len: typeof pos.moligo2Len === 'number' ? pos.moligo2Len : 0,
         notes: typeof pos.notes === 'string' ? pos.notes : '',
         color: typeof pos.color === 'string' ? pos.color : 'slate',
+    };
+}
+
+export const FLANKING_PANEL_DEFAULTS: FlankingPanelState = {
+    params: {
+        flankWindow: 200,
+        optSize: 20, minSize: 16, maxSize: 27,
+        optTm: 62.0, minTm: 57.0, maxTm: 67.0,
+        minGc: 20.0, maxGc: 80.0,
+        numReturn: 5,
+        mvConc: 50.0, dvConc: 3, dntpConc: 0.8, dnaConc: 200.0,
+    },
+    showAdv: false,
+    manual: { leftStart: null, leftEnd: null, rightStart: null, rightEnd: null },
+    result: null,
+    selFwd: null,
+    selRev: null,
+    fwdName: '',
+    revName: '',
+    idtResultsIndiv: {},
+    pairIdtResults: null,
+};
+
+function normalizeFlankingPrimer(primer: unknown): FlankingDesignedPrimer | null {
+    if (!primer || typeof primer !== 'object') return null;
+    const q = primer as Partial<FlankingDesignedPrimer>;
+    if (typeof q.sequence !== 'string' || !q.sequence) return null;
+    return {
+        sequence: q.sequence,
+        length: typeof q.length === 'number' ? q.length : q.sequence.length,
+        gc_percent: typeof q.gc_percent === 'number' ? q.gc_percent : 0,
+        tm: typeof q.tm === 'number' ? q.tm : null,
+        tm_strider: typeof q.tm_strider === 'number' ? q.tm_strider : null,
+        hairpin: q.hairpin && typeof q.hairpin === 'object' ? q.hairpin : { structure_found: false, tm: null, dg: null },
+        homodimer: q.homodimer && typeof q.homodimer === 'object' ? q.homodimer : { structure_found: false, tm: null, dg: null },
+        primer3: q.primer3 && typeof q.primer3 === 'object' ? q.primer3 : { tm: null, gc_percent: null, self_any: null, self_end: null, hairpin_th: null },
+        interval: Array.isArray(q.interval) && q.interval.length === 2 && q.interval.every((n) => typeof n === 'number')
+            ? [q.interval[0], q.interval[1]]
+            : undefined,
+        name: typeof q.name === 'string' ? q.name : undefined,
+    };
+}
+
+function normalizeFlankingPanel(panel: unknown): FlankingPanelState | null {
+    if (!panel || typeof panel !== 'object') return null;
+    const p = panel as Record<string, unknown>;
+    const num = (v: unknown, fallback: number) => (typeof v === 'number' && Number.isFinite(v) ? v : fallback);
+    const numOrNull = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
+    const params = (p.params && typeof p.params === 'object' ? p.params : {}) as Record<string, unknown>;
+    const manual = (p.manual && typeof p.manual === 'object' ? p.manual : {}) as Record<string, unknown>;
+    const d = FLANKING_PANEL_DEFAULTS.params;
+    return {
+        params: {
+            flankWindow: num(params.flankWindow, d.flankWindow),
+            optSize: num(params.optSize, d.optSize),
+            minSize: num(params.minSize, d.minSize),
+            maxSize: num(params.maxSize, d.maxSize),
+            optTm: num(params.optTm, d.optTm),
+            minTm: num(params.minTm, d.minTm),
+            maxTm: num(params.maxTm, d.maxTm),
+            minGc: num(params.minGc, d.minGc),
+            maxGc: num(params.maxGc, d.maxGc),
+            numReturn: num(params.numReturn, d.numReturn),
+            mvConc: num(params.mvConc, d.mvConc),
+            dvConc: num(params.dvConc, d.dvConc),
+            dntpConc: num(params.dntpConc, d.dntpConc),
+            dnaConc: num(params.dnaConc, d.dnaConc),
+        },
+        showAdv: typeof p.showAdv === 'boolean' ? p.showAdv : FLANKING_PANEL_DEFAULTS.showAdv,
+        manual: {
+            leftStart: numOrNull(manual.leftStart),
+            leftEnd: numOrNull(manual.leftEnd),
+            rightStart: numOrNull(manual.rightStart),
+            rightEnd: numOrNull(manual.rightEnd),
+        },
+        result: (p.result && typeof p.result === 'object' ? p.result : null) as FlankingDesignResult | null,
+        selFwd: normalizeFlankingPrimer(p.selFwd),
+        selRev: normalizeFlankingPrimer(p.selRev),
+        fwdName: typeof p.fwdName === 'string' ? p.fwdName : '',
+        revName: typeof p.revName === 'string' ? p.revName : '',
+        idtResultsIndiv: p.idtResultsIndiv && typeof p.idtResultsIndiv === 'object'
+            ? p.idtResultsIndiv as Record<string, unknown>
+            : {},
+        pairIdtResults: p.pairIdtResults ?? null,
     };
 }
 
@@ -297,6 +434,7 @@ export function migrateSession(data: unknown): OligoolSession {
         },
         oligo: normalizeOligoSnapshot(d.oligo),
         flankingPrimers: d.flankingPrimers && typeof d.flankingPrimers === 'object' ? d.flankingPrimers as FlankingPrimerSelection : null,
+        flankingPanel: normalizeFlankingPanel(d.flankingPanel),
     };
 
     if (!session.results.alignment) {

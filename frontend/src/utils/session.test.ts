@@ -2,6 +2,7 @@ import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest'
 import {
   OLIGOOL_SESSION_APP,
   OLIGOOL_SESSION_VERSION,
+  FLANKING_PANEL_DEFAULTS,
   type SavedPosition,
   buildSessionFilename,
   migrateSession,
@@ -190,6 +191,106 @@ describe('migrateSession', () => {
   it('handles null flankingPrimers in session', () => {
     const migrated = migrateSession(baseSession)
     expect(migrated.flankingPrimers).toBeNull()
+  })
+})
+
+describe('flankingPanel persistence', () => {
+  const baseSession = {
+    app: OLIGOOL_SESSION_APP,
+    version: 1,
+    results: { alignment: '>Query\nATCG' },
+  }
+
+  const fullPanel = {
+    params: { ...FLANKING_PANEL_DEFAULTS.params, optTm: 60.5, numReturn: 3 },
+    showAdv: true,
+    manual: { leftStart: 5, leftEnd: 25, rightStart: null, rightEnd: null },
+    result: null,
+    selFwd: {
+      sequence: 'ACGTACGTACGTACGTACGT',
+      length: 20,
+      gc_percent: 50,
+      tm: 58.4,
+      tm_strider: 61.2,
+      hairpin: { structure_found: false, tm: null, dg: null },
+      homodimer: { structure_found: true, tm: null, dg: -2.1 },
+      primer3: { tm: 58.1, gc_percent: 50, self_any: 3, self_end: 1, hairpin_th: null },
+      interval: [10, 30] as [number, number],
+      name: 'FP-F1',
+    },
+    selRev: {
+      sequence: 'TTGGCCAATTGGCCAATTGG',
+      length: 20,
+      gc_percent: 45,
+      tm: null,
+      tm_strider: null,
+      hairpin: { structure_found: false, tm: null, dg: null },
+      homodimer: { structure_found: false, tm: null, dg: null },
+      primer3: { tm: null, gc_percent: null, self_any: null, self_end: null, hairpin_th: null },
+      interval: [500, 520] as [number, number],
+      name: 'FP-R1',
+    },
+    fwdName: 'FP-F1',
+    revName: 'FP-R1',
+    idtResultsIndiv: { ACGTACGTACGTACGTACGT: { stats: { IDT_Tm: 59.9 } } },
+    pairIdtResults: { pairwise: { DeltaG: -1.5 } },
+  }
+
+  it('defaults flankingPanel to null for older sessions', () => {
+    expect(migrateSession(baseSession).flankingPanel).toBeNull()
+  })
+
+  it('preserves a complete flanking panel snapshot', () => {
+    const migrated = migrateSession({ ...baseSession, flankingPanel: fullPanel })
+    const panel = migrated.flankingPanel!
+    expect(panel.params.optTm).toBe(60.5)
+    expect(panel.params.numReturn).toBe(3)
+    expect(panel.showAdv).toBe(true)
+    expect(panel.manual.leftStart).toBe(5)
+    expect(panel.manual.leftEnd).toBe(25)
+    expect(panel.manual.rightStart).toBeNull()
+    expect(panel.selFwd?.sequence).toBe('ACGTACGTACGTACGTACGT')
+    expect(panel.selFwd?.interval).toEqual([10, 30])
+    expect(panel.selFwd?.name).toBe('FP-F1')
+    expect(panel.selRev?.sequence).toBe('TTGGCCAATTGGCCAATTGG')
+    expect(panel.fwdName).toBe('FP-F1')
+    expect(panel.revName).toBe('FP-R1')
+    expect(panel.idtResultsIndiv).toHaveProperty('ACGTACGTACGTACGTACGT')
+    expect(panel.pairIdtResults).toEqual({ pairwise: { DeltaG: -1.5 } })
+  })
+
+  it('preserves fwdSeq/revSeq/amplicon on the MSA selection', () => {
+    const migrated = migrateSession({
+      ...baseSession,
+      flankingPrimers: { fwd: { start: 10, end: 30 }, rev: { start: 500, end: 520 }, fwdSeq: 'ACGT', revSeq: 'TGCA', amplicon: 520 },
+    })
+    expect(migrated.flankingPrimers!.fwdSeq).toBe('ACGT')
+    expect(migrated.flankingPrimers!.revSeq).toBe('TGCA')
+    expect(migrated.flankingPrimers!.amplicon).toBe(520)
+  })
+
+  it('fills param defaults and drops malformed primers', () => {
+    const migrated = migrateSession({
+      ...baseSession,
+      flankingPanel: {
+        params: { optTm: 61 },
+        selFwd: { not_a_sequence: true },
+        selRev: { sequence: 'GGGCCC' },
+      },
+    })
+    const panel = migrated.flankingPanel!
+    expect(panel.params.optTm).toBe(61)
+    expect(panel.params.flankWindow).toBe(FLANKING_PANEL_DEFAULTS.params.flankWindow)
+    expect(panel.selFwd).toBeNull()
+    expect(panel.selRev?.sequence).toBe('GGGCCC')
+    expect(panel.selRev?.length).toBe(6)
+  })
+
+  it('round-trips the panel state through JSON', () => {
+    const restored = parseSessionText(JSON.stringify({ ...baseSession, flankingPanel: fullPanel }))
+    expect(restored.flankingPanel?.selFwd?.sequence).toBe('ACGTACGTACGTACGTACGT')
+    expect(restored.flankingPanel?.selRev?.interval).toEqual([500, 520])
+    expect(restored.flankingPanel?.params.optTm).toBe(60.5)
   })
 })
 
