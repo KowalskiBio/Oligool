@@ -4,6 +4,7 @@ import QueryViewer, { type QueryViewerHandle, type ImportedSession } from './com
 import BlastResults from './components/BlastResults';
 import RabbitGame from './components/RabbitGame';
 import { downloadSession, parseSessionText, OLIGOOL_SESSION_APP, OLIGOOL_SESSION_VERSION, type OligoolSession } from './utils/session';
+import { parseSequenceHeader } from './utils/dna';
 
 type Step = 'input' | 'blasting' | 'aligning' | 'done';
 
@@ -53,6 +54,7 @@ function App() {
   });
 
   const [jobName, setJobName] = useState(() => localStorage.getItem('job_name') || 'Query');
+  const queryHeader = useMemo(() => parseSequenceHeader(input), [input]);
   const [selectedPrimers, setSelectedPrimers] = useState<{ p1: { start: number, end: number }, p2: { start: number, end: number } } | null>(null);
   const [selectedFlankingPrimers, setSelectedFlankingPrimers] = useState<{ fwd: { start: number; end: number } | null; rev: { start: number; end: number } | null; fwdName?: string; revName?: string; amplicon?: number } | null>(null);
   const [showSecrets, setShowSecrets] = useState(false);
@@ -802,6 +804,11 @@ function App() {
               value={input}
               onChange={(e) => setInput(e.target.value)}
             />
+            {queryHeader && (
+              <p className="mt-1 text-xs text-emerald-600 dark:text-emerald-400 break-all">
+                Header detected — it will be used in the report: <span className="font-mono font-semibold">{queryHeader}</span>
+              </p>
+            )}
             {/* ... filters ... */}
             <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4 border-t border-slate-100 dark:border-slate-700 pt-4">
               {/* Organism Filter */}
@@ -1096,6 +1103,7 @@ function App() {
                   importedSession={importedSession}
                   data={selectedSequence}
                   jobName={jobName}
+                  queryHeader={queryHeader}
                   onPrimersUpdate={setSelectedPrimers}
                   onFlankingPrimersUpdate={setSelectedFlankingPrimers}
                   onNavigateTo={(colStart, colEnd) => {

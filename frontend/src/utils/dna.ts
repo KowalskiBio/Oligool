@@ -1,4 +1,18 @@
 
+/** Header of the first non-empty line when it starts with '>' (FASTA/GenBank), without the '>'; otherwise undefined. */
+export function parseSequenceHeader(input: string): string | undefined {
+    for (const rawLine of input.split(/\r?\n/)) {
+        const line = rawLine.trim();
+        if (!line) continue;
+        if (line.startsWith('>')) {
+            const header = line.slice(1).trim();
+            return header.length > 0 ? header : undefined;
+        }
+        return undefined;
+    }
+    return undefined;
+}
+
 export function reverseComplement(seq: string): string {
     const complement: { [key: string]: string } = {
         'A': 'T', 'T': 'A', 'U': 'A',

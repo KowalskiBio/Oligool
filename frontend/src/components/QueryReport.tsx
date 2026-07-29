@@ -215,8 +215,14 @@ export default function QueryReport({ data }: QueryReportProps) {
             <div className="p-6 max-w-5xl mx-auto bg-white text-black">
                 <div className="mb-6 border-b-2 border-indigo-200 pb-4">
                     <h1 className="text-3xl font-bold text-indigo-900">Oligool Complete Design Report</h1>
-                    <p className="text-gray-600 mt-1">Job: {data.jobName || 'N/A'}</p>
-                    <p className="text-gray-600">Query ID: {data.queryId}</p>
+                    {data.header ? (
+                        <p className="text-lg font-semibold text-gray-800 mt-2 break-words">{data.header}</p>
+                    ) : (
+                        <>
+                            <p className="text-gray-600 mt-1">Job: {data.jobName || 'N/A'}</p>
+                            <p className="text-gray-600">Query ID: {data.queryId}</p>
+                        </>
+                    )}
                     <p className="text-gray-500 text-sm mt-1">Generated: {new Date().toISOString()}</p>
                 </div>
 

@@ -132,4 +132,18 @@ describe('QueryReport', () => {
         expect(screen.getByText('Position A')).toBeInTheDocument();
         expect(screen.getByText('Pinned for QA')).toBeInTheDocument();
     });
+
+    it('renders the user-provided header instead of job/query defaults', () => {
+        const header = 'PD166130.1 JP 2022523929-A/9: ANTIBODY BINDING HUMAN LAG-3';
+        render(<QueryReport data={{ ...baseData, header }} />);
+        expect(screen.getByText(header)).toBeInTheDocument();
+        expect(screen.queryByText(/^Job:/)).not.toBeInTheDocument();
+        expect(screen.queryByText(/^Query ID:/)).not.toBeInTheDocument();
+    });
+
+    it('falls back to job name and query id when no header is provided', () => {
+        render(<QueryReport data={baseData} />);
+        expect(screen.getByText(/^Job:/)).toBeInTheDocument();
+        expect(screen.getByText(/^Query ID:/)).toBeInTheDocument();
+    });
 });

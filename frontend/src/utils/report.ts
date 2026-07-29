@@ -53,6 +53,8 @@ export const downloadTxt = (content: string, filename: string): void => {
 export interface CompleteReportData {
     jobName: string;
     queryId: string;
+    /** FASTA/GenBank header provided by the user; shown instead of job/query defaults. */
+    header?: string;
     targetSeq: string;
     targetStart: number;
     targetEnd: number;
@@ -289,8 +291,12 @@ export const buildCompleteReportTxt = (data: CompleteReportData): string => {
     lines.push(`Generated: ${new Date().toISOString()}`);
 
     lines.push(section('JOB & QUERY'));
-    lines.push(kv('Job Name', data.jobName));
-    lines.push(kv('Query ID', data.queryId));
+    if (data.header) {
+        lines.push(kv('Header', data.header));
+    } else {
+        lines.push(kv('Job Name', data.jobName));
+        lines.push(kv('Query ID', data.queryId));
+    }
     lines.push(kv('Target Region', `${data.targetStart} - ${data.targetEnd}`));
     lines.push(kv('Target Length', `${data.targetSeq.length} nt`));
     lines.push(`Sequence:\n${data.targetSeq}`);
