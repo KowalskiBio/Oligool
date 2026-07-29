@@ -660,7 +660,8 @@ async def analyze_idt_oligos(request: IdtAnalyzeRequest):
         return {"error": f"Parallel execution failed: {str(e)}"}
 
     def _extract_idt_delta_g(obj):
-        """Extract IDT DeltaG from a dict (ignoring ViennaRNA_DeltaG)."""
+        """Extract IDT DeltaG from a dict (ignoring ViennaRNA_DeltaG), dropping
+        IDT's placeholder values for unfoldable sequences (e.g. +997.97 kcal/mol)."""
         if not isinstance(obj, dict):
             return None
         for k in ["DeltaG", "deltaG", "deltag", "delta_g", "dG", "Energy", "energy"]:
@@ -668,7 +669,10 @@ async def analyze_idt_oligos(request: IdtAnalyzeRequest):
                 try:
                     val = obj[k]
                     if val is not None:
-                        return float(val)
+                        fval = float(val)
+                        # Real oligo hairpin/dimer ΔG sits well inside (-200, +50);
+                        # anything outside is a sentinel, not a measurement.
+                        return fval if -200.0 < fval < 50.0 else None
                 except (ValueError, TypeError):
                     pass
         return None
@@ -806,6 +810,13 @@ async def analyze_idt_oligos(request: IdtAnalyzeRequest):
             best_idt_dg = None
             for item in data_list:
                 idt_tm = item.get("thermo") or item.get("MeltingTemperature") or item.get("Tm") or item.get("tm") or item.get("MeltTemp")
+                # Same sentinel class as the ΔG guard: IDT returns absurd Tm
+                # placeholders (e.g. 146888.6 °C) when a sequence cannot fold.
+                try:
+                    if idt_tm is not None and not (-100.0 < float(idt_tm) < 200.0):
+                        idt_tm = None
+                except (TypeError, ValueError):
+                    pass
                 item["IDT_Tm"] = idt_tm
                 item["Sequence"] = display_seq
                 item["Local_DeltaG"] = viz_dg
