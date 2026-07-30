@@ -55,6 +55,8 @@ export interface CompleteReportData {
     queryId: string;
     /** FASTA/GenBank header provided by the user; shown instead of job/query defaults. */
     header?: string;
+    /** Full GenBank flat-file header block (LOCUS..FEATURES) to render in the PDF report. */
+    genbankHeader?: string;
     targetSeq: string;
     targetStart: number;
     targetEnd: number;
@@ -198,7 +200,7 @@ export const buildCompleteReportTxt = (data: CompleteReportData): string => {
         lines.push(section('TAG'));
         lines.push(data.tagSeq);
         if (data.tagReg != null) {
-            lines.push(`No.: ${data.tagReg}${data.tagPartNumber ? ` (${data.tagPartNumber})` : ''}`);
+            lines.push(`A${String(data.tagReg).padStart(3, '0')}`);
         }
     }
 

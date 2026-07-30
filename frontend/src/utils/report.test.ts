@@ -28,13 +28,13 @@ describe('buildCompleteReportTxt', () => {
     it('includes TAG roller number in txt when tagReg set', () => {
         const txt = buildCompleteReportTxt({ ...makeData(), tagReg: 18, tagPartNumber: 'MTAG-A018' });
         expect(txt).toContain('=== TAG ===');
-        expect(txt).toContain('No.: 18 (MTAG-A018)');
+        expect(txt).toContain('A018');
     });
 
     it('omits TAG number line when tagReg absent', () => {
         const txt = buildCompleteReportTxt(makeData());
         expect(txt).toContain('=== TAG ===');
-        expect(txt).not.toContain('No.:');
+        expect(txt).not.toMatch(/A0\d{2}/);
     });
 
     it('txt keeps sequences-only layout', () => {

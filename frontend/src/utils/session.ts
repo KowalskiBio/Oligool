@@ -166,6 +166,7 @@ export interface OligoolSession {
     jobName: string;
     search: {
         input: string;
+        genbankHeader?: string;
         organism: string;
         eValue: string;
         percIdentity: string;
@@ -215,6 +216,7 @@ export function downloadSession(session: OligoolSession): void {
 
 const DEFAULT_SEARCH = {
     input: '',
+    genbankHeader: '',
     organism: '',
     eValue: '0.05',
     percIdentity: '0',
@@ -406,6 +408,7 @@ export function migrateSession(data: unknown): OligoolSession {
         jobName: typeof d.jobName === 'string' ? d.jobName : 'oligool',
         search: {
             input: typeof search.input === 'string' ? search.input : DEFAULT_SEARCH.input,
+            genbankHeader: typeof search.genbankHeader === 'string' ? search.genbankHeader : DEFAULT_SEARCH.genbankHeader,
             organism: typeof search.organism === 'string' ? search.organism : DEFAULT_SEARCH.organism,
             eValue: typeof search.eValue === 'string' ? search.eValue : DEFAULT_SEARCH.eValue,
             percIdentity: typeof search.percIdentity === 'string' ? search.percIdentity : DEFAULT_SEARCH.percIdentity,
