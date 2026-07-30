@@ -389,7 +389,10 @@ export default function FlankingPrimersPanel({
     const [analysisError, setAnalysisError] = useState<string | null>(null);
     const [isAnalysisExpanded, setIsAnalysisExpanded] = useState(true);
 
+    // Stale-run guard: only the latest invocation may mutate analysis state.
+    const pairRunRef = useRef(0);
     const runProductAnalysis = useCallback(async (p1Seq: string, p2Seq: string) => {
+        const runId = ++pairRunRef.current;
         setIsAnalyzing(true);
         setAnalysisError(null);
         try {
@@ -423,12 +426,14 @@ export default function FlankingPrimersPanel({
             });
             if (!aRes.ok) throw new Error("Product Analysis Failed");
             const results = await aRes.json();
-            setIdtResults(results);
-            setIsAnalysisExpanded(true); // auto-expand when new results arrive
+            if (runId === pairRunRef.current) {
+                setIdtResults(results);
+                setIsAnalysisExpanded(true); // auto-expand when new results arrive
+            }
         } catch (err: any) {
-            setAnalysisError(err.message);
+            if (runId === pairRunRef.current) setAnalysisError(err.message);
         } finally {
-            setIsAnalyzing(false);
+            if (runId === pairRunRef.current) setIsAnalyzing(false);
         }
     }, [idtCredentials, idtAdvancedParams]);
 
@@ -502,19 +507,34 @@ export default function FlankingPrimersPanel({
         latestRef.current = { idtCredentials, selFwd, selRev, analyzeIndividual, runProductAnalysis, analyzePrimerP3 };
     });
 
+    // Primitive keys: idtCredentials/idtAdvancedParams arrive as inline object literals
+    // (new identity every upstream render) — depending on them re-fired the pair
+    // analysis in an endless loop.
+    const selFwdSeq = selFwd?.sequence;
+    const selRevSeq = selRev?.sequence;
+    const credsKey = idtCredentials
+        ? `${idtCredentials.clientId}:${idtCredentials.clientSecret}:${idtCredentials.username}:${idtCredentials.region ?? ''}`
+        : '';
+    const concKey = [
+        idtAdvancedParams?.mg_conc,
+        idtAdvancedParams?.mv_conc,
+        idtAdvancedParams?.dntp_conc,
+        idtAdvancedParams?.oligo_conc,
+    ].join(':');
     useEffect(() => {
         if (skipNextPairEffectRef.current) {
             // Reset flag and skip this invocation (debounced handler will run analysis)
             skipNextPairEffectRef.current = false;
             return;
         }
-        if (selFwd && selRev && idtCredentials) {
-            runProductAnalysis(selFwd.sequence, selRev.sequence);
+        if (selFwdSeq && selRevSeq && idtCredentials) {
+            runProductAnalysis(selFwdSeq, selRevSeq);
         } else {
             setIdtResults(null);
             setAnalysisError(null);
         }
-    }, [selFwd, selRev, idtCredentials, idtAdvancedParams, runProductAnalysis]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [selFwdSeq, selRevSeq, credsKey, concKey]);
 
     // Cleanup debounced timers on component unmount
     useEffect(() => {
@@ -539,7 +559,7 @@ export default function FlankingPrimersPanel({
 
     const renderResultCard = (title: string, data: any) => {
         if (!data || data.error) return null;
-        const items = Array.isArray(data.raw) ? data.raw : [data.raw];
+        const items = (Array.isArray(data.raw) ? data.raw : [data.raw]).filter((item: unknown) => !!item && typeof item === 'object');
         const topDg = data.DeltaG;
 
         return (
@@ -577,6 +597,9 @@ export default function FlankingPrimersPanel({
                             )}
                         </div>
                     ))}
+                    {items.length === 0 && (
+                        <div className="text-[9px] text-slate-400 italic text-center px-1 py-0.5">No stable structure found</div>
+                    )}
                 </div>
             </div>
         );
