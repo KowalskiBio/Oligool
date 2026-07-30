@@ -79,6 +79,10 @@ export interface CompleteReportData {
     moligo2Len: number;
 
     tagSeq?: string;
+    /** TAG entry reg number from the roller list (constants/tags.ts), when the current TAG matches the database. */
+    tagReg?: number;
+    /** TAG part number from the roller list, e.g. "MTAG-A018". */
+    tagPartNumber?: string;
     fwdPrimer?: string;
     revPrimer?: string;
 
@@ -98,13 +102,42 @@ export interface CompleteReportData {
     flankingFwdSeq?: string;
     flankingFwdLen?: number;
     flankingFwdGc?: number;
-    flankingFwdTm?: number;
 
     flankingRevName?: string;
     flankingRevSeq?: string;
     flankingRevLen?: number;
     flankingRevGc?: number;
-    flankingRevTm?: number;
+
+    /** Amplicon size (bp) spanned by the selected flanking primer pair. */
+    ampliconLength?: number;
+
+    /** Primer3 melting temperature (°C) of the forward flanking primer. */
+    flankingFwdTmP3?: number | null;
+    /** Strider melting temperature (°C) of the forward flanking primer. */
+    flankingFwdTmStrider?: number | null;
+    /** IDT melting temperature (°C) of the forward flanking primer. */
+    flankingFwdIDTTm?: number;
+    /** Primer3 hairpin ΔG (kcal/mol, 25 °C) of the forward flanking primer. */
+    flankingFwdHairpinDg?: number | null;
+    /** Primer3 hairpin Tm (°C) of the forward flanking primer. */
+    flankingFwdHairpinTm?: number | null;
+    /** Primer3 homodimer ΔG (kcal/mol, 25 °C) of the forward flanking primer. */
+    flankingFwdHomodimerDg?: number | null;
+    /** Primer3 homodimer Tm (°C) of the forward flanking primer. */
+    flankingFwdHomodimerTm?: number | null;
+
+    flankingRevTmP3?: number | null;
+    flankingRevTmStrider?: number | null;
+    flankingRevIDTTm?: number;
+    flankingRevHairpinDg?: number | null;
+    flankingRevHairpinTm?: number | null;
+    flankingRevHomodimerDg?: number | null;
+    flankingRevHomodimerTm?: number | null;
+
+    /** Primer3 heterodimer ΔG (kcal/mol, 25 °C) of the flanking primer pair. */
+    flankingHetDg?: number | null;
+    /** Primer3 heterodimer Tm (°C) of the flanking primer pair. */
+    flankingHetTm?: number | null;
 
     /** Visual context map showing moligos and flanking primers in the surrounding sequence. */
     contextMap?: ReportContextMap;
@@ -131,265 +164,79 @@ export interface ReportContextMap {
     regions: ReportContextRegion[];
 }
 
-const fmtNum = (v: number | undefined | null, digits = 1): string => {
-    if (v === undefined || v === null) return 'N/A';
-    return v.toFixed(digits);
-};
-
-const fmtDG = (v: number | undefined | null): string => {
-    if (v === undefined || v === null) return 'N/A';
-    const sign = v > 0 ? '+' : '';
-    return `${sign}${v.toFixed(2)} kcal/mol`;
-};
-
 const section = (title: string): string => `\n=== ${title} ===\n`;
 
 const kv = (label: string, value: string | number | undefined | null): string =>
     `${label}: ${value ?? 'N/A'}`;
 
-const firstDefined = (...values: (number | null | undefined)[]): number | undefined => {
-    for (const v of values) {
-        if (v !== undefined && v !== null) return v;
-    }
-    return undefined;
-};
-
-const extractTopTm = (result?: IdtReportRawData): number | undefined => {
-    if (!result) return undefined;
-    const firstRaw = Array.isArray(result.raw) ? result.raw[0] : result.raw;
-    return firstDefined(
-        result.IDT_Tm,
-        result.Local_Tm,
-        result.all_IDT_Tm?.[0],
-        result.all_Local_Tm?.[0],
-        firstRaw?.IDT_Tm as number | undefined,
-        firstRaw?.Local_Tm as number | undefined,
-        firstRaw?.Tm as number | undefined
-    );
-};
-
-const extractTopLocalDg = (result?: IdtReportRawData): number | undefined => {
-    if (!result) return undefined;
-    const firstRaw = Array.isArray(result.raw) ? result.raw[0] : result.raw;
-    return firstDefined(result.Local_DeltaG, result.all_Local_DeltaG?.[0], firstRaw?.Local_DeltaG as number | undefined);
-};
-
-const rawItems = (result?: IdtReportRawData): IdtRawItem[] => {
-    if (!result || !result.raw) return [];
-    return Array.isArray(result.raw) ? result.raw : [result.raw];
-};
-
-const fmtThermoLine = (label: string, result?: IdtReportRawData): string => {
-    const items = rawItems(result);
-    if (items.length === 0) {
-        return `${label}: IDT ΔG: N/A | Strider ΔG: N/A | Tm: N/A`;
-    }
-
-    const parts: string[] = [];
-    parts.push(`IDT ΔG: ${fmtDG(result?.DeltaG)}`);
-    parts.push(`Strider ΔG: ${fmtDG(extractTopLocalDg(result))}`);
-    const tm = extractTopTm(result);
-    parts.push(`Tm: ${fmtNum(tm)} °C`);
-
-    if (items.length > 1) {
-        parts.push(`structures: ${items.length}`);
-    }
-    return `${label}: ${parts.join(' | ')}`;
-};
-
-const CONTEXT_LINE_LEN = 80;
-
-const fmtStructureDetails = (title: string, result?: IdtReportRawData): string[] => {
-    const items = rawItems(result);
-    if (items.length === 0) return [];
-
-    const out: string[] = [];
-    out.push(`\n${title}:`);
-    const allDg = result?.all_DeltaG ?? [];
-    const allLocalDg = result?.all_Local_DeltaG ?? [];
-    const allIdtTm = result?.all_IDT_Tm ?? [];
-    const allLocalTm = result?.all_Local_Tm ?? [];
-
-    items.forEach((item, idx) => {
-        const idtDg = allDg[idx] ?? (idx === 0 ? result?.DeltaG : undefined);
-        const localDg = allLocalDg[idx] ?? (idx === 0 ? result?.Local_DeltaG : undefined);
-        const idtTm = allIdtTm[idx] ?? (idx === 0 ? result?.IDT_Tm : undefined);
-        const localTm = allLocalTm[idx] ?? (idx === 0 ? result?.Local_Tm : undefined);
-        const db = item.DotBracket || '';
-        const seq = item.Sequence || '';
-        out.push(`  Structure ${idx + 1}:`);
-        out.push(`    IDT ΔG: ${fmtDG(idtDg)} | Strider ΔG: ${fmtDG(localDg)} | IDT Tm: ${fmtNum(idtTm)} °C | Local Tm: ${fmtNum(localTm)} °C`);
-        if (seq) out.push(`    Sequence: ${seq}`);
-        if (db) out.push(`    Dot-Bracket: ${db}`);
-    });
-    return out;
-};
-
-const REGION_SYMBOLS: Record<string, string> = {
-    'MOLigo 1': '1',
-    'MOLigo 2': '2',
-    'Flanking Fwd': 'F',
-    'Flanking Rev': 'R',
-    'Fwd Primer Binding': 'f',
-    'Rev Primer Binding': 'r',
-};
-
-const REGION_PRIORITY: Record<string, number> = {
-    'MOLigo 1': 1,
-    'MOLigo 2': 2,
-    'Flanking Fwd': 3,
-    'Flanking Rev': 4,
-    'Fwd Primer Binding': 5,
-    'Rev Primer Binding': 6,
-};
-
-const fmtContextMap = (contextMap?: ReportContextMap): string[] => {
-    if (!contextMap || !contextMap.sequence) return [];
-    const { sequence, absStart, regions } = contextMap;
-    const out: string[] = [];
-    out.push(section('CONTEXT MAP'));
-    out.push(`Window: ${absStart} - ${absStart + sequence.length - 1} (${sequence.length} nt)`);
-
-    const legendParts: string[] = [];
-    Object.entries(REGION_SYMBOLS).forEach(([label, symbol]) => {
-        if (regions.some(r => r.label === label)) {
-            legendParts.push(`${symbol} = ${label}`);
-        }
-    });
-    if (legendParts.length > 0) out.push(`Legend: ${legendParts.join(' | ')}`);
-    out.push('');
-
-    for (let i = 0; i < sequence.length; i += CONTEXT_LINE_LEN) {
-        const lineSeq = sequence.slice(i, i + CONTEXT_LINE_LEN);
-        const lineStart = absStart + i;
-        const offset = i;
-        const markers = Array(lineSeq.length).fill(' ');
-        for (let j = 0; j < lineSeq.length; j++) {
-            const absIdx = offset + j;
-            let best: ReportContextRegion | null = null;
-            for (const r of regions) {
-                if (absIdx >= r.start && absIdx < r.end) {
-                    if (!best || (REGION_PRIORITY[r.label] ?? 99) < (REGION_PRIORITY[best.label] ?? 99)) {
-                        best = r;
-                    }
-                }
-            }
-            if (best) markers[j] = REGION_SYMBOLS[best.label] ?? '?';
-        }
-        out.push(`${String(lineStart).padStart(8, ' ')}  ${lineSeq}`);
-        if (markers.some(m => m !== ' ')) {
-            out.push(`${' '.repeat(10)}   ${markers.join('')}`);
-        }
-    }
-    return out;
-};
-
 export const buildCompleteReportTxt = (data: CompleteReportData): string => {
     const lines: string[] = [];
 
-    lines.push('Oligool Complete Design Report');
+    lines.push('Oligool Design Report');
     lines.push(`Generated: ${new Date().toISOString()}`);
 
-    lines.push(section('JOB & QUERY'));
+    lines.push(section('HEADER'));
     if (data.header) {
-        lines.push(kv('Header', data.header));
+        lines.push(data.header);
     } else {
         lines.push(kv('Job Name', data.jobName));
         lines.push(kv('Query ID', data.queryId));
     }
     lines.push(kv('Target Region', `${data.targetStart} - ${data.targetEnd}`));
     lines.push(kv('Target Length', `${data.targetSeq.length} nt`));
-    lines.push(`Sequence:\n${data.targetSeq}`);
 
-    lines.push(section('SEARCH PARAMETERS'));
-    Object.entries(data.searchParams).forEach(([key, value]) => {
-        lines.push(kv(key, String(value)));
-    });
-    if (data.advancedParams && Object.keys(data.advancedParams).length > 0) {
-        lines.push('\nAdvanced Search Parameters:');
-        Object.entries(data.advancedParams).forEach(([key, value]) => {
-            lines.push(`  ${key}: ${String(value)}`);
-        });
-    }
-    if (data.idtAdvancedParams) {
-        lines.push('\nIDT Advanced Parameters:');
-        lines.push(`  mv_conc: ${data.idtAdvancedParams.mv_conc} mM`);
-        lines.push(`  mg_conc: ${data.idtAdvancedParams.mg_conc} mM`);
-        lines.push(`  dntp_conc: ${data.idtAdvancedParams.dntp_conc} mM`);
-        lines.push(`  oligo_conc: ${data.idtAdvancedParams.oligo_conc} µM`);
-    }
+    lines.push(section('TARGET SEQUENCE'));
+    lines.push(data.targetSeq);
 
-    lines.push(section('MOLIGO 1'));
-    lines.push(kv('Name', data.moligo1Name));
-    lines.push(`Sequence: ${data.moligo1Seq}`);
-    lines.push(`Shift: ${data.moligo1Shift} | Length: ${data.moligo1Len} nt | GC: ${fmtNum(calcGC(data.moligo1Seq))}%`);
-    lines.push(fmtThermoLine('Hairpin', data.idtM1Hairpin));
-    lines.push(fmtThermoLine('Self-Dimer', data.idtM1SelfDimer));
-    lines.push(`Analyze Tm: ${fmtNum(data.idtM1Tm)} °C`);
+    lines.push(section(`MOLIGO 1${data.moligo1Name ? ` - ${data.moligo1Name}` : ''}`));
+    lines.push(data.moligo1Seq);
 
-    lines.push(section('MOLIGO 2'));
-    lines.push(kv('Name', data.moligo2Name));
-    lines.push(`Sequence: ${data.moligo2Seq}`);
-    lines.push(`Shift: ${data.moligo2Shift} | Length: ${data.moligo2Len} nt | GC: ${fmtNum(calcGC(data.moligo2Seq))}%`);
-    lines.push(fmtThermoLine('Hairpin', data.idtM2Hairpin));
-    lines.push(fmtThermoLine('Self-Dimer', data.idtM2SelfDimer));
-    lines.push(`Analyze Tm: ${fmtNum(data.idtM2Tm)} °C`);
+    lines.push(section(`MOLIGO 2${data.moligo2Name ? ` - ${data.moligo2Name}` : ''}`));
+    lines.push(data.moligo2Seq);
 
     if (data.tagSeq) {
         lines.push(section('TAG'));
-        lines.push(`Sequence: ${data.tagSeq}`);
-        lines.push(`Length: ${data.tagSeq.length} nt`);
+        lines.push(data.tagSeq);
+        if (data.tagReg != null) {
+            lines.push(`No.: ${data.tagReg}${data.tagPartNumber ? ` (${data.tagPartNumber})` : ''}`);
+        }
     }
 
-    lines.push(section('UNIVERSAL PRIMERS'));
-    if (data.fwdPrimer) {
-        lines.push(`Forward Primer: ${data.fwdPrimer}`);
-        lines.push(`  RC: ${reverseComplement(data.fwdPrimer)}`);
-        lines.push(`  Length: ${data.fwdPrimer.length} nt | GC: ${fmtNum(calcGC(data.fwdPrimer))}%`);
-    }
-    if (data.revPrimer) {
-        lines.push(`Reverse Primer: ${data.revPrimer}`);
-        lines.push(`  Length: ${data.revPrimer.length} nt | GC: ${fmtNum(calcGC(data.revPrimer))}%`);
-    }
-
-    lines.push(section('PAIRWISE INTERACTION'));
-    lines.push(fmtThermoLine('MOLigo 1 ↔ MOLigo 2 Heterodimer', data.idtPairwise));
-
-    const hasStructures = data.idtM1Hairpin || data.idtM1SelfDimer || data.idtM2Hairpin || data.idtM2SelfDimer || data.idtPairwise;
-    if (hasStructures) {
-        lines.push(section('SECONDARY STRUCTURE DETAILS'));
-        lines.push(...fmtStructureDetails('MOLigo 1 Hairpin', data.idtM1Hairpin));
-        lines.push(...fmtStructureDetails('MOLigo 1 Self-Dimer', data.idtM1SelfDimer));
-        lines.push(...fmtStructureDetails('MOLigo 2 Hairpin', data.idtM2Hairpin));
-        lines.push(...fmtStructureDetails('MOLigo 2 Self-Dimer', data.idtM2SelfDimer));
-        lines.push(...fmtStructureDetails('Pairwise Heterodimer', data.idtPairwise));
+    if (data.fwdPrimer || data.revPrimer) {
+        lines.push(section('UNIVERSAL PRIMERS'));
+        if (data.fwdPrimer) {
+            lines.push('Forward Primer:');
+            lines.push(data.fwdPrimer);
+            lines.push('Forward Primer (reverse complement):');
+            lines.push(reverseComplement(data.fwdPrimer));
+        }
+        if (data.revPrimer) {
+            lines.push('Reverse Primer:');
+            lines.push(data.revPrimer);
+        }
     }
 
     lines.push(section('FLANKING PRIMERS'));
     if (data.flankingFwdSeq) {
-        lines.push(`Forward: ${data.flankingFwdName || 'Forward Flanking Primer'}`);
-        lines.push(`  Sequence: ${data.flankingFwdSeq}`);
-        lines.push(`  Length: ${data.flankingFwdLen ?? data.flankingFwdSeq.length} nt | GC: ${fmtNum(data.flankingFwdGc)}% | Tm: ${fmtNum(data.flankingFwdTm)} °C`);
+        lines.push(`${data.flankingFwdName || 'Forward Flanking Primer'}:`);
+        lines.push(data.flankingFwdSeq);
     }
     if (data.flankingRevSeq) {
-        lines.push(`Reverse: ${data.flankingRevName || 'Reverse Flanking Primer'}`);
-        lines.push(`  Sequence: ${data.flankingRevSeq}`);
-        lines.push(`  Length: ${data.flankingRevLen ?? data.flankingRevSeq.length} nt | GC: ${fmtNum(data.flankingRevGc)}% | Tm: ${fmtNum(data.flankingRevTm)} °C`);
+        lines.push(`${data.flankingRevName || 'Reverse Flanking Primer'}:`);
+        lines.push(data.flankingRevSeq);
     }
     if (!data.flankingFwdSeq && !data.flankingRevSeq) {
         lines.push('No flanking primers designed yet.');
     }
 
-    lines.push(...fmtContextMap(data.contextMap));
-
     lines.push(section('FINAL ORDER SEQUENCES'));
     const fwdRC = data.fwdPrimer ? reverseComplement(data.fwdPrimer) : '';
     const fullOligo2 = (data.revPrimer || '') + data.moligo2Seq;
     const fullOligo1 = data.moligo1Seq + (data.tagSeq?.toLowerCase() || '') + fwdRC;
-    lines.push(`Oligo 2 (RevP + M2): ${fullOligo2}`);
-    lines.push(`  Length: ${fullOligo2.length} nt | GC: ${fmtNum(calcGC(fullOligo2))}%`);
-    lines.push(`Oligo 1 (M1 + TAG + RC-FwdP): ${fullOligo1}`);
-    lines.push(`  Length: ${fullOligo1.length} nt | GC: ${fmtNum(calcGC(fullOligo1))}%`);
+    lines.push('Oligo 2 (RevP + M2):');
+    lines.push(fullOligo2);
+    lines.push('Oligo 1 (M1 + TAG + RC-FwdP):');
+    lines.push(fullOligo1);
 
     lines.push('\n--- End of Report ---\n');
 

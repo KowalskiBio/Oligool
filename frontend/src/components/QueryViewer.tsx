@@ -9,6 +9,7 @@ import { PIN_COLORS, exportPositionsCSV, exportPositionsTSV } from '../utils/ses
 import type { OligoSnapshot, SavedPosition, FixedAbsCoords, FlankingPanelState } from '../utils/session';
 import { buildCompleteReportTxt, downloadTxt, type CompleteReportData } from '../utils/report';
 import { reverseComplement } from '../utils/dna';
+import { TAG_DATABASE } from '../constants/tags';
 
 /** Imperative handle App uses to pull QueryViewer's state when saving a session. */
 export interface QueryViewerHandle {
@@ -1251,6 +1252,25 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
             };
         };
 
+        const tagEntry = tagSeq ? TAG_DATABASE.find(t => t.antiTag.toUpperCase() === tagSeq.toUpperCase()) : undefined;
+
+        const fps = flankingPanelState;
+        const sf = fps?.selFwd;
+        const sr = fps?.selRev;
+
+        const indivAnalyzeOf = (seq: string | undefined): { IDT_Tm?: number; Tm?: number } | { IDT_Tm?: number; Tm?: number }[] | undefined => {
+            const entry = seq ? fps?.idtResultsIndiv?.[seq] : undefined;
+            if (!entry || typeof entry !== 'object') return undefined;
+            const analyze = (entry as { analyze?: unknown }).analyze;
+            if (!analyze || typeof analyze !== 'object') return undefined;
+            return analyze as { IDT_Tm?: number; Tm?: number } | { IDT_Tm?: number; Tm?: number }[];
+        };
+
+        const flankingFwdSeq = flankingPrimersData?.fwdSeq ?? sf?.sequence;
+        const flankingFwdName = flankingPrimersData?.fwdName ?? fps?.fwdName ?? sf?.name;
+        const flankingRevSeq = flankingPrimersData?.revSeq ?? sr?.sequence;
+        const flankingRevName = flankingPrimersData?.revName ?? fps?.revName ?? sr?.name;
+
         return {
             jobName,
             queryId: data.id,
@@ -1270,6 +1290,8 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
             moligo2Shift,
             moligo2Len,
             tagSeq,
+            tagReg: tagEntry?.reg,
+            tagPartNumber: tagEntry?.partNumber,
             fwdPrimer,
             revPrimer,
             idtM1Hairpin: idtResults?.m1?.hairpin,
@@ -1282,16 +1304,31 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
             idtM2Tm: extractBestTm(idtResults?.m2?.analyze),
             idtPairwise: idtResults?.pairwise,
             savedPositions,
-            flankingFwdName: flankingPrimersData?.fwdName,
-            flankingFwdSeq: flankingPrimersData?.fwdSeq,
-            flankingFwdLen: flankingPrimersData?.fwdSeq?.length,
-            flankingFwdGc: flankingPrimersData?.fwdSeq ? ((flankingPrimersData.fwdSeq.match(/[GCgc]/g) || []).length / flankingPrimersData.fwdSeq.length) * 100 : undefined,
-            flankingFwdTm: undefined,
-            flankingRevName: flankingPrimersData?.revName,
-            flankingRevSeq: flankingPrimersData?.revSeq,
-            flankingRevLen: flankingPrimersData?.revSeq?.length,
-            flankingRevGc: flankingPrimersData?.revSeq ? ((flankingPrimersData.revSeq.match(/[GCgc]/g) || []).length / flankingPrimersData.revSeq.length) * 100 : undefined,
-            flankingRevTm: undefined,
+            flankingFwdName,
+            flankingFwdSeq,
+            flankingFwdLen: flankingFwdSeq?.length,
+            flankingFwdGc: flankingFwdSeq ? ((flankingFwdSeq.match(/[GCgc]/g) || []).length / flankingFwdSeq.length) * 100 : undefined,
+            flankingRevName,
+            flankingRevSeq,
+            flankingRevLen: flankingRevSeq?.length,
+            flankingRevGc: flankingRevSeq ? ((flankingRevSeq.match(/[GCgc]/g) || []).length / flankingRevSeq.length) * 100 : undefined,
+            ampliconLength: flankingPrimersData?.amplicon ?? (sf?.interval && sr?.interval && sr.interval[1] > sf.interval[0] ? sr.interval[1] - sf.interval[0] : undefined),
+            flankingFwdTmP3: sf?.tm,
+            flankingFwdTmStrider: sf?.tm_strider,
+            flankingFwdIDTTm: extractBestTm(indivAnalyzeOf(sf?.sequence)),
+            flankingFwdHairpinDg: sf?.hairpin?.dg,
+            flankingFwdHairpinTm: sf?.hairpin?.tm,
+            flankingFwdHomodimerDg: sf?.homodimer?.dg,
+            flankingFwdHomodimerTm: sf?.homodimer?.tm,
+            flankingRevTmP3: sr?.tm,
+            flankingRevTmStrider: sr?.tm_strider,
+            flankingRevIDTTm: extractBestTm(indivAnalyzeOf(sr?.sequence)),
+            flankingRevHairpinDg: sr?.hairpin?.dg,
+            flankingRevHairpinTm: sr?.hairpin?.tm,
+            flankingRevHomodimerDg: sr?.homodimer?.dg,
+            flankingRevHomodimerTm: sr?.homodimer?.tm,
+            flankingHetDg: fps?.result?.pair_metrics?.heterodimer?.dg,
+            flankingHetTm: fps?.result?.pair_metrics?.heterodimer?.tm,
             contextMap: buildContextMap(),
         };
     };
