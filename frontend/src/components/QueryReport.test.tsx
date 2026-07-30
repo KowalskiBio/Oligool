@@ -297,8 +297,8 @@ describe('QueryReport', () => {
         expect(flankText).toContain(baseData.flankingFwdSeq);
         expect(flankText).toMatch(/Length: 20 nt \| GC: 45\.0%/);
         expect(flankText).toMatch(/Tm — P3: 61\.2 °C \| Strider: 60\.1 °C \| IDT: 62\.5 °C/);
-        expect(flankText).toMatch(/Hairpin ΔG: -1\.20 kcal\/mol \(Tm: 42\.0 °C\)/);
-        expect(flankText).toMatch(/Homodimer ΔG: -3\.40 kcal\/mol \(Tm: 38\.5 °C\)/);
+        expect(flankText).toMatch(/P3 Hairpin ΔG: -1\.20 kcal\/mol \(Tm: 42\.0 °C\)/);
+        expect(flankText).toMatch(/P3 Homodimer ΔG: -3\.40 kcal\/mol \(Tm: 38\.5 °C\)/);
         expect(flankText).toMatch(/Heterodimer \(fwd × rev\) ΔG: -5\.60 kcal\/mol \(Tm: 41\.0 °C\)/);
         expect(flankText).toContain('Amplicon length: 150 bp');
         expect(flankText).toContain('FlnkR1');
@@ -337,8 +337,8 @@ describe('QueryReport', () => {
         flankText = sectionText(report, 'FLANKING PRIMERS');
         expect(flankText).toContain('FlnkF1');
         expect(flankText).toMatch(/Tm — P3: N\/A °C \| Strider: N\/A °C \| IDT: N\/A °C/);
-        expect(flankText).toMatch(/Hairpin ΔG: N\/A/);
-        expect(flankText).toMatch(/Homodimer ΔG: N\/A/);
+        expect(flankText).toMatch(/P3 Hairpin ΔG: N\/A/);
+        expect(flankText).toMatch(/P3 Homodimer ΔG: N\/A/);
         expect(flankText).not.toContain('Heterodimer');
         expect(flankText).not.toContain('Amplicon length');
     });

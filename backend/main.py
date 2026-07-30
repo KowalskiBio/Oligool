@@ -1193,8 +1193,8 @@ async def design_flanking_primers(req: FlankingPrimerParams):
         results["pair_metrics"] = {
             "heterodimer": {
                 "structure_found": bool(getattr(het, "structure_found", False)),
-                "tm": _round(getattr(het, "tm", None), 1),
-                "dg": _round(getattr(het, "dg", None), 1),
+                "tm": _round(getattr(het, "tm", None), 1) if getattr(het, "tm", None) is not None and -50.0 < float(getattr(het, "tm", None)) < 200.0 else None,
+                "dg": _round((getattr(het, "dg", None) or 0) / 1000, 2),
             }
         }
 
@@ -1264,12 +1264,12 @@ async def analyze_primer_sequence(req: PrimerAnalyzeRequest):
         "tm_strider": strider_duplex_tm(s, **kwargs),
         "hairpin": {
             "structure_found": bool(getattr(hp, "structure_found", False)),
-            "tm": _round(getattr(hp, "tm", None), 1),
+            "tm": _round(getattr(hp, "tm", None), 1) if getattr(hp, "tm", None) is not None and -50.0 < float(getattr(hp, "tm", None)) < 200.0 else None,
             "dg": _round((getattr(hp, "dg", None) or 0) / 1000, 2),
         },
         "homodimer": {
             "structure_found": bool(getattr(hd, "structure_found", False)),
-            "tm": _round(getattr(hd, "tm", None), 1),
+            "tm": _round(getattr(hd, "tm", None), 1) if getattr(hd, "tm", None) is not None and -50.0 < float(getattr(hd, "tm", None)) < 200.0 else None,
             "dg": _round((getattr(hd, "dg", None) or 0) / 1000, 2),
         },
     }

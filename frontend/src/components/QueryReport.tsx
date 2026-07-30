@@ -154,12 +154,12 @@ const StructureSection = ({
                     const idtTm = allIdtTm[idx] ?? (idx === 0 ? result?.IDT_Tm : undefined);
                     const localTm = allLocalTm[idx] ?? (idx === 0 ? result?.Local_Tm : undefined);
                     return (
-                        <div key={idx}>
+                        <div key={idx} className="break-inside-avoid">
                             <div className="grid grid-cols-2 gap-x-4 gap-y-0.5 text-xs text-gray-600 mb-1">
-                                <span>IDT ΔG: <span className="font-bold text-gray-900">{fmtDG(idtDg)}</span></span>
-                                <span>Strider ΔG: <span className="font-bold text-gray-900">{fmtDG(localDg)}</span></span>
-                                <span>IDT Tm: <span className="font-bold text-gray-900">{fmtNum(idtTm)} °C</span></span>
-                                <span>Local Tm: <span className="font-bold text-gray-900">{fmtNum(localTm)} °C</span></span>
+                                {fmtDG(idtDg) !== 'N/A' && <span>IDT ΔG: <span className="font-bold text-gray-900">{fmtDG(idtDg)}</span></span>}
+                                {fmtDG(localDg) !== 'N/A' && <span>Strider ΔG: <span className="font-bold text-gray-900">{fmtDG(localDg)}</span></span>}
+                                {fmtNum(idtTm) !== 'N/A' && <span>IDT Tm: <span className="font-bold text-gray-900">{fmtNum(idtTm)} °C</span></span>}
+                                {fmtNum(localTm) !== 'N/A' && <span>Local Tm: <span className="font-bold text-gray-900">{fmtNum(localTm)} °C</span></span>}
                             </div>
                             {renderIdtSvg(item, seq1, seq2)}
                         </div>
@@ -182,7 +182,8 @@ export default function QueryReport({ data }: QueryReportProps) {
                     .query-report, .query-report * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
                     @media print {
                         .query-report { display: block !important; }
-                        .query-report > div > * { break-inside: avoid; page-break-inside: avoid; }
+                        .query-report .break-avoid { break-inside: avoid; page-break-inside: avoid; }
+                        .query-report .break-avoid-item { break-inside: avoid; page-break-inside: avoid; }
                         .query-report .grid > * { break-inside: avoid; page-break-inside: avoid; }
                     }
                     @media screen {
@@ -205,13 +206,13 @@ export default function QueryReport({ data }: QueryReportProps) {
                 )}
 
                 {data.contextMap && (
-                    <div className="mb-6">
+                    <div className="break-avoid mb-6">
                         <h2 className="text-lg font-bold text-gray-800 mb-2 border-b border-gray-300 pb-1">CONTEXT MAP</h2>
                         <ContextMap contextMap={data.contextMap} />
                     </div>
                 )}
 
-                <div className="mb-6">
+                <div className="break-avoid mb-6">
                     <h2 className="text-lg font-bold text-gray-800 mb-2 border-b border-gray-300 pb-1">MOLIGO PROVENANCE SCHEMATIC</h2>
                     <MOLigoSchematic
                         light
@@ -259,7 +260,7 @@ export default function QueryReport({ data }: QueryReportProps) {
                 </div>
 
                 {data.tagSeq && (
-                    <div className="mb-6">
+                    <div className="break-avoid mb-6">
                         <h2 className="text-lg font-bold text-gray-800 mb-2 border-b border-gray-300 pb-1">TAG SEQUENCE</h2>
                         <p className="font-mono text-sm break-all bg-gray-50 p-3 rounded border border-gray-200">{data.tagSeq}</p>
                         {data.tagReg != null && (
@@ -268,7 +269,7 @@ export default function QueryReport({ data }: QueryReportProps) {
                     </div>
                 )}
 
-                <div className="mb-6">
+                <div className="break-avoid mb-6">
                     <h2 className="text-lg font-bold text-gray-800 mb-2 border-b border-gray-300 pb-1">UNIVERSAL PRIMERS</h2>
                     <div className="grid grid-cols-2 gap-3">
                         {data.fwdPrimer && (
@@ -287,7 +288,7 @@ export default function QueryReport({ data }: QueryReportProps) {
                     </div>
                 </div>
 
-                <div className="mb-6">
+                <div className="break-avoid mb-6">
                     <h2 className="text-lg font-bold text-gray-800 mb-2 border-b border-gray-300 pb-1">Moligo 1 with Moligo 2 pairwise</h2>
                     <div className="grid grid-cols-2 gap-2 text-sm">
                         <div className="bg-gray-50 p-2 rounded border border-gray-200"><span className="text-gray-600">IDT ΔG:</span> <V>{fmtDG(data.idtPairwise?.DeltaG)}</V></div>
@@ -317,7 +318,7 @@ export default function QueryReport({ data }: QueryReportProps) {
                     </div>
                 )}
 
-                <div className="mb-6">
+                <div className="break-avoid mb-6">
                     <h2 className="text-lg font-bold text-gray-800 mb-2 border-b border-gray-300 pb-1">FLANKING PRIMERS</h2>
                     {data.flankingFwdSeq ? (
                         <div className="mb-3">
@@ -325,8 +326,8 @@ export default function QueryReport({ data }: QueryReportProps) {
                             <p className="font-mono text-sm break-all bg-gray-50 p-2 rounded border border-gray-200">{data.flankingFwdSeq}</p>
                             <p className="text-sm text-gray-600">Length: <V>{data.flankingFwdLen ?? data.flankingFwdSeq.length} nt</V> | GC: <V>{fmtNum(data.flankingFwdGc)}%</V></p>
                             <p className="text-sm text-gray-600">Tm — P3: <V>{fmtNum(data.flankingFwdTmP3)} °C</V> | Strider: <V>{fmtNum(data.flankingFwdTmStrider)} °C</V> | IDT: <V>{fmtNum(data.flankingFwdIDTTm)} °C</V></p>
-                            <p className="text-sm text-gray-600">Hairpin ΔG: <V>{fmtDG(data.flankingFwdHairpinDg)}</V> (Tm: <V>{fmtNum(data.flankingFwdHairpinTm)} °C</V>)</p>
-                            <p className="text-sm text-gray-600">Homodimer ΔG: <V>{fmtDG(data.flankingFwdHomodimerDg)}</V> (Tm: <V>{fmtNum(data.flankingFwdHomodimerTm)} °C</V>)</p>
+                            <p className="text-sm text-gray-600">P3 Hairpin ΔG: <V>{fmtDG(data.flankingFwdHairpinDg)}</V> (Tm: <V>{fmtNum(data.flankingFwdHairpinTm)} °C</V>)</p>
+                            <p className="text-sm text-gray-600">P3 Homodimer ΔG: <V>{fmtDG(data.flankingFwdHomodimerDg)}</V> (Tm: <V>{fmtNum(data.flankingFwdHomodimerTm)} °C</V>)</p>
                         </div>
                     ) : (
                         <p className="text-sm text-gray-500">No forward flanking primer designed.</p>
@@ -337,8 +338,8 @@ export default function QueryReport({ data }: QueryReportProps) {
                             <p className="font-mono text-sm break-all bg-gray-50 p-2 rounded border border-gray-200">{data.flankingRevSeq}</p>
                             <p className="text-sm text-gray-600">Length: <V>{data.flankingRevLen ?? data.flankingRevSeq.length} nt</V> | GC: <V>{fmtNum(data.flankingRevGc)}%</V></p>
                             <p className="text-sm text-gray-600">Tm — P3: <V>{fmtNum(data.flankingRevTmP3)} °C</V> | Strider: <V>{fmtNum(data.flankingRevTmStrider)} °C</V> | IDT: <V>{fmtNum(data.flankingRevIDTTm)} °C</V></p>
-                            <p className="text-sm text-gray-600">Hairpin ΔG: <V>{fmtDG(data.flankingRevHairpinDg)}</V> (Tm: <V>{fmtNum(data.flankingRevHairpinTm)} °C</V>)</p>
-                            <p className="text-sm text-gray-600">Homodimer ΔG: <V>{fmtDG(data.flankingRevHomodimerDg)}</V> (Tm: <V>{fmtNum(data.flankingRevHomodimerTm)} °C</V>)</p>
+                            <p className="text-sm text-gray-600">P3 Hairpin ΔG: <V>{fmtDG(data.flankingRevHairpinDg)}</V> (Tm: <V>{fmtNum(data.flankingRevHairpinTm)} °C</V>)</p>
+                            <p className="text-sm text-gray-600">P3 Homodimer ΔG: <V>{fmtDG(data.flankingRevHomodimerDg)}</V> (Tm: <V>{fmtNum(data.flankingRevHomodimerTm)} °C</V>)</p>
                         </div>
                     ) : (
                         <p className="text-sm text-gray-500">No reverse flanking primer designed.</p>
@@ -352,7 +353,7 @@ export default function QueryReport({ data }: QueryReportProps) {
                 </div>
 
                 {data.savedPositions && data.savedPositions.length > 0 && (
-                    <div className="mb-6">
+                    <div className="break-avoid mb-6">
                         <h2 className="text-lg font-bold text-gray-800 mb-2 border-b border-gray-300 pb-1">SAVED POSITIONS</h2>
                         <div className="space-y-3">
                             {data.savedPositions.map((pos) => (
@@ -377,7 +378,7 @@ export default function QueryReport({ data }: QueryReportProps) {
                     </div>
                 )}
 
-                <div className="mb-6">
+                <div className="break-avoid mb-6">
                     <h2 className="text-lg font-bold text-gray-800 mb-2 border-b border-gray-300 pb-1">FINAL ORDER SEQUENCES</h2>
                     <div className="font-mono text-xs whitespace-pre-wrap break-all bg-gray-50 p-3 rounded border border-gray-200">
                         {[
