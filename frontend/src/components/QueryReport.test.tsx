@@ -253,7 +253,7 @@ describe('QueryReport', () => {
 
     it('pairwise section renamed', () => {
         render(<QueryReport data={baseData} />);
-        expect(screen.getByText('MOLIGO 1 × MOLIGO 2')).toBeInTheDocument();
+        expect(screen.getByText('Moligo 1 with Moligo 2 pairwise')).toBeInTheDocument();
         expect(screen.queryByText('PAIRWISE INTERACTION')).not.toBeInTheDocument();
     });
 
