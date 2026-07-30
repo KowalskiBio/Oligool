@@ -27,6 +27,10 @@ interface QueryViewerProps {
     jobName: string;
     /** FASTA/GenBank header the user pasted with the query sequence, if any. */
     queryHeader?: string;
+    /** Full GenBank flat-file header pasted on the input page, rendered verbatim on the PDF report. */
+    genbankHeader?: string;
+    /** Updates the shared GenBank header (the report dialog edits the same field as the input page). */
+    onGenbankHeaderChange?: (value: string) => void;
     onPrimersUpdate: (primers: { p1: { start: number, end: number }, p2: { start: number, end: number } } | null) => void;
     onFlankingPrimersUpdate?: (primers: {
         fwd: { start: number, end: number } | null,
@@ -89,7 +93,7 @@ interface OligizeResponse {
     param_warnings?: string[];
 }
 
-const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function QueryViewer({ data, jobName, queryHeader, onPrimersUpdate, onFlankingPrimersUpdate, flankingPanelState, onFlankingPanelStateChange, onNavigateTo, oligoRegion, autofindRegion, idtCredentials, alignment, navigateTarget, isDarkMode, importedSession }, ref) {
+const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function QueryViewer({ data, jobName, genbankHeader, onGenbankHeaderChange, onPrimersUpdate, onFlankingPrimersUpdate, flankingPanelState, onFlankingPanelStateChange, onNavigateTo, oligoRegion, autofindRegion, idtCredentials, alignment, navigateTarget, isDarkMode, importedSession }, ref) {
     const API_BASE = ((import.meta.env.VITE_API_BASE as string) || '');
     const [copyFeedback, setCopyFeedback] = useState('');
 
@@ -218,9 +222,7 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
         amplicon?: number;
     } | null>(null);
     const [showReportDialog, setShowReportDialog] = useState(false);
-    const [reportHeader, setReportHeader] = useState(queryHeader ?? '');
-    const [reportHeaderError, setReportHeaderError] = useState<string | null>(null);
-    useEffect(() => { setReportHeader(queryHeader ?? ''); }, [queryHeader]);
+    const [headerError, setHeaderError] = useState<string | null>(null);
     const [interactiveFlankWindow, setInteractiveFlankWindow] = useState(200);
 
 
@@ -1274,7 +1276,7 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
         return {
             jobName,
             queryId: data.id,
-            header: reportHeader.trim() || undefined,
+            genbankHeader: genbankHeader && genbankHeader.trim() ? genbankHeader : undefined,
             targetSeq: fullSeq,
             targetStart: data.start,
             targetEnd: data.end,
@@ -1333,17 +1335,17 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
         };
     };
 
-    const validateReportHeader = (): boolean => {
-        if (reportHeader.trim()) {
-            setReportHeaderError(null);
+    const validateHeader = (): boolean => {
+        if (genbankHeader && genbankHeader.trim()) {
+            setHeaderError(null);
             return true;
         }
-        setReportHeaderError('Please enter a header for the report (e.g. paste your sequence with a >header line).');
+        setHeaderError('Please enter a header (paste the GenBank header or a >FASTA header line).');
         return false;
     };
 
     const handleDownloadTxt = () => {
-        if (!validateReportHeader()) return;
+        if (!validateHeader()) return;
         const reportData = buildCompleteReport();
         const content = buildCompleteReportTxt(reportData);
         const filename = `Oligool_Report_${(jobName || 'design').replace(/\s+/g, '_')}_${new Date().toISOString().slice(0, 10)}.txt`;
@@ -1351,7 +1353,7 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
     };
 
     const handlePrintPdf = () => {
-        if (!validateReportHeader()) return;
+        if (!validateHeader()) return;
         buildCompleteReport();
         setTimeout(() => window.print(), 300);
     };
@@ -2677,8 +2679,7 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
             <div className="mt-8 px-5 py-4 flex justify-end">
                 <button
                     onClick={() => {
-                        if (!reportHeader.trim() && jobName.trim() && jobName !== 'Query') setReportHeader(jobName);
-                        setReportHeaderError(null);
+                        setHeaderError(null);
                         setShowReportDialog(true);
                     }}
                     className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2.5 rounded-lg font-bold transition-all shadow-md active:scale-95 border border-indigo-500"
@@ -2719,18 +2720,19 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
 
                     <div className="mb-4">
                         <label htmlFor="report-header" className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                            Report Header
+                            Header
+                            <span className="ml-2 font-normal text-slate-400 dark:text-slate-500">(GenBank header or &gt;FASTA line)</span>
                         </label>
-                        <input
+                        <textarea
                             id="report-header"
-                            type="text"
-                            value={reportHeader}
-                            onChange={(e) => { setReportHeader(e.target.value); if (e.target.value.trim()) setReportHeaderError(null); }}
-                            placeholder="e.g. PD166130.1 ANTIBODY BINDING HUMAN LAG-3"
-                            className="w-full rounded-lg border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm px-3 py-2 border"
+                            rows={4}
+                            value={genbankHeader ?? ''}
+                            onChange={(e) => { onGenbankHeaderChange?.(e.target.value); if (e.target.value.trim()) setHeaderError(null); }}
+                            placeholder={"LOCUS       PD166130                 981 bp    DNA     linear   PAT 29-JAN-2025\nDEFINITION  ...\nVERSION     ..."}
+                            className="w-full rounded-lg border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 font-mono text-xs px-3 py-2 border resize-y"
                         />
-                        {reportHeaderError && (
-                            <p className="mt-1 text-xs text-red-600 dark:text-red-400">{reportHeaderError}</p>
+                        {headerError && (
+                            <p className="mt-1 text-xs text-red-600 dark:text-red-400">{headerError}</p>
                         )}
                     </div>
 

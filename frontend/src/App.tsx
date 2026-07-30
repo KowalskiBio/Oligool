@@ -21,6 +21,7 @@ interface BlastHit {
 
 function App() {
   const [input, setInput] = useState('');
+  const [genbankHeader, setGenbankHeader] = useState('');
   const [step, setStep] = useState<Step>('input');
   const [blastHits, setBlastHits] = useState<BlastHit[]>([]);
   const [filteredHits, setFilteredHits] = useState<BlastHit[]>([]);
@@ -54,7 +55,12 @@ function App() {
   });
 
   const [jobName, setJobName] = useState(() => localStorage.getItem('job_name') || 'Query');
-  const queryHeader = useMemo(() => parseSequenceHeader(input), [input]);
+    const queryHeader = useMemo(() => parseSequenceHeader(input), [input]);
+
+    useEffect(() => {
+        if (!genbankHeader.trim() && queryHeader) setGenbankHeader(queryHeader);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [queryHeader]);
   const [selectedPrimers, setSelectedPrimers] = useState<{ p1: { start: number, end: number }, p2: { start: number, end: number } } | null>(null);
   const [selectedFlankingPrimers, setSelectedFlankingPrimers] = useState<FlankingPrimerSelection | null>(null);
 const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState | null>(null);
@@ -281,9 +287,10 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
     setBlastMeta(null);
     setAlignment('');
     setSelectedSequence(null);
-    setError('');
-    setInput('');
-    setSelectedFlankingPrimers(null);
+      setError('');
+      setInput('');
+      setGenbankHeader('');
+      setSelectedFlankingPrimers(null);
     setFlankingPanelState(null);
     setAutofindSelectedAccessions(new Set());
     setImportedSession(null);
@@ -301,7 +308,7 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
       version: OLIGOOL_SESSION_VERSION,
       savedAt: new Date().toISOString(),
       jobName,
-      search: { input, organism, eValue, percIdentity, filterMatches, maxHitsPreset, customHits },
+      search: { input, genbankHeader, organism, eValue, percIdentity, filterMatches, maxHitsPreset, customHits },
       results: {
         blastHits,
         filteredHits,
@@ -323,6 +330,7 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
   const applySession = useCallback((session: OligoolSession) => {
     setJobName(session.jobName || 'Query');
     setInput(session.search?.input ?? '');
+    setGenbankHeader(session.search?.genbankHeader ?? '');
     setOrganism(session.search?.organism ?? '');
     setEValue(session.search?.eValue ?? '0.05');
     setPercIdentity(session.search?.percIdentity ?? '0');
@@ -813,6 +821,20 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                 Header detected — it will be used in the report: <span className="font-mono font-semibold">{queryHeader}</span>
               </p>
             )}
+
+            <label htmlFor="genbank-header" className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2 mt-4">
+              GenBank Header
+              <span className="ml-2 font-normal text-slate-400 dark:text-slate-500">(optional — paste the full header from GenBank)</span>
+            </label>
+            <textarea
+              id="genbank-header"
+              rows={4}
+              disabled={step !== 'input'}
+              className="w-full rounded-lg border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 font-mono text-xs p-3 border disabled:opacity-50 disabled:bg-slate-50 dark:disabled:bg-slate-800"
+              placeholder={"LOCUS       PD166130                 981 bp    DNA     linear   PAT 29-JAN-2025\nDEFINITION  ...\nACCESSION   ...\nVERSION     ..."}
+              value={genbankHeader}
+              onChange={(e) => setGenbankHeader(e.target.value)}
+            />
             {/* ... filters ... */}
             <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4 border-t border-slate-100 dark:border-slate-700 pt-4">
               {/* Organism Filter */}
@@ -1108,6 +1130,8 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                   data={selectedSequence}
                   jobName={jobName}
                   queryHeader={queryHeader}
+                  genbankHeader={genbankHeader}
+                  onGenbankHeaderChange={setGenbankHeader}
                   onPrimersUpdate={setSelectedPrimers}
                   onFlankingPrimersUpdate={setSelectedFlankingPrimers}
                   flankingPanelState={flankingPanelState}
