@@ -232,11 +232,11 @@ describe('QueryReport', () => {
     it('TAG section shows roller number', () => {
         const { rerender } = render(<QueryReport data={baseData} />);
         let report = document.querySelector('.query-report')!;
-        expect(sectionText(report, 'TAG SEQUENCE')).toContain('No.: 18 (MTAG-A018)');
+        expect(sectionText(report, 'TAG SEQUENCE')).toContain('A018');
 
         rerender(<QueryReport data={{ ...baseData, tagReg: undefined }} />);
         report = document.querySelector('.query-report')!;
-        expect(sectionText(report, 'TAG SEQUENCE')).not.toMatch(/No\.:/);
+        expect(sectionText(report, 'TAG SEQUENCE')).not.toMatch(/A0\d{2}/);
     });
 
     it('universal primers show only sequences plus forward RC', () => {
@@ -355,5 +355,27 @@ describe('QueryReport', () => {
         expect(foText).toContain(`${baseData.flankingFwdName}\t${baseData.flankingFwdSeq}`);
         expect(foText).toContain(`${baseData.flankingRevName}\t${baseData.flankingRevSeq}`);
         expect(foText).not.toContain('Length:');
+    });
+
+    it('renders the GenBank header block verbatim below the title and date when genbankHeader is provided', () => {
+        const block = 'LOCUS       PD166130                 981 bp    DNA     linear   PAT 29-JAN-2025\nDEFINITION  JP 2022523929-A/9: ANTIBODY BINDING HUMAN LAG-3\nACCESSION   PD166130\nVERSION     PD166130.1';
+        render(<QueryReport data={{ ...baseData, genbankHeader: block }} />);
+        const report = document.querySelector('.query-report')!;
+        const pre = report.querySelector('[data-genbank-header]');
+        expect(pre).toBeTruthy();
+        expect(pre!.textContent).toBe(block);
+        const preClass = pre!.className;
+        expect(preClass).toContain('text-[10px]');
+        expect(preClass).not.toContain('font-bold');
+        const title = report.querySelector('h1');
+        expect(title).toBeTruthy();
+        expect(title!.textContent).toBe('Oligool Complete Design Report');
+        expect(title!.className).toContain('text-xl');
+        expect(title!.compareDocumentPosition(pre!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    });
+
+    it('omits the GenBank header block when genbankHeader is absent', () => {
+        render(<QueryReport data={baseData} />);
+        expect(document.querySelector('[data-genbank-header]')).not.toBeInTheDocument();
     });
 });

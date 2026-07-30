@@ -188,11 +188,16 @@ export default function QueryReport({ data }: QueryReportProps) {
 
             <div className="p-6 max-w-5xl mx-auto bg-white text-black">
                 <div className="mb-6 border-b-2 border-indigo-200 pb-4">
-                    <h1 className="text-3xl font-bold text-indigo-900">Oligool Complete Design Report</h1>
+                    <h1 className="text-xl font-bold text-indigo-900">Oligool Complete Design Report</h1>
+                    <p className="text-xs text-gray-500 mt-1">{new Date().toLocaleString()}</p>
                     {data.header && (
-                        <p className="text-lg font-semibold text-gray-800 mt-2 break-words">{data.header}</p>
+                        <p className="text-base font-medium text-gray-800 mt-2 break-words">{data.header}</p>
                     )}
                 </div>
+
+                {data.genbankHeader && (
+                    <pre data-genbank-header className="font-mono text-[10px] leading-[1.15] text-gray-600 whitespace-pre-wrap break-words mb-6">{data.genbankHeader}</pre>
+                )}
 
                 {data.contextMap && (
                     <div className="mb-6">
@@ -214,35 +219,37 @@ export default function QueryReport({ data }: QueryReportProps) {
                     />
                 </div>
 
-                <div className="mb-6">
-                    <h2 className="text-lg font-bold text-gray-800 mb-2 border-b border-gray-300 pb-1">MOLIGO 1</h2>
-                    <p className="font-mono text-sm break-all bg-gray-50 p-3 rounded border border-gray-200">{data.moligo1Seq}</p>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm mt-2">
-                        <div className="bg-gray-50 p-2 rounded border border-gray-200"><span className="text-gray-600">Name:</span> {data.moligo1Name}</div>
-                        <div className="bg-gray-50 p-2 rounded border border-gray-200"><span className="text-gray-600">Length:</span> {data.moligo1Len} nt</div>
-                        <div className="bg-gray-50 p-2 rounded border border-gray-200"><span className="text-gray-600">GC:</span> {fmtNum(calcGC(data.moligo1Seq))}%</div>
+                <div className="break-inside-avoid mb-6 grid grid-cols-1 gap-3">
+                    <div>
+                        <h2 className="text-sm font-bold text-gray-800 border-b border-gray-300 pb-0.5 mb-1">MOLIGO 1</h2>
+                        <p className="font-mono text-xs break-all bg-gray-50 p-1.5 rounded border border-gray-200">{data.moligo1Seq}</p>
+                        <div className="text-xs text-gray-600 mt-1 flex flex-wrap gap-x-3 gap-y-0.5">
+                            <span><span className="text-gray-500">Name:</span> {data.moligo1Name}</span>
+                            <span><span className="text-gray-500">Length:</span> {data.moligo1Len} nt</span>
+                            <span><span className="text-gray-500">GC:</span> {fmtNum(calcGC(data.moligo1Seq))}%</span>
+                        </div>
+                        <div className="text-xs text-gray-600 mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5">
+                            <span><span className="text-gray-500">Hairpin IDT ΔG:</span> {fmtDG(data.idtM1Hairpin?.DeltaG)}</span>
+                            <span><span className="text-gray-500">Hairpin Strider ΔG:</span> {fmtDG(extractTopLocalDg(data.idtM1Hairpin))}</span>
+                            <span><span className="text-gray-500">Self-Dimer IDT ΔG:</span> {fmtDG(data.idtM1SelfDimer?.DeltaG)}</span>
+                            <span><span className="text-gray-500">Self-Dimer Strider ΔG:</span> {fmtDG(extractTopLocalDg(data.idtM1SelfDimer))}</span>
+                        </div>
                     </div>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm mt-2">
-                        <div className="bg-gray-50 p-2 rounded border border-gray-200"><span className="text-gray-600">Hairpin IDT ΔG:</span> {fmtDG(data.idtM1Hairpin?.DeltaG)}</div>
-                        <div className="bg-gray-50 p-2 rounded border border-gray-200"><span className="text-gray-600">Hairpin Strider ΔG:</span> {fmtDG(extractTopLocalDg(data.idtM1Hairpin))}</div>
-                        <div className="bg-gray-50 p-2 rounded border border-gray-200"><span className="text-gray-600">Self-Dimer IDT ΔG:</span> {fmtDG(data.idtM1SelfDimer?.DeltaG)}</div>
-                        <div className="bg-gray-50 p-2 rounded border border-gray-200"><span className="text-gray-600">Self-Dimer Strider ΔG:</span> {fmtDG(extractTopLocalDg(data.idtM1SelfDimer))}</div>
-                    </div>
-                </div>
 
-                <div className="mb-6">
-                    <h2 className="text-lg font-bold text-gray-800 mb-2 border-b border-gray-300 pb-1">MOLIGO 2</h2>
-                    <p className="font-mono text-sm break-all bg-gray-50 p-3 rounded border border-gray-200">{data.moligo2Seq}</p>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm mt-2">
-                        <div className="bg-gray-50 p-2 rounded border border-gray-200"><span className="text-gray-600">Name:</span> {data.moligo2Name}</div>
-                        <div className="bg-gray-50 p-2 rounded border border-gray-200"><span className="text-gray-600">Length:</span> {data.moligo2Len} nt</div>
-                        <div className="bg-gray-50 p-2 rounded border border-gray-200"><span className="text-gray-600">GC:</span> {fmtNum(calcGC(data.moligo2Seq))}%</div>
-                    </div>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm mt-2">
-                        <div className="bg-gray-50 p-2 rounded border border-gray-200"><span className="text-gray-600">Hairpin IDT ΔG:</span> {fmtDG(data.idtM2Hairpin?.DeltaG)}</div>
-                        <div className="bg-gray-50 p-2 rounded border border-gray-200"><span className="text-gray-600">Hairpin Strider ΔG:</span> {fmtDG(extractTopLocalDg(data.idtM2Hairpin))}</div>
-                        <div className="bg-gray-50 p-2 rounded border border-gray-200"><span className="text-gray-600">Self-Dimer IDT ΔG:</span> {fmtDG(data.idtM2SelfDimer?.DeltaG)}</div>
-                        <div className="bg-gray-50 p-2 rounded border border-gray-200"><span className="text-gray-600">Self-Dimer Strider ΔG:</span> {fmtDG(extractTopLocalDg(data.idtM2SelfDimer))}</div>
+                    <div>
+                        <h2 className="text-sm font-bold text-gray-800 border-b border-gray-300 pb-0.5 mb-1">MOLIGO 2</h2>
+                        <p className="font-mono text-xs break-all bg-gray-50 p-1.5 rounded border border-gray-200">{data.moligo2Seq}</p>
+                        <div className="text-xs text-gray-600 mt-1 flex flex-wrap gap-x-3 gap-y-0.5">
+                            <span><span className="text-gray-500">Name:</span> {data.moligo2Name}</span>
+                            <span><span className="text-gray-500">Length:</span> {data.moligo2Len} nt</span>
+                            <span><span className="text-gray-500">GC:</span> {fmtNum(calcGC(data.moligo2Seq))}%</span>
+                        </div>
+                        <div className="text-xs text-gray-600 mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5">
+                            <span><span className="text-gray-500">Hairpin IDT ΔG:</span> {fmtDG(data.idtM2Hairpin?.DeltaG)}</span>
+                            <span><span className="text-gray-500">Hairpin Strider ΔG:</span> {fmtDG(extractTopLocalDg(data.idtM2Hairpin))}</span>
+                            <span><span className="text-gray-500">Self-Dimer IDT ΔG:</span> {fmtDG(data.idtM2SelfDimer?.DeltaG)}</span>
+                            <span><span className="text-gray-500">Self-Dimer Strider ΔG:</span> {fmtDG(extractTopLocalDg(data.idtM2SelfDimer))}</span>
+                        </div>
                     </div>
                 </div>
 
@@ -250,28 +257,29 @@ export default function QueryReport({ data }: QueryReportProps) {
                     <div className="mb-6">
                         <h2 className="text-lg font-bold text-gray-800 mb-2 border-b border-gray-300 pb-1">TAG SEQUENCE</h2>
                         <p className="font-mono text-sm break-all bg-gray-50 p-3 rounded border border-gray-200">{data.tagSeq}</p>
-                        <p className="text-sm text-gray-600 mt-1">Length: {data.tagSeq.length} nt</p>
                         {data.tagReg != null && (
-                            <p className="text-sm text-gray-600">No.: {data.tagReg}{data.tagPartNumber ? ` (${data.tagPartNumber})` : ''}</p>
+                            <p className="text-sm text-gray-600 mt-1">A{String(data.tagReg).padStart(3, '0')}</p>
                         )}
                     </div>
                 )}
 
                 <div className="mb-6">
                     <h2 className="text-lg font-bold text-gray-800 mb-2 border-b border-gray-300 pb-1">UNIVERSAL PRIMERS</h2>
-                    {data.fwdPrimer && (
-                        <div className="mb-3">
-                            <h3 className="text-sm font-bold text-gray-700">Forward Primer</h3>
-                            <p className="font-mono text-sm break-all bg-gray-50 p-2 rounded border border-gray-200">{data.fwdPrimer}</p>
-                            <p className="text-sm text-gray-600">RC: {fwdRC}</p>
-                        </div>
-                    )}
-                    {data.revPrimer && (
-                        <div>
-                            <h3 className="text-sm font-bold text-gray-700">Reverse Primer</h3>
-                            <p className="font-mono text-sm break-all bg-gray-50 p-2 rounded border border-gray-200">{data.revPrimer}</p>
-                        </div>
-                    )}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        {data.fwdPrimer && (
+                            <div>
+                                <h3 className="text-sm font-bold text-gray-700">Forward Primer</h3>
+                                <p className="font-mono text-sm break-all bg-gray-50 p-2 rounded border border-gray-200">{data.fwdPrimer}</p>
+                                <p className="text-sm text-gray-600">RC: {fwdRC}</p>
+                            </div>
+                        )}
+                        {data.revPrimer && (
+                            <div>
+                                <h3 className="text-sm font-bold text-gray-700">Reverse Primer</h3>
+                                <p className="font-mono text-sm break-all bg-gray-50 p-2 rounded border border-gray-200">{data.revPrimer}</p>
+                            </div>
+                        )}
+                    </div>
                 </div>
 
                 <div className="mb-6">
