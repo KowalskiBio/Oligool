@@ -542,7 +542,7 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                 title="Kliknutím zobrazíte novinky a návod k použití"
                 className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800 whitespace-nowrap cursor-pointer hover:bg-amber-200 dark:hover:bg-amber-900/50 transition-colors"
               >
-                v0.9.4 beta
+                v0.9.5 beta
               </button>
               {sessionMsg && (
                 <span
@@ -1167,6 +1167,16 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                 <button onClick={() => setShowWhatsNew(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-xl leading-none">&times;</button>
               </div>
               <div className="space-y-4 text-sm text-slate-700 dark:text-slate-300">
+                <section>
+                  <h3 className="font-semibold text-indigo-600 dark:text-indigo-400 mb-1">Přepracovaný design reportu (PDF/TXT)</h3>
+                  <p>
+                    Report má nově horní záhlaví s menším názvem, datem a vlastním GenBank headerem vloženým
+                    přímo na vstupní stránce. Sekce MOLigo 1 a 2 jsou kompaktnější a jsou chráněny proti
+                    rozdělení stránkou. Primery se zobrazují vedle sebe, ΔG hodnoty jsou tučně a v tabulátorovém
+                    rozložení. Heterodimer M1×M2 je přejmenován na „Moligo 1 with Moligo 2 pairwise“ včetně
+                    SVG struktury. TAG ukazuje číslo z role (např. A018) místo délky.
+                  </p>
+                </section>
                 <section>
                   <h3 className="font-semibold text-indigo-600 dark:text-indigo-400 mb-1">MOLigo schéma a kopírovatelné sekvence</h3>
                   <p>
