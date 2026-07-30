@@ -82,9 +82,13 @@ export default function HairpinSVG({ seq, dotBracket }: HairpinSVGProps) {
             );
         }
         // Multiloop / pseudoknot / unparseable – show dot-bracket
+        const blockPairs: string[] = [];
+        for (let start = 0; start < Math.max(seq.length, dotBracket.length); start += 60) {
+            blockPairs.push(`${seq.slice(start, start + 60)}\n${dotBracket.slice(start, start + 60)}`);
+        }
         return (
             <pre className="font-mono text-[10px] text-slate-500 dark:text-slate-400 whitespace-pre">
-                {seq}{'\n'}{dotBracket}
+                {blockPairs.join('\n\n')}
             </pre>
         );
     }

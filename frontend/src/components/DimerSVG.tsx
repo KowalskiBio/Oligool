@@ -182,10 +182,10 @@ export default function DimerSVG({ seq, dotBracket }: DimerSVGProps) {
     });
 
     return (
-        <div className="w-full overflow-x-auto">
+        <div className="w-full">
             <svg
                 viewBox={`0 0 ${svgW} ${svgH}`}
-                width={Math.max(svgW, 300)}
+                width="100%"
                 style={{ maxHeight: '120px' }}
                 className="mx-auto"
             >
