@@ -1153,6 +1153,7 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                   alignment={alignment}
                   navigateTarget={navigateTarget}
                   isDarkMode={isDarkMode}
+                  onSaveSession={handleSaveSession}
                 />
               )}
             </>

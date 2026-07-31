@@ -63,6 +63,8 @@ interface QueryViewerProps {
     isDarkMode?: boolean;
     /** A session to restore into this viewer; applied once per nonce. */
     importedSession?: ImportedSession | null;
+    /** Saves the current working session to a downloadable file. */
+    onSaveSession?: () => void;
 }
 
 interface IdtData {
@@ -93,7 +95,7 @@ interface OligizeResponse {
     param_warnings?: string[];
 }
 
-const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function QueryViewer({ data, jobName, genbankHeader, onGenbankHeaderChange, onPrimersUpdate, onFlankingPrimersUpdate, flankingPanelState, onFlankingPanelStateChange, onNavigateTo, oligoRegion, autofindRegion, idtCredentials, alignment, navigateTarget, isDarkMode, importedSession }, ref) {
+const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function QueryViewer({ data, jobName, genbankHeader, onGenbankHeaderChange, onPrimersUpdate, onFlankingPrimersUpdate, flankingPanelState, onFlankingPanelStateChange, onNavigateTo, oligoRegion, autofindRegion, idtCredentials, alignment, navigateTarget, isDarkMode, importedSession, onSaveSession }, ref) {
     const API_BASE = ((import.meta.env.VITE_API_BASE as string) || '');
     const [copyFeedback, setCopyFeedback] = useState('');
 
@@ -2688,7 +2690,19 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
         )}
 
         {primers && (
-            <div className="mt-8 px-5 py-4 flex justify-end">
+            <div className="mt-8 px-5 py-4 flex justify-end gap-3">
+                {onSaveSession && (
+                    <button
+                        onClick={onSaveSession}
+                        title="Save this session (oligos, pinned positions, primers & alignment) to a file"
+                        className="flex items-center gap-2 bg-white dark:bg-slate-700 hover:bg-slate-50 dark:hover:bg-slate-600 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800 px-6 py-2.5 rounded-lg font-bold transition-all shadow-sm active:scale-95"
+                    >
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 16v1a3 3 0 01-3 3H7a3 3 0 01-3-3v-1m4-4l4 4m0 0l4-4m-4 4V4" />
+                        </svg>
+                        Save
+                    </button>
+                )}
                 <button
                     onClick={() => {
                         setHeaderError(null);
