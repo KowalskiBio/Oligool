@@ -91,10 +91,20 @@ export interface CompleteReportData {
     idtM1Hairpin?: IdtReportRawData;
     idtM1SelfDimer?: IdtReportRawData;
     idtM1Analyze?: unknown;
+    /** Primer3 melting temperature (°C) of MOLigo 1. */
+    moligo1TmP3?: number;
+    /** Strider melting temperature (°C) of MOLigo 1. */
+    moligo1TmStrider?: number | null;
+    /** IDT melting temperature (°C) of MOLigo 1. */
     idtM1Tm?: number;
     idtM2Hairpin?: IdtReportRawData;
     idtM2SelfDimer?: IdtReportRawData;
     idtM2Analyze?: unknown;
+    /** Primer3 melting temperature (°C) of MOLigo 2. */
+    moligo2TmP3?: number;
+    /** Strider melting temperature (°C) of MOLigo 2. */
+    moligo2TmStrider?: number | null;
+    /** IDT melting temperature (°C) of MOLigo 2. */
     idtM2Tm?: number;
     idtPairwise?: IdtReportRawData;
 

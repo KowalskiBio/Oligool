@@ -243,22 +243,20 @@ describe('QueryReport', () => {
         expect(sectionText(report, 'TAG SEQUENCE')).not.toMatch(/A0\d{2}/);
     });
 
-    it('universal primers show only sequences plus forward RC', () => {
+    it('universal primers section is removed from report', () => {
         render(<QueryReport data={baseData} />);
-        const report = document.querySelector('.query-report')!;
-        const upText = sectionText(report, 'UNIVERSAL PRIMERS');
-        expect(upText).toContain(baseData.fwdPrimer);
-        expect(upText).toContain(baseData.revPrimer);
-        expect(upText).toContain(`RC\t${reverseComplement(baseData.fwdPrimer!)}`);
-        expect(upText.match(/RC\t/g)).toHaveLength(1);
-        expect(upText).not.toContain('Length\t');
-        expect(upText).not.toContain('GC\t');
+        expect(screen.queryByText('UNIVERSAL PRIMERS')).not.toBeInTheDocument();
     });
 
-    it('pairwise section renamed', () => {
-        render(<QueryReport data={baseData} />);
-        expect(screen.getByText('Moligo 1 with Moligo 2 pairwise')).toBeInTheDocument();
-        expect(screen.queryByText('PAIRWISE INTERACTION')).not.toBeInTheDocument();
+    it('pairwise shown only in secondary structure predictions', () => {
+        const dots16 = '.'.repeat(16);
+        const data: CompleteReportData = {
+            ...baseData,
+            idtPairwise: { DeltaG: -2.1, raw: { DotBracket: `${dots16}&${dots16}`, Sequence: `${baseData.moligo1Seq}&${baseData.moligo2Seq}` } },
+        };
+        render(<QueryReport data={data} />);
+        expect(screen.queryByText('Moligo 1 with Moligo 2 pairwise')).not.toBeInTheDocument();
+        expect(screen.getAllByText((_, node) => !!node?.textContent?.includes('MOLigo 1 × MOLigo 2')).length).toBeGreaterThan(0);
     });
 
     it('context map uses vivid palette and print color rule', () => {
@@ -303,8 +301,9 @@ describe('QueryReport', () => {
         expect(flankText).toMatch(/Tm — P3\t61\.2 °C \| Strider\t60\.1 °C \| IDT\t62\.5 °C/);
         expect(flankText).toMatch(/P3 Hairpin ΔG\t-1\.20 kcal\/mol \(Tm\t42\.0 °C\)/);
         expect(flankText).toMatch(/P3 Homodimer ΔG\t-3\.40 kcal\/mol \(Tm\t38\.5 °C\)/);
-        expect(flankText).toMatch(/Heterodimer \(fwd × rev\) ΔG\t-5\.60 kcal\/mol \(Tm\t41\.0 °C\)/);
+        expect(flankText).toMatch(/Heterodimer ΔG\t-5\.60 kcal\/mol \(Tm\t41\.0 °C\)/);
         expect(flankText).toContain('Amplicon length\t150 bp');
+        expect(flankText).toContain('FlnkF1 × FlnkR1');
         expect(flankText).toContain('FlnkR1');
         expect(flankText).toContain(baseData.flankingRevSeq);
 

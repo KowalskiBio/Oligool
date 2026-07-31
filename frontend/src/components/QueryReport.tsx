@@ -234,6 +234,9 @@ export default function QueryReport({ data }: QueryReportProps) {
                             <span><span className="text-gray-500">Length{'\t'}</span><V>{data.moligo1Len} nt</V></span>
                             <span><span className="text-gray-500">GC{'\t'}</span><V>{fmtNum(calcGC(data.moligo1Seq))}%</V></span>
                         </div>
+                        <div className="text-xs text-gray-600 mt-0.5 whitespace-pre-wrap">
+                            <span><span className="text-gray-500">Tm — P3{'\t'}</span><V>{fmtNum(data.moligo1TmP3)} °C</V> | <span className="text-gray-500">Strider{'\t'}</span><V>{fmtNum(data.moligo1TmStrider)} °C</V> | <span className="text-gray-500">IDT{'\t'}</span><V>{fmtNum(data.idtM1Tm)} °C</V></span>
+                        </div>
                         <div className="text-xs text-gray-600 mt-0.5 grid grid-cols-2 gap-x-6 gap-y-0.5 whitespace-pre-wrap">
                             <span><span className="text-gray-500">Hairpin IDT ΔG{'\t'}</span><V>{fmtDG(data.idtM1Hairpin?.DeltaG)}</V></span>
                             <span><span className="text-gray-500">Hairpin Strider ΔG{'\t'}</span><V>{fmtDG(extractTopLocalDg(data.idtM1Hairpin))}</V></span>
@@ -249,6 +252,9 @@ export default function QueryReport({ data }: QueryReportProps) {
                             <span><span className="text-gray-500">Name{'\t'}</span><V>{data.moligo2Name}</V></span>
                             <span><span className="text-gray-500">Length{'\t'}</span><V>{data.moligo2Len} nt</V></span>
                             <span><span className="text-gray-500">GC{'\t'}</span><V>{fmtNum(calcGC(data.moligo2Seq))}%</V></span>
+                        </div>
+                        <div className="text-xs text-gray-600 mt-0.5 whitespace-pre-wrap">
+                            <span><span className="text-gray-500">Tm — P3{'\t'}</span><V>{fmtNum(data.moligo2TmP3)} °C</V> | <span className="text-gray-500">Strider{'\t'}</span><V>{fmtNum(data.moligo2TmStrider)} °C</V> | <span className="text-gray-500">IDT{'\t'}</span><V>{fmtNum(data.idtM2Tm)} °C</V></span>
                         </div>
                         <div className="text-xs text-gray-600 mt-0.5 grid grid-cols-2 gap-x-6 gap-y-0.5 whitespace-pre-wrap">
                             <span><span className="text-gray-500">Hairpin IDT ΔG{'\t'}</span><V>{fmtDG(data.idtM2Hairpin?.DeltaG)}</V></span>
@@ -268,42 +274,6 @@ export default function QueryReport({ data }: QueryReportProps) {
                         )}
                     </div>
                 )}
-
-                <div className="break-avoid mb-6">
-                    <h2 className="text-lg font-bold text-gray-800 mb-2 border-b border-gray-300 pb-1">UNIVERSAL PRIMERS</h2>
-                    <div className="grid grid-cols-2 gap-3">
-                        {data.fwdPrimer && (
-                            <div>
-                                <h3 className="text-sm font-bold text-gray-700">Forward Primer</h3>
-                                <p className="font-mono text-sm break-all bg-gray-50 p-2 rounded border border-gray-200">{data.fwdPrimer}</p>
-                                <p className="text-sm text-gray-600 whitespace-pre-wrap">RC{'\t'}{fwdRC}</p>
-                            </div>
-                        )}
-                        {data.revPrimer && (
-                            <div>
-                                <h3 className="text-sm font-bold text-gray-700">Reverse Primer</h3>
-                                <p className="font-mono text-sm break-all bg-gray-50 p-2 rounded border border-gray-200">{data.revPrimer}</p>
-                            </div>
-                        )}
-                    </div>
-                </div>
-
-                <div className="break-avoid mb-6">
-                    <h2 className="text-lg font-bold text-gray-800 mb-2 border-b border-gray-300 pb-1">Moligo 1 with Moligo 2 pairwise</h2>
-                    <div className="grid grid-cols-2 gap-2 text-sm whitespace-pre-wrap">
-                        <div className="bg-gray-50 p-2 rounded border border-gray-200"><span className="text-gray-600">IDT ΔG{'\t'}</span><V>{fmtDG(data.idtPairwise?.DeltaG)}</V></div>
-                        <div className="bg-gray-50 p-2 rounded border border-gray-200"><span className="text-gray-600">Strider ΔG{'\t'}</span><V>{fmtDG(extractTopLocalDg(data.idtPairwise))}</V></div>
-                        {(data.idtPairwise?.IDT_Tm != null || data.idtPairwise?.Local_Tm != null) && (
-                            <div className="bg-gray-50 p-2 rounded border border-gray-200"><span className="text-gray-600">IDT Tm{'\t'}</span><V>{fmtNum(data.idtPairwise?.IDT_Tm)} °C</V></div>
-                        )}
-                        {(data.idtPairwise?.IDT_Tm != null || data.idtPairwise?.Local_Tm != null) && (
-                            <div className="bg-gray-50 p-2 rounded border border-gray-200"><span className="text-gray-600">Local Tm{'\t'}</span><V>{fmtNum(data.idtPairwise?.Local_Tm)} °C</V></div>
-                        )}
-                    </div>
-                    {rawItems(data.idtPairwise).map((item, idx) => (
-                        <div key={idx} className="mt-2">{renderIdtSvg(item, data.moligo1Seq, data.moligo2Seq)}</div>
-                    ))}
-                </div>
 
                 {(data.idtM1Hairpin || data.idtM1SelfDimer || data.idtM2Hairpin || data.idtM2SelfDimer || data.idtPairwise) && (
                     <div className="mb-6">
@@ -333,7 +303,7 @@ export default function QueryReport({ data }: QueryReportProps) {
                         <p className="text-sm text-gray-500">No forward flanking primer designed.</p>
                     )}
                     {data.flankingRevSeq ? (
-                        <div>
+                        <div className="mb-3">
                             <h3 className="text-sm font-bold text-gray-700">{data.flankingRevName || 'Flanking Rev'}</h3>
                             <p className="font-mono text-sm break-all bg-gray-50 p-2 rounded border border-gray-200">{data.flankingRevSeq}</p>
                             <p className="text-sm text-gray-600 whitespace-pre-wrap">Length{'\t'}<V>{data.flankingRevLen ?? data.flankingRevSeq.length} nt</V> | GC{'\t'}<V>{fmtNum(data.flankingRevGc)}%</V></p>
@@ -344,11 +314,16 @@ export default function QueryReport({ data }: QueryReportProps) {
                     ) : (
                         <p className="text-sm text-gray-500">No reverse flanking primer designed.</p>
                     )}
-                    {(data.flankingHetDg != null || data.flankingHetTm != null) && (
-                        <p className="text-sm text-gray-600 whitespace-pre-wrap">Heterodimer (fwd × rev) ΔG{'\t'}<V>{fmtDG(data.flankingHetDg)}</V> (Tm{'\t'}<V>{fmtNum(data.flankingHetTm)} °C</V>)</p>
-                    )}
-                    {data.ampliconLength != null && (
-                        <p className="text-sm text-gray-600 whitespace-pre-wrap">Amplicon length{'\t'}<V>{data.ampliconLength} bp</V></p>
+                    {((data.flankingHetDg != null || data.flankingHetTm != null) || data.ampliconLength != null) && (
+                        <div>
+                            <h3 className="text-sm font-bold text-gray-700">{(data.flankingFwdName || 'Primer1')} × {(data.flankingRevName || 'Primer2')}</h3>
+                            {(data.flankingHetDg != null || data.flankingHetTm != null) && (
+                                <p className="text-sm text-gray-600 whitespace-pre-wrap">Heterodimer ΔG{'\t'}<V>{fmtDG(data.flankingHetDg)}</V> (Tm{'\t'}<V>{fmtNum(data.flankingHetTm)} °C</V>)</p>
+                            )}
+                            {data.ampliconLength != null && (
+                                <p className="text-sm text-gray-600 whitespace-pre-wrap">Amplicon length{'\t'}<V>{data.ampliconLength} bp</V></p>
+                            )}
+                        </div>
                     )}
                 </div>
 
