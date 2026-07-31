@@ -65,9 +65,10 @@ const sectionText = (report: Element, headingText: string): string => {
 
 /** Combined textContent of the MOLIGO 1 and MOLIGO 2 sections. */
 const moligoSectionsText = (report: Element): string => {
-    const heads = Array.from(report.querySelectorAll('h2')).filter(h =>
-        /^MOLIGO [12](\s|$|\()/.test(h.textContent ?? '')
-    );
+    const heads = Array.from(report.querySelectorAll('h2')).filter(h => {
+        const t = (h.textContent ?? '').trim();
+        return t === baseData.moligo1Name || t === baseData.moligo2Name;
+    });
     expect(heads.length).toBeGreaterThanOrEqual(2);
     return heads.map(h => h.parentElement?.textContent ?? '').join('\n');
 };
@@ -117,10 +118,10 @@ describe('QueryReport', () => {
             },
         };
         render(<QueryReport data={data} />);
-        expect(screen.getAllByText('Hairpin IDT ΔG:').length).toBeGreaterThanOrEqual(1);
-        expect(screen.getAllByText('Hairpin Strider ΔG:').length).toBeGreaterThanOrEqual(1);
-        expect(screen.getAllByText('Self-Dimer IDT ΔG:').length).toBeGreaterThanOrEqual(1);
-        expect(screen.getAllByText('Self-Dimer Strider ΔG:').length).toBeGreaterThanOrEqual(1);
+        expect(screen.getAllByText('Hairpin IDT ΔG').length).toBeGreaterThanOrEqual(1);
+        expect(screen.getAllByText('Hairpin Strider ΔG').length).toBeGreaterThanOrEqual(1);
+        expect(screen.getAllByText('Self-Dimer IDT ΔG').length).toBeGreaterThanOrEqual(1);
+        expect(screen.getAllByText('Self-Dimer Strider ΔG').length).toBeGreaterThanOrEqual(1);
         // Moligo tiles show only ΔG values — no Shift/Tm labels. Scope the negative
         // assertions to the MOLIGO sections: '(Tm: ...)' strings legitimately appear
         // in flanking-primer and structure sections of the report.
@@ -223,9 +224,12 @@ describe('QueryReport', () => {
 
     it('moligo headings contain no capture/reporter labels', () => {
         render(<QueryReport data={baseData} />);
-        expect(screen.getByText('MOLIGO 1')).toBeInTheDocument();
-        expect(screen.getByText('MOLIGO 2')).toBeInTheDocument();
         const report = document.querySelector('.query-report') as HTMLElement;
+        const moligoHeadings = Array.from(report.querySelectorAll('h2')).filter(h => {
+            const t = (h.textContent ?? '').trim();
+            return t === baseData.moligo1Name || t === baseData.moligo2Name;
+        });
+        expect(moligoHeadings).toHaveLength(2);
         expect(within(report).queryByText(/CAPTURE|REPORTER/)).toBeNull();
     });
 
@@ -245,10 +249,10 @@ describe('QueryReport', () => {
         const upText = sectionText(report, 'UNIVERSAL PRIMERS');
         expect(upText).toContain(baseData.fwdPrimer);
         expect(upText).toContain(baseData.revPrimer);
-        expect(upText).toContain(`RC: ${reverseComplement(baseData.fwdPrimer!)}`);
-        expect(upText.match(/RC:/g)).toHaveLength(1);
-        expect(upText).not.toContain('Length:');
-        expect(upText).not.toContain('GC:');
+        expect(upText).toContain(`RC\t${reverseComplement(baseData.fwdPrimer!)}`);
+        expect(upText.match(/RC\t/g)).toHaveLength(1);
+        expect(upText).not.toContain('Length\t');
+        expect(upText).not.toContain('GC\t');
     });
 
     it('pairwise section renamed', () => {
@@ -295,12 +299,12 @@ describe('QueryReport', () => {
         let flankText = sectionText(report, 'FLANKING PRIMERS');
         expect(flankText).toContain('FlnkF1');
         expect(flankText).toContain(baseData.flankingFwdSeq);
-        expect(flankText).toMatch(/Length: 20 nt \| GC: 45\.0%/);
-        expect(flankText).toMatch(/Tm — P3: 61\.2 °C \| Strider: 60\.1 °C \| IDT: 62\.5 °C/);
-        expect(flankText).toMatch(/P3 Hairpin ΔG: -1\.20 kcal\/mol \(Tm: 42\.0 °C\)/);
-        expect(flankText).toMatch(/P3 Homodimer ΔG: -3\.40 kcal\/mol \(Tm: 38\.5 °C\)/);
-        expect(flankText).toMatch(/Heterodimer \(fwd × rev\) ΔG: -5\.60 kcal\/mol \(Tm: 41\.0 °C\)/);
-        expect(flankText).toContain('Amplicon length: 150 bp');
+        expect(flankText).toMatch(/Length\t20 nt \| GC\t45\.0%/);
+        expect(flankText).toMatch(/Tm — P3\t61\.2 °C \| Strider\t60\.1 °C \| IDT\t62\.5 °C/);
+        expect(flankText).toMatch(/P3 Hairpin ΔG\t-1\.20 kcal\/mol \(Tm\t42\.0 °C\)/);
+        expect(flankText).toMatch(/P3 Homodimer ΔG\t-3\.40 kcal\/mol \(Tm\t38\.5 °C\)/);
+        expect(flankText).toMatch(/Heterodimer \(fwd × rev\) ΔG\t-5\.60 kcal\/mol \(Tm\t41\.0 °C\)/);
+        expect(flankText).toContain('Amplicon length\t150 bp');
         expect(flankText).toContain('FlnkR1');
         expect(flankText).toContain(baseData.flankingRevSeq);
 
@@ -336,9 +340,9 @@ describe('QueryReport', () => {
         report = document.querySelector('.query-report')!;
         flankText = sectionText(report, 'FLANKING PRIMERS');
         expect(flankText).toContain('FlnkF1');
-        expect(flankText).toMatch(/Tm — P3: N\/A °C \| Strider: N\/A °C \| IDT: N\/A °C/);
-        expect(flankText).toMatch(/P3 Hairpin ΔG: N\/A/);
-        expect(flankText).toMatch(/P3 Homodimer ΔG: N\/A/);
+        expect(flankText).toMatch(/Tm — P3\tN\/A °C \| Strider\tN\/A °C \| IDT\tN\/A °C/);
+        expect(flankText).toMatch(/P3 Hairpin ΔG\tN\/A/);
+        expect(flankText).toMatch(/P3 Homodimer ΔG\tN\/A/);
         expect(flankText).not.toContain('Heterodimer');
         expect(flankText).not.toContain('Amplicon length');
     });
@@ -349,7 +353,7 @@ describe('QueryReport', () => {
         const foText = sectionText(report, 'FINAL ORDER SEQUENCES');
         const expectedOligo2 = `${baseData.revPrimer}${baseData.moligo2Seq}`;
         const expectedOligo1 =
-            baseData.moligo1Seq + baseData.tagSeq!.toLowerCase() + reverseComplement(baseData.fwdPrimer!);
+            baseData.moligo1Seq + baseData.tagSeq! + reverseComplement(baseData.fwdPrimer!);
         expect(foText).toContain(`Oligo 2 (RevP + M2)\t${expectedOligo2}`);
         expect(foText).toContain(`Oligo 1 (M1 + TAG + RC-FwdP)\t${expectedOligo1}`);
         expect(foText).toContain(`${baseData.flankingFwdName}\t${baseData.flankingFwdSeq}`);

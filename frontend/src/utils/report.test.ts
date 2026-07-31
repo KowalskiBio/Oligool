@@ -25,30 +25,43 @@ const makeData = (): CompleteReportData => ({
 });
 
 describe('buildCompleteReportTxt', () => {
-    it('includes TAG roller number in txt when tagReg set', () => {
-        const txt = buildCompleteReportTxt({ ...makeData(), tagReg: 18, tagPartNumber: 'MTAG-A018' });
-        expect(txt).toContain('=== TAG ===');
-        expect(txt).toContain('A018');
-    });
-
-    it('omits TAG number line when tagReg absent', () => {
-        const txt = buildCompleteReportTxt(makeData());
-        expect(txt).toContain('=== TAG ===');
-        expect(txt).not.toMatch(/A0\d{2}/);
-    });
-
-    it('txt keeps sequences-only layout', () => {
+    it('txt report starts at FLANKING PRIMERS — no header/target/moligo/tag/primers sections', () => {
         const data = makeData();
         const txt = buildCompleteReportTxt(data);
-        expect(txt).toContain('Oligool Design Report');
-        expect(txt).toContain('=== HEADER ===');
-        expect(txt).toContain('=== TARGET SEQUENCE ===');
-        expect(txt).toContain(`=== MOLIGO 1 - ${data.moligo1Name} ===`);
-        expect(txt).toContain(`=== MOLIGO 2 - ${data.moligo2Name} ===`);
+        expect(txt.startsWith('=== FLANKING PRIMERS ===')).toBe(true);
+        expect(txt).not.toContain('Oligool Design Report');
+        expect(txt).not.toContain('=== HEADER ===');
+        expect(txt).not.toContain('=== TARGET SEQUENCE ===');
+        expect(txt).not.toContain(`=== ${data.moligo1Name} ===`);
+        expect(txt).not.toContain(`=== ${data.moligo2Name} ===`);
+        expect(txt).not.toContain('=== TAG ===');
+        expect(txt).not.toContain('=== UNIVERSAL PRIMERS ===');
+    });
+
+    it('txt keeps FINAL ORDER SEQUENCES with renamed oligo labels and RC', () => {
+        const data = makeData();
+        const txt = buildCompleteReportTxt(data);
         expect(txt).toContain('=== FINAL ORDER SEQUENCES ===');
         expect(txt).toContain(reverseComplement(data.fwdPrimer!));
+        expect(txt).toContain(`${data.moligo2Name} (RevP + M2):`);
+        expect(txt).toContain(`${data.moligo1Name} (M1 + TAG + RC-FwdP):`);
         expect(txt).not.toContain('SEARCH PARAMETERS');
         expect(txt).not.toContain('DeltaG');
         expect(txt).not.toContain('ΔG');
+    });
+
+    it('txt includes flanking primers when present', () => {
+        const data: CompleteReportData = {
+            ...makeData(),
+            flankingFwdName: 'FlnkF1',
+            flankingFwdSeq: 'CGATCGATTTTTCCCCAAAA',
+            flankingRevName: 'FlnkR1',
+            flankingRevSeq: 'GGGGAAAACCCCTTTTGGGG',
+        };
+        const txt = buildCompleteReportTxt(data);
+        expect(txt).toContain('FlnkF1:');
+        expect(txt).toContain('CGATCGATTTTTCCCCAAAA');
+        expect(txt).toContain('FlnkR1:');
+        expect(txt).toContain('GGGGAAAACCCCTTTTGGGG');
     });
 });

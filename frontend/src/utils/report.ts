@@ -168,55 +168,8 @@ export interface ReportContextMap {
 
 const section = (title: string): string => `\n=== ${title} ===\n`;
 
-const kv = (label: string, value: string | number | undefined | null): string =>
-    `${label}: ${value ?? 'N/A'}`;
-
 export const buildCompleteReportTxt = (data: CompleteReportData): string => {
     const lines: string[] = [];
-
-    lines.push('Oligool Design Report');
-    lines.push(`Generated: ${new Date().toISOString()}`);
-
-    lines.push(section('HEADER'));
-    if (data.header) {
-        lines.push(data.header);
-    } else {
-        lines.push(kv('Job Name', data.jobName));
-        lines.push(kv('Query ID', data.queryId));
-    }
-    lines.push(kv('Target Region', `${data.targetStart} - ${data.targetEnd}`));
-    lines.push(kv('Target Length', `${data.targetSeq.length} nt`));
-
-    lines.push(section('TARGET SEQUENCE'));
-    lines.push(data.targetSeq);
-
-    lines.push(section(`MOLIGO 1${data.moligo1Name ? ` - ${data.moligo1Name}` : ''}`));
-    lines.push(data.moligo1Seq);
-
-    lines.push(section(`MOLIGO 2${data.moligo2Name ? ` - ${data.moligo2Name}` : ''}`));
-    lines.push(data.moligo2Seq);
-
-    if (data.tagSeq) {
-        lines.push(section('TAG'));
-        lines.push(data.tagSeq);
-        if (data.tagReg != null) {
-            lines.push(`A${String(data.tagReg).padStart(3, '0')}`);
-        }
-    }
-
-    if (data.fwdPrimer || data.revPrimer) {
-        lines.push(section('UNIVERSAL PRIMERS'));
-        if (data.fwdPrimer) {
-            lines.push('Forward Primer:');
-            lines.push(data.fwdPrimer);
-            lines.push('Forward Primer (reverse complement):');
-            lines.push(reverseComplement(data.fwdPrimer));
-        }
-        if (data.revPrimer) {
-            lines.push('Reverse Primer:');
-            lines.push(data.revPrimer);
-        }
-    }
 
     lines.push(section('FLANKING PRIMERS'));
     if (data.flankingFwdSeq) {
@@ -234,13 +187,21 @@ export const buildCompleteReportTxt = (data: CompleteReportData): string => {
     lines.push(section('FINAL ORDER SEQUENCES'));
     const fwdRC = data.fwdPrimer ? reverseComplement(data.fwdPrimer) : '';
     const fullOligo2 = (data.revPrimer || '') + data.moligo2Seq;
-    const fullOligo1 = data.moligo1Seq + (data.tagSeq?.toLowerCase() || '') + fwdRC;
-    lines.push('Oligo 2 (RevP + M2):');
+    const fullOligo1 = data.moligo1Seq + (data.tagSeq || '') + fwdRC;
+    lines.push(`${data.moligo2Name || 'Oligo 2'} (RevP + M2):`);
     lines.push(fullOligo2);
-    lines.push('Oligo 1 (M1 + TAG + RC-FwdP):');
+    lines.push(`${data.moligo1Name || 'Oligo 1'} (M1 + TAG + RC-FwdP):`);
     lines.push(fullOligo1);
+    if (data.flankingFwdSeq) {
+        lines.push(`${data.flankingFwdName || 'Flanking Fwd'}:`);
+        lines.push(data.flankingFwdSeq);
+    }
+    if (data.flankingRevSeq) {
+        lines.push(`${data.flankingRevName || 'Flanking Rev'}:`);
+        lines.push(data.flankingRevSeq);
+    }
 
     lines.push('\n--- End of Report ---\n');
 
-    return lines.join('\n');
+    return lines.join('\n').trimStart();
 };

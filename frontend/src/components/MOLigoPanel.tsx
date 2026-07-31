@@ -72,7 +72,7 @@ export default function MOLigoPanel(props: MOLigoProps) {
     const fwdRCSeq = reverseComplement(fwdPrimer || "");
 
     const leftOligoSeq = (revPrimer || "") + moligo2Seq;
-    const rightOligoSeq = moligo1Seq + (tagSeq || "").toLowerCase() + (fwdPrimer || "");
+    const rightOligoSeq = moligo1Seq + (tagSeq || "") + (fwdPrimer || "");
 
     const copyToClipboard = (text: string, label: string) => {
         if (!navigator.clipboard) return;
