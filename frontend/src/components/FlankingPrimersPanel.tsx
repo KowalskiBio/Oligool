@@ -553,8 +553,23 @@ export default function FlankingPrimersPanel({
 
     const extractTm = (analyzeData: any) => {
         if (!analyzeData || analyzeData.error) return null;
-        if (Array.isArray(analyzeData) && analyzeData.length > 0) return analyzeData[0].Tm;
-        return analyzeData.Tm;
+
+        const getTmFromObj = (obj: any) => {
+            if (obj === null || typeof obj !== 'object') return null;
+            return obj.IDT_Tm !== undefined ? obj.IDT_Tm
+                : obj.Tm !== undefined ? obj.Tm
+                    : obj.MeltingTemperature !== undefined ? obj.MeltingTemperature
+                        : obj.MeltTemp !== undefined ? obj.MeltTemp
+                            : obj.tm !== undefined ? obj.tm
+                                : obj.meltingTemperature !== undefined ? obj.meltingTemperature
+                                    : obj.meltTemp !== undefined ? obj.meltTemp
+                                        : null;
+        };
+
+        if (Array.isArray(analyzeData) && analyzeData.length > 0) {
+            return getTmFromObj(analyzeData[0]);
+        }
+        return getTmFromObj(analyzeData);
     };
 
     const renderResultCard = (title: string, data: any) => {
@@ -1125,16 +1140,10 @@ export default function FlankingPrimersPanel({
                         </button>
                     </div>
                 </div>
-                <div className="grid grid-cols-6 gap-2 text-[10px] text-slate-500 dark:text-slate-400">
+                <div className="grid grid-cols-7 gap-2 text-[10px] text-slate-500 dark:text-slate-400">
                     <div><span className="font-bold text-slate-600 dark:text-slate-300">Len</span><br />{p.length} bp</div>
-                    <div className="flex gap-2 items-center">
-                        <div><span className="font-bold text-slate-600 dark:text-slate-300">P3 Tm</span><br />{p.tm ?? p.primer3?.tm ?? '—'}°C</div>
-                        {indivResult?.stats && (
-                            <div title="IDT Tm" className="bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300 px-1.5 py-0.5 rounded border border-purple-200 dark:border-purple-800 self-end mb-0.5">
-                                <b className="font-bold">IDT: {extractTm(indivResult.stats)?.toFixed(1) || 'N/A'}°C</b>
-                            </div>
-                        )}
-                    </div>
+                    <div><span className="font-bold text-slate-600 dark:text-slate-300">P3 Tm</span><br />{p.tm ?? p.primer3?.tm ?? '—'}°C</div>
+                    <div><span className="font-bold text-slate-600 dark:text-slate-300" title="IDT Tm">IDT Tm</span><br />{indivResult?.analyze ? (extractTm(indivResult.analyze)?.toFixed(1) || 'N/A') + '°C' : '—'}</div>
                     <div><span className="font-bold text-slate-600 dark:text-slate-300" title="Strider duplex Tm">Strider Tm</span><br />{p.tm_strider != null ? `${p.tm_strider.toFixed(1)}°C` : '—'}</div>
                     <div><span className="font-bold text-slate-600 dark:text-slate-300">GC</span><br />{p.gc_percent ?? p.primer3?.gc_percent ?? '—'}%</div>
                     <div><span className="font-bold text-slate-600 dark:text-slate-300">Hairpin Tm</span><br /><span className={p.hairpin.structure_found ? 'text-amber-500' : 'text-emerald-500'}>{p.hairpin.structure_found ? `${p.primer3?.hairpin_th ?? '—'}°C` : 'None'}</span></div>

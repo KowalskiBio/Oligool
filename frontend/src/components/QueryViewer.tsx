@@ -1176,16 +1176,24 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
     }, [onFlankingPrimersUpdate]);
 
     const buildCompleteReport = (): CompleteReportData => {
-        const extractBestTm = (raw?: { IDT_Tm?: number; Tm?: number } | { IDT_Tm?: number; Tm?: number }[]): number | undefined => {
+        const extractBestTm = (raw?: Record<string, unknown> | Record<string, unknown>[]): number | undefined => {
             if (!raw) return undefined;
+            const keys = ['IDT_Tm', 'Tm', 'MeltingTemperature', 'MeltTemp', 'tm', 'meltingTemperature', 'meltTemp'];
+            const fromObj = (obj: Record<string, unknown>): number | undefined => {
+                for (const k of keys) {
+                    if (obj[k] !== undefined && obj[k] !== null) return obj[k] as number;
+                }
+                return undefined;
+            };
             if (Array.isArray(raw)) {
                 for (const item of raw) {
-                    if (item.IDT_Tm !== undefined) return item.IDT_Tm;
-                    if (item.Tm !== undefined) return item.Tm;
+                    if (item && typeof item === 'object') {
+                        const tm = fromObj(item as Record<string, unknown>);
+                        if (tm !== undefined) return tm;
+                    }
                 }
-            } else {
-                if (raw.IDT_Tm !== undefined) return raw.IDT_Tm;
-                if (raw.Tm !== undefined) return raw.Tm;
+            } else if (typeof raw === 'object') {
+                return fromObj(raw);
             }
             return undefined;
         };
@@ -1299,10 +1307,14 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
             idtM1Hairpin: idtResults?.m1?.hairpin,
             idtM1SelfDimer: idtResults?.m1?.self_dimer,
             idtM1Analyze: idtResults?.m1?.analyze,
+            moligo1TmP3: primers?.p1?.tm,
+            moligo1TmStrider: primers?.p1?.tm_strider ?? null,
             idtM1Tm: extractBestTm(idtResults?.m1?.analyze),
             idtM2Hairpin: idtResults?.m2?.hairpin,
             idtM2SelfDimer: idtResults?.m2?.self_dimer,
             idtM2Analyze: idtResults?.m2?.analyze,
+            moligo2TmP3: primers?.p2?.tm,
+            moligo2TmStrider: primers?.p2?.tm_strider ?? null,
             idtM2Tm: extractBestTm(idtResults?.m2?.analyze),
             idtPairwise: idtResults?.pairwise,
             savedPositions,
