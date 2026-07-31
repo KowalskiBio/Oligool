@@ -609,7 +609,8 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
                     if (col >= seqLen) continue;
                     const ch = (s.seq[col] || '-').toUpperCase();
                     const qch = (querySeq[col] || '-').toUpperCase();
-                    const isInternalDeletion = !isQuery && ch === '-' && col >= sStart && col <= sEnd;
+                    // require query base: both-gap columns are structural, not deletions
+                    const isInternalDeletion = !isQuery && ch === '-' && qch !== '-' && col >= sStart && col <= sEnd;
                     const isInsertion = !isQuery && qch === '-' && ch !== '-';
 
                     if (isInternalDeletion || isInsertion) {
@@ -949,7 +950,8 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
                     let fg = '#374151';
 
                     if (ch === '-') {
-                        if (!isQuery && col >= sStart && col <= sEnd) {
+                        // require query base: both-gap columns are structural, not deletions
+                        if (!isQuery && qch !== '-' && col >= sStart && col <= sEnd) {
                             bg = isDark ? '#3b0764' : '#f3e8ff';
                             fg = isDark ? '#d8b4fe' : '#7e22ce';
                         } else {
@@ -1012,7 +1014,8 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
                     const ch = (s.seq[col] || '-').toUpperCase();
                     const qch = (querySeq[col] || '-').toUpperCase();
 
-                    const isInternalDeletion = !isQuery && ch === '-' && col >= sStart && col <= sEnd;
+                    // require query base: both-gap columns are structural, not deletions
+                    const isInternalDeletion = !isQuery && ch === '-' && qch !== '-' && col >= sStart && col <= sEnd;
                     const isInsertion = !isQuery && qch === '-' && ch !== '-';
                     const isIndel = isInternalDeletion || isInsertion;
                     if (ch === '-' && !isIndel) continue;
@@ -1127,9 +1130,10 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
                     if (col >= seqLen) continue;
                     const ch = (s.seq[col] || '-').toUpperCase();
                     const qch = (querySeq[col] || '-').toUpperCase();
-                    if (ch === '-' && !(col >= sStart && col <= sEnd && !isQuery)) continue;
+                    // require query base: both-gap columns are structural, not deletions
+                    if (ch === '-' && !(!isQuery && qch !== '-' && col >= sStart && col <= sEnd)) continue;
 
-                    const isInternalDeletion = !isQuery && ch === '-' && col >= sStart && col <= sEnd;
+                    const isInternalDeletion = !isQuery && ch === '-' && qch !== '-' && col >= sStart && col <= sEnd;
                     const isInsertion = !isQuery && qch === '-' && ch !== '-';
 
                     if (isInternalDeletion || isInsertion) {
