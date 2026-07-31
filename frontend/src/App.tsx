@@ -542,7 +542,7 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                 title="Kliknutím zobrazíte novinky a návod k použití"
                 className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800 whitespace-nowrap cursor-pointer hover:bg-amber-200 dark:hover:bg-amber-900/50 transition-colors"
               >
-                v0.9.5 beta
+                v0.9.6 beta
               </button>
               {sessionMsg && (
                 <span
@@ -1168,6 +1168,47 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                 <button onClick={() => setShowWhatsNew(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-xl leading-none">&times;</button>
               </div>
               <div className="space-y-4 text-sm text-slate-700 dark:text-slate-300">
+                <section>
+                  <h3 className="font-semibold text-indigo-600 dark:text-indigo-400 mb-1">Viditelnost indelů v MSA přehledu</h3>
+                  <p>
+                    V horní MSA liště a v minimapě jsou nyní indely (inzerce/delece) viditelné
+                    jako fialové pruhy vedle červených mismatchů. Indely se vykreslují ve třech
+                    průchodech (základní pruhy → mismatchy → indely nahoře), takže nejsou překryty
+                    dalšími sekvencemi. Každý indel má minimální výšku 3 px, aby zůstal viditelný
+                    i při stovkách sekvencí, a zároveň respektuje Y pozici řádku (indel v řádcích
+                    80–90 označí pouze tento úsek, ne celou lištu).
+                  </p>
+                </section>
+                <section>
+                  <h3 className="font-semibold text-indigo-600 dark:text-indigo-400 mb-1">Tm hodnoty v reportu</h3>
+                  <p>
+                    MOLigo 1 a 2 v reportu nyní zobrazují Tm řádek se všemi třemi hodnotami
+                    (Primer3, Strider, IDT) vedle sebe, stejně jako flanking primery. Opraveno
+                    čtení IDT Tm — funkce nyní kontroluje 7 variant názvu klíče v IDT odpovědi
+                    (IDT_Tm, Tm, MeltingTemperature, …), takže IDT Tm již nezobrazuje N/A.
+                    V panelu flanking primerů je IDT Tm nyní běžná buňka v gridu vedle P3 a
+                    Strider, místo odlišného fialového badge.
+                  </p>
+                </section>
+                <section>
+                  <h3 className="font-semibold text-indigo-600 dark:text-indigo-400 mb-1">Čistší layout reportu</h3>
+                  <p>
+                    Z reportu jsme odstranili duplicitní pairwise sekci („Moligo 1 with Moligo 2
+                    pairwise“) — ponechali jsme pouze tu v „Secondary structure predictions“.
+                    Sekce „Universal primers“ (fwd/rev) byla odstraněna. Flanking primery jsou
+                    nyní rozděleny na tři podsekce: Forward, Reverse a třetí s názvem
+                    „FwdName × RevName“ s heterodimerem a amplicon length. Názvy primerů
+                    se používají místo generických „Primer1/Primer2“. TAG sekvence v reportu
+                    zachovává původní velikost písmen (nepřevádí na malá).
+                  </p>
+                </section>
+                <section>
+                  <h3 className="font-semibold text-indigo-600 dark:text-indigo-400 mb-1">Tlačítko Save dole</h3>
+                  <p>
+                    Vedle tlačítka „Create a report“ v pravém dolním rohu je nyní k dispozici
+                    tlačítko Save, takže relaci uložíte bez nutnosti scrollovat nahoru.
+                  </p>
+                </section>
                 <section>
                   <h3 className="font-semibold text-indigo-600 dark:text-indigo-400 mb-1">Přepracovaný design reportu (PDF/TXT)</h3>
                   <p>
