@@ -585,42 +585,55 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
         ctx.fillRect(MINIMAP_LABEL_W, rowsTop - 0.5, mmSeqW, 0.5);
 
         const sampleStep = Math.max(1, Math.floor(sequences.length / 200));
+        const pxStep = Math.max(1, seqLen / mmSeqW);
+        const mmMarkerH = Math.max(3, rowDrawH);
+
+        const mmSampled = [];
         for (let row = 0; row < sequences.length; row += sampleStep) {
             const s = sequences[row];
-            const y = rowsTop + row * rowH;
-            const isQuery = row === 0;
+            mmSampled.push({ s, isQuery: row === 0, sStart: seqStart(s.seq), sEnd: seqEnd(s.seq), y: rowsTop + row * rowH });
+        }
 
-            const sStart = seqStart(s.seq);
-            const sEnd = seqEnd(s.seq);
-            if (sStart <= sEnd) {
-                const x1 = MINIMAP_LABEL_W + (sStart / seqLen) * mmSeqW;
-                const x2 = MINIMAP_LABEL_W + ((sEnd + 1) / seqLen) * mmSeqW;
-                ctx.fillStyle = isQuery ? (isDark ? '#1e3a8a' : '#bfdbfe') : (isDark ? '#334155' : '#d1d5db');
-                ctx.fillRect(x1, y, x2 - x1, rowDrawH);
+        for (const r of mmSampled) {
+            if (r.sStart <= r.sEnd) {
+                const x1 = MINIMAP_LABEL_W + (r.sStart / seqLen) * mmSeqW;
+                const x2 = MINIMAP_LABEL_W + ((r.sEnd + 1) / seqLen) * mmSeqW;
+                ctx.fillStyle = r.isQuery ? (isDark ? '#1e3a8a' : '#bfdbfe') : (isDark ? '#334155' : '#d1d5db');
+                ctx.fillRect(x1, r.y, x2 - x1, rowDrawH);
             }
+        }
 
-            const pxStep = Math.max(1, seqLen / mmSeqW);
-            for (let x = 0; x < mmSeqW; x++) {
-                const colBase = Math.floor((x / mmSeqW) * seqLen);
-                const sampleCols = [colBase];
-                if (pxStep > 2) sampleCols.push(colBase + Math.floor(pxStep / 2));
+        // Per-row mismatch markers (red) then indel markers (purple, on top).
+        // Per-row Y preserves which rows have variation; 3px minimum height
+        // keeps rare single-row indels visible even with hundreds of sequences.
+        for (let pass = 1; pass <= 2; pass++) {
+            const wantIndel = pass === 2;
+            ctx.fillStyle = wantIndel ? '#9333ea' : '#dc2626';
+            for (const r of mmSampled) {
+                if (r.isQuery) continue;
+                for (let x = 0; x < mmSeqW; x++) {
+                    const colBase = Math.floor((x / mmSeqW) * seqLen);
+                    const sampleCols = [colBase];
+                    if (pxStep > 2) sampleCols.push(colBase + Math.floor(pxStep / 2));
 
-                for (const col of sampleCols) {
-                    if (col >= seqLen) continue;
-                    const ch = (s.seq[col] || '-').toUpperCase();
-                    const qch = (querySeq[col] || '-').toUpperCase();
-                    // require query base: both-gap columns are structural, not deletions
-                    const isInternalDeletion = !isQuery && ch === '-' && qch !== '-' && col >= sStart && col <= sEnd;
-                    const isInsertion = !isQuery && qch === '-' && ch !== '-';
+                    let found = false;
+                    for (const col of sampleCols) {
+                        if (col >= seqLen) continue;
+                        const ch = (r.s.seq[col] || '-').toUpperCase();
+                        const qch = (querySeq[col] || '-').toUpperCase();
+                        const isInternalDeletion = ch === '-' && qch !== '-' && col >= r.sStart && col <= r.sEnd;
+                        const isInsertion = qch === '-' && ch !== '-';
 
-                    if (isInternalDeletion || isInsertion) {
-                        ctx.fillStyle = '#9333ea';
-                        ctx.fillRect(MINIMAP_LABEL_W + x, y, 1.2, rowDrawH);
-                        break;
-                    } else if (!isQuery && ch !== '-' && ch !== qch && qch !== '-') {
-                        ctx.fillStyle = '#dc2626';
-                        ctx.fillRect(MINIMAP_LABEL_W + x, y, 1.2, rowDrawH);
-                        break;
+                        if (wantIndel) {
+                            if (isInternalDeletion || isInsertion) { found = true; break; }
+                        } else {
+                            if (isInternalDeletion || isInsertion) continue;
+                            if (ch !== '-' && ch !== qch && qch !== '-') { found = true; break; }
+                        }
+                    }
+
+                    if (found) {
+                        ctx.fillRect(MINIMAP_LABEL_W + x, r.y, 1.2, mmMarkerH);
                     }
                 }
             }
@@ -1091,59 +1104,67 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
 
         // ── MSA overview track (sticky) ──
         const msaTop = stickyY + MAIN_GC_TRACK_H;
-        const msaRowH = MAIN_MSA_TRACK_H / sequences.length; // fractional for positioning
-        const msaDrawH = Math.max(1, msaRowH); // minimum 1px for visibility
+        const msaRowH = MAIN_MSA_TRACK_H / sequences.length;
+        const msaDrawH = Math.max(1, msaRowH);
+        const markerH = Math.max(3, msaDrawH);
         ctx.fillStyle = isDark ? '#0f172a' : '#f1f5f9';
         ctx.fillRect(labelWidth, msaTop, availableWidth - labelWidth, MAIN_MSA_TRACK_H);
 
         const sampleStep = Math.max(1, Math.floor(sequences.length / 200));
+        const seqW = availableWidth - labelWidth - RIGHT_PADDING;
+        const pxStep = Math.max(1, seqLen / seqW);
+
+        const sampled = [];
         for (let row = 0; row < sequences.length; row += sampleStep) {
             const s = sequences[row];
-            const y = msaTop + row * msaRowH;
-            const isQuery = row === 0;
-            const sStart = seqStart(s.seq);
-            const sEnd = seqEnd(s.seq);
-            if (sStart <= sEnd) {
-                const barX1 = Math.max(labelWidth, labelWidth + sStart * cellW - scrollLeft);
-                const barX2 = Math.min(labelWidth + seqAreaW, labelWidth + (sEnd + 1) * cellW - scrollLeft);
+            sampled.push({ s, isQuery: row === 0, sStart: seqStart(s.seq), sEnd: seqEnd(s.seq), y: msaTop + row * msaRowH });
+        }
+
+        for (const r of sampled) {
+            if (r.sStart <= r.sEnd) {
+                const barX1 = Math.max(labelWidth, labelWidth + r.sStart * cellW - scrollLeft);
+                const barX2 = Math.min(labelWidth + seqAreaW, labelWidth + (r.sEnd + 1) * cellW - scrollLeft);
                 if (barX2 > barX1) {
-                    ctx.fillStyle = isQuery
+                    ctx.fillStyle = r.isQuery
                         ? (isDark ? '#1e3a8a' : '#bfdbfe')
                         : (isDark ? '#334155' : '#e2e8f0');
-                    ctx.fillRect(barX1, y, barX2 - barX1, msaDrawH);
+                    ctx.fillRect(barX1, r.y, barX2 - barX1, msaDrawH);
                 }
             }
-            const seqW = availableWidth - labelWidth - RIGHT_PADDING;
-            const pxStep = Math.max(1, seqLen / seqW);
+        }
 
-            // Optimized: Iterate over visible pixels, not every column.
-            // (availableWidth - labelWidth) is the visible sequence area width.
-            for (let x = 0; x < availableWidth - labelWidth; x++) {
-                const colBase = Math.floor(((x + scrollLeft) / seqW) * seqLen * viewFraction);
-                if (colBase < 0 || colBase >= seqLen) continue;
+        // Per-row mismatch markers (red) then indel markers (purple, on top).
+        // Per-row Y preserves which rows have variation; 3px minimum height
+        // keeps rare single-row indels visible even with hundreds of sequences.
+        for (let pass = 1; pass <= 2; pass++) {
+            const wantIndel = pass === 2;
+            ctx.fillStyle = wantIndel ? '#9333ea' : '#dc2626';
+            for (const r of sampled) {
+                if (r.isQuery) continue;
+                for (let x = 0; x < availableWidth - labelWidth; x++) {
+                    const colBase = Math.floor(((x + scrollLeft) / seqW) * seqLen * viewFraction);
+                    if (colBase < 0 || colBase >= seqLen) continue;
+                    const sampleCols = [colBase];
+                    if (pxStep > 2) sampleCols.push(colBase + Math.floor(pxStep / 2));
 
-                // Sample 2 points per pixel area
-                const sampleCols = [colBase];
-                if (pxStep > 2) sampleCols.push(colBase + Math.floor(pxStep / 2));
+                    let found = false;
+                    for (const col of sampleCols) {
+                        if (col >= seqLen) continue;
+                        const ch = (r.s.seq[col] || '-').toUpperCase();
+                        const qch = (querySeq[col] || '-').toUpperCase();
+                        const isInternalDeletion = ch === '-' && qch !== '-' && col >= r.sStart && col <= r.sEnd;
+                        const isInsertion = qch === '-' && ch !== '-';
 
-                for (const col of sampleCols) {
-                    if (col >= seqLen) continue;
-                    const ch = (s.seq[col] || '-').toUpperCase();
-                    const qch = (querySeq[col] || '-').toUpperCase();
-                    // require query base: both-gap columns are structural, not deletions
-                    if (ch === '-' && !(!isQuery && qch !== '-' && col >= sStart && col <= sEnd)) continue;
+                        if (wantIndel) {
+                            if (isInternalDeletion || isInsertion) { found = true; break; }
+                        } else {
+                            if (isInternalDeletion || isInsertion) continue;
+                            if (ch !== '-' && ch !== qch && qch !== '-') { found = true; break; }
+                        }
+                    }
 
-                    const isInternalDeletion = !isQuery && ch === '-' && qch !== '-' && col >= sStart && col <= sEnd;
-                    const isInsertion = !isQuery && qch === '-' && ch !== '-';
-
-                    if (isInternalDeletion || isInsertion) {
-                        ctx.fillStyle = '#9333ea';
-                        ctx.fillRect(labelWidth + x, y, 1.2, msaDrawH);
-                        break;
-                    } else if (!isQuery && ch !== '-' && ch !== qch && qch !== '-') {
-                        ctx.fillStyle = '#dc2626';
-                        ctx.fillRect(labelWidth + x, y, 1.2, msaDrawH);
-                        break;
+                    if (found) {
+                        ctx.fillRect(labelWidth + x, r.y, 1.2, markerH);
                     }
                 }
             }
