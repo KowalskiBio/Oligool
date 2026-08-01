@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useMemo, useCallback, forwardRef, useImperativeHandle } from 'react';
 import { findCleanRegions, computeMismatchCols, type CleanRegion } from '../utils/msa';
+import { buildAnchorGrid, buildInsertRuns, groupInsertsByRow, firstAnchorAtOrAfter, lastAnchorAtOrBefore, gappedRangeToAnchor, type InsertEntry } from '../utils/anchorGrid';
 
 /* ── helpers ────────────────────────────────────────── */
 const getPrettyStep = (minPixels: number, pixelsPerUnit: number) => {
@@ -285,6 +286,34 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
     const seqLen = sequences.length > 0 ? Math.max(...sequences.map((s) => s.seq.length)) : 0;
     const querySeq = sequences.length > 0 ? sequences[0].seq : '';
 
+    /* ── anchor grid: query residues only; inserts render as overlays ── */
+    const anchorGrid = useMemo(() => buildAnchorGrid(querySeq), [querySeq]);
+    const { anchorLen, anchorCols } = anchorGrid;
+    const insertEntries = useMemo<InsertEntry[]>(() => buildInsertRuns(sequences, anchorGrid), [sequences, anchorGrid]);
+    const insertsByRow = useMemo(() => groupInsertsByRow(insertEntries), [insertEntries]);
+
+    // External props arrive as gapped column ranges; convert once to anchor space
+    const primersA = useMemo(() => {
+        if (!primers) return null;
+        return {
+            p1: gappedRangeToAnchor(anchorCols, primers.p1.start, primers.p1.end),
+            p2: gappedRangeToAnchor(anchorCols, primers.p2.start, primers.p2.end),
+        };
+    }, [primers, anchorCols]);
+
+    const flankingPrimersA = useMemo(() => {
+        if (!flankingPrimers) return null;
+        return {
+            fwd: flankingPrimers.fwd ? gappedRangeToAnchor(anchorCols, flankingPrimers.fwd.start, flankingPrimers.fwd.end) : null,
+            rev: flankingPrimers.rev ? gappedRangeToAnchor(anchorCols, flankingPrimers.rev.start, flankingPrimers.rev.end) : null,
+        };
+    }, [flankingPrimers, anchorCols]);
+
+    const restoredA = useMemo(() => {
+        if (!restoredRegion) return null;
+        return gappedRangeToAnchor(anchorCols, restoredRegion.start, restoredRegion.end);
+    }, [restoredRegion, anchorCols]);
+
     useEffect(() => {
         setLabelWidth(calculateAutoWidth(sequences));
     }, [sequences, calculateAutoWidth]);
@@ -314,8 +343,8 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
     /* ── sizing ─────────────────────────────────────────── */
     const seqAreaW = Math.max(1, availableWidth - labelWidth - RIGHT_PADDING);
     const totalVirtualW = seqAreaW / viewFraction;
-    const cellW = seqLen > 0 ? totalVirtualW / seqLen : 1;
-    const visibleBases = seqLen * viewFraction;
+    const cellW = anchorLen > 0 ? totalVirtualW / anchorLen : 1;
+    const visibleBases = anchorLen * viewFraction;
     const totalH = MAIN_GC_TRACK_H + MAIN_MSA_TRACK_H + RULER_HEIGHT + sequences.length * ROW_HEIGHT + 4;
 
     // Keep live refs up-to-date for use inside setInterval (avoids stale closures)
@@ -326,33 +355,31 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
     /* ── viewport fractions ────────────────────────────── */
     const startFrac = totalVirtualW > 0 ? scrollLeft / totalVirtualW : 0;
     const endFrac = Math.min(1, startFrac + viewFraction);
-    const startCol = Math.max(0, Math.floor(startFrac * seqLen));
-    const endCol = Math.min(seqLen - 1, Math.ceil(endFrac * seqLen) - 1);
+    const startCol = Math.max(0, Math.floor(startFrac * anchorLen));
+    const endCol = Math.min(anchorLen - 1, Math.ceil(endFrac * anchorLen) - 1);
 
     /* ── broadcast visible query range ─────────────────── */
     useEffect(() => {
-        if (sequences.length > 0 && onVisibleQueryChange) {
-            // Provide the visible slice of the query (first sequence)
+        if (sequences.length > 0 && onVisibleQueryChange && anchorLen > 0) {
+            // Provide the visible slice of the query (first sequence).
+            // startCol/endCol are anchor indices; the consumer contract is gapped columns.
             const query = sequences[0];
-            const start = Math.max(0, startCol);
-            const end = Math.min(query.seq.length - 1, endCol);
-            const slice = query.seq.slice(start, end + 1);
-            // Compute full ungapped sequence and ungapped offset of this window
+            const start = Math.max(0, Math.min(anchorLen - 1, startCol));
+            const end = Math.min(anchorLen - 1, endCol);
+            const gappedStart = anchorCols[start];
+            const gappedEnd = anchorCols[end];
+            const slice = query.seq.slice(gappedStart, gappedEnd + 1);
             const fullSeq = query.seq.replace(/-/g, '');
-            let ungappedOffset = 0;
-            for (let i = 0; i < start; i++) {
-                if (query.seq[i] !== '-') ungappedOffset++;
-            }
             onVisibleQueryChange({
                 id: query.id,
                 seq: slice,
-                start: start,
-                end: end,
+                start: gappedStart,
+                end: gappedEnd,
                 fullSeq,
-                ungappedOffset,
+                ungappedOffset: start,
             });
         }
-    }, [sequences, startCol, endCol, onVisibleQueryChange]);
+    }, [sequences, startCol, endCol, onVisibleQueryChange, anchorLen, anchorCols]);
 
     /* ── auto-switch mode with hysteresis ──────────────── */
     useEffect(() => {
@@ -410,18 +437,23 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
 
     /* ── navigate to a specific column range ────────────── */
     useEffect(() => {
-        if (!navigateTarget || seqLen === 0) return;
+        if (!navigateTarget || anchorLen === 0) return;
         const { colStart, colEnd } = navigateTarget;
+        // navigateTarget arrives as gapped columns; the viewport works in anchor space
+        const a0 = firstAnchorAtOrAfter(anchorCols, colStart);
+        const a1 = lastAnchorAtOrBefore(anchorCols, colEnd);
+        const colStartA = Math.max(0, Math.min(anchorLen - 1, a0));
+        const colEndA = a1 < a0 ? colStartA : Math.max(0, Math.min(anchorLen - 1, a1));
         // For small targets (primers ~20bp): use tiny padding so visibleBases < 85
         // and the viewer auto-switches to letter/sequence mode.
         // For large targets (regions): use generous padding for context.
-        const span = colEnd - colStart + 1;
+        const span = colEndA - colStartA + 1;
         const PADDING = span < 100 ? 20 : 150;
-        const visStart = Math.max(0, colStart - PADDING);
-        const visEnd = Math.min(seqLen - 1, colEnd + PADDING);
+        const visStart = Math.max(0, colStartA - PADDING);
+        const visEnd = Math.min(anchorLen - 1, colEndA + PADDING);
         const spanCols = visEnd - visStart + 1;
-        const newVF = Math.max(0.005, Math.min(1, spanCols / seqLen));
-        const centerFrac = (colStart + colEnd) / (2 * seqLen);
+        const newVF = Math.max(0.005, Math.min(1, spanCols / anchorLen));
+        const centerFrac = (colStartA + colEndA) / (2 * anchorLen);
         const newTotalVW = seqAreaW / newVF;
         let newSL = centerFrac * newTotalVW - seqAreaW / 2;
         newSL = Math.max(0, Math.min(newTotalVW - seqAreaW, newSL));
@@ -451,11 +483,13 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
     };
 
     const copySelection = () => {
-        if (sequences.length === 0) return;
+        if (sequences.length === 0 || anchorLen === 0) return;
         const query = sequences[0];
-        const sub = query.seq.slice(startCol, endCol + 1);
+        const start = Math.max(0, Math.min(anchorLen - 1, startCol));
+        const end = Math.min(anchorLen - 1, endCol);
+        const sub = query.seq.slice(anchorCols[start], anchorCols[end] + 1).replace(/-/g, '');
         navigator.clipboard.writeText(sub).then(() => {
-            showCopyFeedback(`Copied query pos ${startCol + 1}–${endCol + 1} (${sub.length} bp)`);
+            showCopyFeedback(`Copied query pos ${start + 1}–${end + 1} (${sub.length} bp)`);
         });
     };
 
@@ -507,9 +541,11 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
 
     /* ── selection statistics (visible range) ─────── */
     const selectionStats = useMemo(() => {
-        if (sequences.length === 0) return null;
+        if (sequences.length === 0 || anchorLen === 0) return null;
         const query = sequences[0];
-        const sub = query.seq.slice(startCol, endCol + 1).toUpperCase();
+        const start = Math.max(0, Math.min(anchorLen - 1, startCol));
+        const end = Math.min(anchorLen - 1, endCol);
+        const sub = query.seq.slice(anchorCols[start], anchorCols[end] + 1).toUpperCase();
         let g = 0, c = 0, a = 0, t = 0, total = 0;
         for (const char of sub) {
             if (char === 'G') g++;
@@ -520,7 +556,7 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
         }
         const gcPct = total > 0 ? ((g + c) / total) * 100 : 0;
         return { g, c, a, t, total, gcPct };
-    }, [sequences, startCol, endCol]);
+    }, [sequences, startCol, endCol, anchorLen, anchorCols]);
 
     const drawMinimapBackground = useCallback(() => {
         if (!sequences.length) return;
@@ -553,10 +589,10 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
         ctx.fillText('GC%', MINIMAP_LABEL_W - 4, MINIMAP_GC_H / 2);
         ctx.fillText('MSA', MINIMAP_LABEL_W - 4, rowsTop + rowAreaH / 2);
 
-        for (let col = 0; col < seqLen; col++) {
-            const x = MINIMAP_LABEL_W + (col / seqLen) * mmSeqW;
-            const w = Math.max(1, mmSeqW / seqLen);
-            const gc = gcContent[col] || 0;
+        for (let a = 0; a < anchorLen; a++) {
+            const x = MINIMAP_LABEL_W + (a / anchorLen) * mmSeqW;
+            const w = Math.max(1, mmSeqW / anchorLen);
+            const gc = gcContent[anchorCols[a]] || 0;
             const r = Math.round(255 - gc * 150);
             const g = Math.round(180 + gc * 60);
             const b = Math.round(50 + gc * 100);
@@ -571,39 +607,44 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
         ctx.font = '8px ui-monospace, SFMono-Regular, monospace';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'bottom';
-        const tickInt = getPrettyStep(150, mmSeqW / seqLen);
-        for (let col = 0; col < seqLen; col++) {
-            if ((col + 1) % tickInt === 0) {
-                const x = MINIMAP_LABEL_W + ((col + 0.5) / seqLen) * mmSeqW;
+        const tickInt = getPrettyStep(150, mmSeqW / anchorLen);
+        for (let a = 0; a < anchorLen; a++) {
+            if ((a + 1) % tickInt === 0) {
+                const x = MINIMAP_LABEL_W + ((a + 0.5) / anchorLen) * mmSeqW;
                 ctx.fillStyle = isDark ? '#334155' : '#cbd5e1';
                 ctx.fillRect(x, MINIMAP_GC_H + MINIMAP_RULER_H - 4, 1, 4);
                 ctx.fillStyle = '#94a3b8';
-                ctx.fillText(String(col + 1), x, MINIMAP_GC_H + MINIMAP_RULER_H - 5);
+                ctx.fillText(String(a + 1), x, MINIMAP_GC_H + MINIMAP_RULER_H - 5);
             }
         }
         ctx.fillStyle = isDark ? '#334155' : '#e2e8f0';
         ctx.fillRect(MINIMAP_LABEL_W, rowsTop - 0.5, mmSeqW, 0.5);
 
         const sampleStep = Math.max(1, Math.floor(sequences.length / 200));
-        const pxStep = Math.max(1, seqLen / mmSeqW);
+        const pxStep = Math.max(1, anchorLen / mmSeqW);
         const mmMarkerH = Math.max(3, rowDrawH);
 
         const mmSampled = [];
         for (let row = 0; row < sequences.length; row += sampleStep) {
             const s = sequences[row];
-            mmSampled.push({ s, isQuery: row === 0, sStart: seqStart(s.seq), sEnd: seqEnd(s.seq), y: rowsTop + row * rowH });
+            const sStart = seqStart(s.seq);
+            const sEnd = seqEnd(s.seq);
+            // aligned span converted to anchor space so bars are contiguous across insert columns
+            const aS = firstAnchorAtOrAfter(anchorCols, sStart);
+            const aE = lastAnchorAtOrBefore(anchorCols, sEnd);
+            mmSampled.push({ s, isQuery: row === 0, sStart, sEnd, aS, aE, y: rowsTop + row * rowH });
         }
 
         for (const r of mmSampled) {
-            if (r.sStart <= r.sEnd) {
-                const x1 = MINIMAP_LABEL_W + (r.sStart / seqLen) * mmSeqW;
-                const x2 = MINIMAP_LABEL_W + ((r.sEnd + 1) / seqLen) * mmSeqW;
+            if (r.aS <= r.aE) {
+                const x1 = MINIMAP_LABEL_W + (r.aS / anchorLen) * mmSeqW;
+                const x2 = MINIMAP_LABEL_W + ((r.aE + 1) / anchorLen) * mmSeqW;
                 ctx.fillStyle = r.isQuery ? (isDark ? '#1e3a8a' : '#bfdbfe') : (isDark ? '#334155' : '#d1d5db');
                 ctx.fillRect(x1, r.y, x2 - x1, rowDrawH);
             }
         }
 
-        // Per-row mismatch markers (red) then indel markers (purple, on top).
+        // Per-row mismatch markers (red) then deletion markers (purple, on top).
         // Per-row Y preserves which rows have variation; 3px minimum height
         // keeps rare single-row indels visible even with hundreds of sequences.
         for (let pass = 1; pass <= 2; pass++) {
@@ -612,23 +653,22 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
             for (const r of mmSampled) {
                 if (r.isQuery) continue;
                 for (let x = 0; x < mmSeqW; x++) {
-                    const colBase = Math.floor((x / mmSeqW) * seqLen);
-                    const sampleCols = [colBase];
-                    if (pxStep > 2) sampleCols.push(colBase + Math.floor(pxStep / 2));
+                    const aBase = Math.floor((x / mmSeqW) * anchorLen);
+                    const sampleA = [aBase];
+                    if (pxStep > 2) sampleA.push(aBase + Math.floor(pxStep / 2));
 
                     let found = false;
-                    for (const col of sampleCols) {
-                        if (col >= seqLen) continue;
+                    for (const a of sampleA) {
+                        if (a >= anchorLen) continue;
+                        const col = anchorCols[a];
                         const ch = (r.s.seq[col] || '-').toUpperCase();
                         const qch = (querySeq[col] || '-').toUpperCase();
-                        const isInternalDeletion = ch === '-' && qch !== '-' && col >= r.sStart && col <= r.sEnd;
-                        const isInsertion = qch === '-' && ch !== '-';
+                        const isInternalDeletion = ch === '-' && col >= r.sStart && col <= r.sEnd;
 
                         if (wantIndel) {
-                            if (isInternalDeletion || isInsertion) { found = true; break; }
+                            if (isInternalDeletion) { found = true; break; }
                         } else {
-                            if (isInternalDeletion || isInsertion) continue;
-                            if (ch !== '-' && ch !== qch && qch !== '-') { found = true; break; }
+                            if (!isInternalDeletion && ch !== '-' && ch !== qch) { found = true; break; }
                         }
                     }
 
@@ -639,39 +679,47 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
             }
         }
 
-        if (primers) {
+        // Insertion markers (blue) come from the insert runs, not per-pixel sampling.
+        ctx.fillStyle = '#3b82f6';
+        for (const entry of insertEntries) {
+            if (entry.row % sampleStep !== 0) continue;
+            const x = MINIMAP_LABEL_W + (entry.boundary / anchorLen) * mmSeqW;
+            ctx.fillRect(x, rowsTop + entry.row * rowH, 1.2, mmMarkerH);
+        }
+
+        if (primersA) {
             const mmRulerY = MINIMAP_GC_H;
             const mmRulerH = MINIMAP_RULER_H;
-            const p1x = MINIMAP_LABEL_W + (primers.p1.start / seqLen) * mmSeqW;
-            const p1w = Math.max(1, ((primers.p1.end - primers.p1.start) / seqLen) * mmSeqW);
+            const p1x = MINIMAP_LABEL_W + (primersA.p1.start / anchorLen) * mmSeqW;
+            const p1w = Math.max(1, ((primersA.p1.end - primersA.p1.start) / anchorLen) * mmSeqW);
             ctx.fillStyle = '#22c55e';
             ctx.fillRect(p1x, mmRulerY + mmRulerH - 4, p1w, 4);
-            const p2x = MINIMAP_LABEL_W + (primers.p2.start / seqLen) * mmSeqW;
-            const p2w = Math.max(1, ((primers.p2.end - primers.p2.start) / seqLen) * mmSeqW);
+            const p2x = MINIMAP_LABEL_W + (primersA.p2.start / anchorLen) * mmSeqW;
+            const p2w = Math.max(1, ((primersA.p2.end - primersA.p2.start) / anchorLen) * mmSeqW);
             ctx.fillStyle = '#facc15';
             ctx.fillRect(p2x, mmRulerY + mmRulerH - 4, p2w, 4);
         }
 
         // Flanking primers (designed in lower panel) — drawn above the oligo bars
-        if (flankingPrimers) {
+        if (flankingPrimersA) {
             const mmRulerY = MINIMAP_GC_H;
-            if (flankingPrimers.fwd) {
-                const fx = MINIMAP_LABEL_W + (flankingPrimers.fwd.start / seqLen) * mmSeqW;
-                const fw = Math.max(2, ((flankingPrimers.fwd.end - flankingPrimers.fwd.start) / seqLen) * mmSeqW);
+            if (flankingPrimersA.fwd) {
+                const fx = MINIMAP_LABEL_W + (flankingPrimersA.fwd.start / anchorLen) * mmSeqW;
+                const fw = Math.max(2, ((flankingPrimersA.fwd.end - flankingPrimersA.fwd.start) / anchorLen) * mmSeqW);
                 ctx.fillStyle = '#10b981'; // emerald-500
                 ctx.fillRect(fx, mmRulerY, fw, 3);
             }
-            if (flankingPrimers.rev) {
-                const rx = MINIMAP_LABEL_W + (flankingPrimers.rev.start / seqLen) * mmSeqW;
-                const rw = Math.max(2, ((flankingPrimers.rev.end - flankingPrimers.rev.start) / seqLen) * mmSeqW);
+            if (flankingPrimersA.rev) {
+                const rx = MINIMAP_LABEL_W + (flankingPrimersA.rev.start / anchorLen) * mmSeqW;
+                const rw = Math.max(2, ((flankingPrimersA.rev.end - flankingPrimersA.rev.start) / anchorLen) * mmSeqW);
                 ctx.fillStyle = '#14b8a6'; // teal-500
                 ctx.fillRect(rx, mmRulerY, rw, 3);
             }
         }
 
-        if (restoredRegion && restoredRegion.start < restoredRegion.end) {
-            const rx = MINIMAP_LABEL_W + Math.max(0, (restoredRegion.start / seqLen) * mmSeqW);
-            const rw = Math.max(2, ((restoredRegion.end - restoredRegion.start) / seqLen) * mmSeqW);
+        if (restoredA && restoredA.start < restoredA.end) {
+            const rx = MINIMAP_LABEL_W + Math.max(0, (restoredA.start / anchorLen) * mmSeqW);
+            const rw = Math.max(2, ((restoredA.end - restoredA.start) / anchorLen) * mmSeqW);
             ctx.fillStyle = isDark ? 'rgba(99, 102, 241, 0.35)' : 'rgba(99, 102, 241, 0.25)';
             ctx.fillRect(rx, MINIMAP_GC_H + 4, rw, MINIMAP_RULER_H + 42);
             ctx.strokeStyle = isDark ? 'rgba(129, 140, 248, 0.7)' : 'rgba(67, 56, 202, 0.6)';
@@ -683,7 +731,7 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
         ctx.fillRect(MINIMAP_LABEL_W - 1, 0, 1, MINIMAP_HEIGHT);
 
         staticMinimapDrawnRef.current = true;
-    }, [sequences, querySeq, seqLen, availableWidth, gcContent, primers, flankingPrimers, isDark, restoredRegion]);
+    }, [sequences, querySeq, anchorLen, anchorCols, insertEntries, availableWidth, gcContent, primersA, flankingPrimersA, isDark, restoredA]);
 
     const drawMinimap = useCallback(() => {
         const cvs = minimapRef.current;
@@ -744,9 +792,9 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
         }
 
         const hoverCol = hoverColRef.current;
-        if (hoverCol !== null && hoverCol >= 0 && hoverCol < seqLen) {
-            const hx = MINIMAP_LABEL_W + (hoverCol / seqLen) * mmSeqW;
-            ctx.strokeStyle = mismatchCols.has(hoverCol) ? '#ef4444' : '#3b82f6';
+        if (hoverCol !== null && hoverCol >= 0 && hoverCol < anchorLen) {
+            const hx = MINIMAP_LABEL_W + (hoverCol / anchorLen) * mmSeqW;
+            ctx.strokeStyle = mismatchCols.has(anchorCols[hoverCol]) ? '#ef4444' : '#3b82f6';
             ctx.lineWidth = 1;
             ctx.beginPath();
             ctx.moveTo(Math.floor(hx) + 0.5, rowsTop);
@@ -756,7 +804,7 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
 
         ctx.fillStyle = isDark ? '#334155' : '#cbd5e1';
         ctx.fillRect(MINIMAP_LABEL_W - 1, 0, 1, MINIMAP_HEIGHT);
-    }, [sequences.length, availableWidth, startFrac, endFrac, viewFraction, selectionRange, isDark, drawMinimapBackground, seqLen, mismatchCols]);
+    }, [sequences.length, availableWidth, startFrac, endFrac, viewFraction, selectionRange, isDark, drawMinimapBackground, anchorLen, anchorCols, mismatchCols]);
 
     useEffect(() => {
         staticMinimapDrawnRef.current = false;
@@ -863,8 +911,8 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
         const mouseXFrac = (e.clientX - rect.left - MINIMAP_LABEL_W) / mmSeqW;
 
         // Set hover column for cursor line
-        const col = Math.floor(mouseXFrac * seqLen);
-        const newCol = col >= 0 && col < seqLen ? col : null;
+        const col = Math.floor(mouseXFrac * anchorLen);
+        const newCol = col >= 0 && col < anchorLen ? col : null;
         if (newCol !== hoverColRef.current) {
             hoverColRef.current = newCol;
             cancelAnimationFrame(hoverRafRef.current);
@@ -888,7 +936,7 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
         } else {
             canvas.style.cursor = 'crosshair';
         }
-    }, [viewFraction, scrollLeft, availableWidth, seqLen]);
+    }, [viewFraction, scrollLeft, availableWidth, anchorLen]);
 
     const handleMinimapMouseLeave = useCallback(() => {
         if (hoverColRef.current !== null) {
@@ -923,7 +971,7 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
         ctx.translate(0, -scrollTop);
 
         const firstCol = Math.max(0, Math.floor(scrollLeft / cellW));
-        const lastCol = Math.min(seqLen - 1, Math.ceil((scrollLeft + seqAreaW) / cellW));
+        const lastCol = Math.min(anchorLen - 1, Math.ceil((scrollLeft + seqAreaW) / cellW));
 
         /* ── clip sequence area so it never bleeds into labels ── */
         ctx.save();
@@ -953,28 +1001,26 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
             }
 
             if (viewMode === 'letters') {
-                for (let col = firstCol; col <= lastCol; col++) {
+                for (let a = firstCol; a <= lastCol; a++) {
+                    const col = anchorCols[a];
                     const ch = (s.seq[col] || '-').toUpperCase();
-                    const qch = (querySeq[col] || '-').toUpperCase();
+                    const qch = querySeq[col].toUpperCase(); // anchor columns always hold a query base
 
-                    const x = labelWidth + col * cellW - scrollLeft;
+                    const x = labelWidth + a * cellW - scrollLeft;
 
                     let bg = '#f3f4f6'; // default/match gray
                     let fg = '#374151';
 
                     if (ch === '-') {
-                        // require query base: both-gap columns are structural, not deletions
-                        if (!isQuery && qch !== '-' && col >= sStart && col <= sEnd) {
+                        // deletion in the hit (within its aligned span), or structural gap outside it
+                        if (!isQuery && col >= sStart && col <= sEnd) {
                             bg = isDark ? '#3b0764' : '#f3e8ff';
                             fg = isDark ? '#d8b4fe' : '#7e22ce';
                         } else {
                             bg = isDark ? '#0f172a' : '#f3f4f6';
                             fg = isDark ? '#475569' : '#9ca3af';
                         }
-                    } else if (!isQuery && qch === '-' && ch !== '-') {
-                        bg = isDark ? '#3b0764' : '#f3e8ff';
-                        fg = isDark ? '#d8b4fe' : '#7e22ce';
-                    } else if (!isQuery && ch !== qch && qch !== '-') {
+                    } else if (!isQuery && ch !== qch) {
                         bg = isDark ? '#7f1d1d' : '#fee2e2';
                         fg = isDark ? '#fecaca' : '#b91c1c';
                     } else {
@@ -982,19 +1028,19 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
                         fg = isDark ? '#cbd5e1' : '#374151';
 
                         if (isQuery) {
-                            if (restoredRegion && col >= restoredRegion.start && col < restoredRegion.end) {
+                            if (restoredA && a >= restoredA.start && a < restoredA.end) {
                                 bg = isDark ? '#3730a3' : '#c7d2fe';
                                 fg = isDark ? '#e0e7ff' : '#312e81';
-                            } else if (primers && col >= primers.p1.start && col < primers.p1.end) {
+                            } else if (primersA && a >= primersA.p1.start && a < primersA.p1.end) {
                                 bg = isDark ? '#065f46' : '#86efac';
                                 fg = isDark ? '#a7f3d0' : '#064e3b';
-                            } else if (primers && col >= primers.p2.start && col < primers.p2.end) {
+                            } else if (primersA && a >= primersA.p2.start && a < primersA.p2.end) {
                                 bg = isDark ? '#92400e' : '#fde047';
                                 fg = isDark ? '#fef3c7' : '#78350f';
-                            } else if (flankingPrimers?.fwd && col >= flankingPrimers.fwd.start && col < flankingPrimers.fwd.end) {
+                            } else if (flankingPrimersA?.fwd && a >= flankingPrimersA.fwd.start && a < flankingPrimersA.fwd.end) {
                                 bg = isDark ? '#047857' : '#34d399';
                                 fg = isDark ? '#d1fae5' : '#022c22';
-                            } else if (flankingPrimers?.rev && col >= flankingPrimers.rev.start && col < flankingPrimers.rev.end) {
+                            } else if (flankingPrimersA?.rev && a >= flankingPrimersA.rev.start && a < flankingPrimersA.rev.end) {
                                 bg = isDark ? '#0f766e' : '#2dd4bf';
                                 fg = isDark ? '#ccfbf1' : '#042f2e';
                             }
@@ -1010,11 +1056,56 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
                     ctx.textBaseline = 'middle';
                     ctx.fillText(ch, x + cellW / 2, y + ROW_HEIGHT / 2);
                 }
+
+                // Inserted hit bases don't occupy anchor columns — overlay them as
+                // compressed underlined text on the boundary between columns.
+                if (!isQuery) {
+                    const rowInserts = insertsByRow.get(row);
+                    if (rowInserts) {
+                        for (const entry of rowInserts) {
+                            if (entry.boundary < firstCol || entry.boundary > lastCol + 1) continue;
+                            const bx = labelWidth + entry.boundary * cellW - scrollLeft;
+                            if (bx < labelWidth || bx > labelWidth + seqAreaW) continue;
+                            const n = entry.text.length;
+                            const plaqueX = Math.max(labelWidth, bx - cellW / 2);
+                            const clampedW = Math.min(cellW, labelWidth + seqAreaW - plaqueX);
+                            if (clampedW <= 0) continue;
+                            ctx.fillStyle = isDark ? 'rgba(15,23,42,0.85)' : 'rgba(255,255,255,0.85)';
+                            ctx.fillRect(plaqueX, y, clampedW, ROW_HEIGHT);
+                            const charW = clampedW / n;
+                            const fs = charW / 0.6;
+                            if (fs >= 4) {
+                                ctx.fillStyle = isDark ? '#bfdbfe' : '#1d4ed8';
+                                ctx.font = `${Math.min(9, Math.max(4, fs))}px ui-monospace, SFMono-Regular, monospace`;
+                                ctx.textAlign = 'center';
+                                ctx.textBaseline = 'middle';
+                                for (let i = 0; i < n; i++) {
+                                    ctx.fillText(entry.text[i], plaqueX + i * charW + charW / 2, y + ROW_HEIGHT / 2);
+                                }
+                            } else {
+                                const label = `+${n}`;
+                                const labelFs = clampedW / (0.6 * label.length);
+                                if (labelFs >= 4) {
+                                    ctx.fillStyle = isDark ? '#bfdbfe' : '#1d4ed8';
+                                    ctx.font = `${Math.min(9, labelFs)}px ui-monospace, SFMono-Regular, monospace`;
+                                    ctx.textAlign = 'center';
+                                    ctx.textBaseline = 'middle';
+                                    ctx.fillText(label, plaqueX + clampedW / 2, y + ROW_HEIGHT / 2);
+                                }
+                            }
+                            ctx.fillStyle = '#3b82f6';
+                            ctx.fillRect(plaqueX, y + ROW_HEIGHT - 3.5, clampedW, 1.5);
+                        }
+                    }
+                }
             }
             else {
-                if (sStart <= sEnd) {
-                    const barX1 = Math.floor(Math.max(labelWidth, labelWidth + sStart * cellW - scrollLeft));
-                    const barX2 = Math.ceil(Math.min(labelWidth + seqAreaW, labelWidth + (sEnd + 1) * cellW - scrollLeft));
+                // aligned span converted to anchor space so the bar is contiguous
+                const aS = firstAnchorAtOrAfter(anchorCols, sStart);
+                const aE = lastAnchorAtOrBefore(anchorCols, sEnd);
+                if (aS <= aE) {
+                    const barX1 = Math.floor(Math.max(labelWidth, labelWidth + aS * cellW - scrollLeft));
+                    const barX2 = Math.ceil(Math.min(labelWidth + seqAreaW, labelWidth + (aE + 1) * cellW - scrollLeft));
                     if (barX2 > barX1) {
                         ctx.fillStyle = isQuery
                             ? (isDark ? '#1e3a8a' : '#bfdbfe')
@@ -1023,40 +1114,52 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
                     }
                 }
                 const barW = Math.max(1, Math.ceil(cellW));
-                for (let col = firstCol; col <= lastCol; col++) {
+                for (let a = firstCol; a <= lastCol; a++) {
+                    const col = anchorCols[a];
                     const ch = (s.seq[col] || '-').toUpperCase();
-                    const qch = (querySeq[col] || '-').toUpperCase();
+                    const qch = querySeq[col].toUpperCase();
 
-                    // require query base: both-gap columns are structural, not deletions
-                    const isInternalDeletion = !isQuery && ch === '-' && qch !== '-' && col >= sStart && col <= sEnd;
-                    const isInsertion = !isQuery && qch === '-' && ch !== '-';
-                    const isIndel = isInternalDeletion || isInsertion;
-                    if (ch === '-' && !isIndel) continue;
+                    const isInternalDeletion = !isQuery && ch === '-' && col >= sStart && col <= sEnd;
+                    if (ch === '-' && !isInternalDeletion) continue;
 
-                    const x = Math.floor(labelWidth + col * cellW - scrollLeft);
+                    const x = Math.floor(labelWidth + a * cellW - scrollLeft);
 
-                    if (isInternalDeletion || isInsertion) {
+                    if (isInternalDeletion) {
                         ctx.fillStyle = '#9333ea';
                         ctx.fillRect(x, y + 2, barW, ROW_HEIGHT - 4);
-                    } else if (!isQuery && ch !== '-' && ch !== qch && qch !== '-') {
+                    } else if (!isQuery && ch !== qch) {
                         ctx.fillStyle = '#dc2626';
                         ctx.fillRect(x, y + 2, barW, ROW_HEIGHT - 4);
-                    } else if (isQuery && ch !== '-') {
-                        if (restoredRegion && col >= restoredRegion.start && col < restoredRegion.end) {
+                    } else if (isQuery) {
+                        if (restoredA && a >= restoredA.start && a < restoredA.end) {
                             ctx.fillStyle = isDark ? '#6366f1' : '#818cf8';
                             ctx.fillRect(x, y + 2, barW, ROW_HEIGHT - 4);
-                        } else if (primers && col >= primers.p1.start && col < primers.p1.end) {
+                        } else if (primersA && a >= primersA.p1.start && a < primersA.p1.end) {
                             ctx.fillStyle = '#22c55e';
                             ctx.fillRect(x, y + 2, barW, ROW_HEIGHT - 4);
-                        } else if (primers && col >= primers.p2.start && col < primers.p2.end) {
+                        } else if (primersA && a >= primersA.p2.start && a < primersA.p2.end) {
                             ctx.fillStyle = '#facc15';
                             ctx.fillRect(x, y + 2, barW, ROW_HEIGHT - 4);
-                        } else if (flankingPrimers?.fwd && col >= flankingPrimers.fwd.start && col < flankingPrimers.fwd.end) {
+                        } else if (flankingPrimersA?.fwd && a >= flankingPrimersA.fwd.start && a < flankingPrimersA.fwd.end) {
                             ctx.fillStyle = '#10b981';
                             ctx.fillRect(x, y + 2, barW, ROW_HEIGHT - 4);
-                        } else if (flankingPrimers?.rev && col >= flankingPrimers.rev.start && col < flankingPrimers.rev.end) {
+                        } else if (flankingPrimersA?.rev && a >= flankingPrimersA.rev.start && a < flankingPrimersA.rev.end) {
                             ctx.fillStyle = '#14b8a6';
                             ctx.fillRect(x, y + 2, barW, ROW_HEIGHT - 4);
+                        }
+                    }
+                }
+
+                // blue ticks mark hit insertions at their boundary between anchor columns
+                if (!isQuery) {
+                    const rowInserts = insertsByRow.get(row);
+                    if (rowInserts) {
+                        for (const entry of rowInserts) {
+                            if (entry.boundary < firstCol || entry.boundary > lastCol + 1) continue;
+                            const bx = Math.floor(labelWidth + entry.boundary * cellW - scrollLeft);
+                            if (bx < labelWidth || bx > labelWidth + seqAreaW) continue;
+                            ctx.fillStyle = '#3b82f6';
+                            ctx.fillRect(bx - 1, y + 2, 2, ROW_HEIGHT - 4);
                         }
                     }
                 }
@@ -1089,9 +1192,9 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
         ctx.fillStyle = isDark ? '#1e293b' : '#f8fafc';
         ctx.fillRect(labelWidth, stickyY, availableWidth - labelWidth, MAIN_GC_TRACK_H);
         const gcBarW = Math.max(1, Math.ceil(cellW));
-        for (let col = firstCol; col <= lastCol; col++) {
-            const x = Math.floor(labelWidth + col * cellW - scrollLeft);
-            const gc = gcContent[col] || 0;
+        for (let a = firstCol; a <= lastCol; a++) {
+            const x = Math.floor(labelWidth + a * cellW - scrollLeft);
+            const gc = gcContent[anchorCols[a]] || 0;
             const r = Math.round(255 - gc * 150);
             const g = Math.round(180 + gc * 60);
             const b = Math.round(50 + gc * 100);
@@ -1112,18 +1215,28 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
 
         const sampleStep = Math.max(1, Math.floor(sequences.length / 200));
         const seqW = availableWidth - labelWidth - RIGHT_PADDING;
-        const pxStep = Math.max(1, seqLen / seqW);
+        const pxStep = Math.max(1, anchorLen / seqW);
 
         const sampled = [];
         for (let row = 0; row < sequences.length; row += sampleStep) {
             const s = sequences[row];
-            sampled.push({ s, isQuery: row === 0, sStart: seqStart(s.seq), sEnd: seqEnd(s.seq), y: msaTop + row * msaRowH });
+            const sStart = seqStart(s.seq);
+            const sEnd = seqEnd(s.seq);
+            sampled.push({
+                s,
+                isQuery: row === 0,
+                sStart,
+                sEnd,
+                aS: firstAnchorAtOrAfter(anchorCols, sStart),
+                aE: lastAnchorAtOrBefore(anchorCols, sEnd),
+                y: msaTop + row * msaRowH,
+            });
         }
 
         for (const r of sampled) {
-            if (r.sStart <= r.sEnd) {
-                const barX1 = Math.max(labelWidth, labelWidth + r.sStart * cellW - scrollLeft);
-                const barX2 = Math.min(labelWidth + seqAreaW, labelWidth + (r.sEnd + 1) * cellW - scrollLeft);
+            if (r.aS <= r.aE) {
+                const barX1 = Math.max(labelWidth, labelWidth + r.aS * cellW - scrollLeft);
+                const barX2 = Math.min(labelWidth + seqAreaW, labelWidth + (r.aE + 1) * cellW - scrollLeft);
                 if (barX2 > barX1) {
                     ctx.fillStyle = r.isQuery
                         ? (isDark ? '#1e3a8a' : '#bfdbfe')
@@ -1133,7 +1246,7 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
             }
         }
 
-        // Per-row mismatch markers (red) then indel markers (purple, on top).
+        // Per-row mismatch markers (red) then deletion markers (purple, on top).
         // Per-row Y preserves which rows have variation; 3px minimum height
         // keeps rare single-row indels visible even with hundreds of sequences.
         for (let pass = 1; pass <= 2; pass++) {
@@ -1142,24 +1255,23 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
             for (const r of sampled) {
                 if (r.isQuery) continue;
                 for (let x = 0; x < availableWidth - labelWidth; x++) {
-                    const colBase = Math.floor(((x + scrollLeft) / seqW) * seqLen * viewFraction);
-                    if (colBase < 0 || colBase >= seqLen) continue;
-                    const sampleCols = [colBase];
-                    if (pxStep > 2) sampleCols.push(colBase + Math.floor(pxStep / 2));
+                    const aBase = Math.floor(((x + scrollLeft) / seqW) * anchorLen * viewFraction);
+                    if (aBase < 0 || aBase >= anchorLen) continue;
+                    const sampleA = [aBase];
+                    if (pxStep > 2) sampleA.push(aBase + Math.floor(pxStep / 2));
 
                     let found = false;
-                    for (const col of sampleCols) {
-                        if (col >= seqLen) continue;
+                    for (const a of sampleA) {
+                        if (a >= anchorLen) continue;
+                        const col = anchorCols[a];
                         const ch = (r.s.seq[col] || '-').toUpperCase();
-                        const qch = (querySeq[col] || '-').toUpperCase();
-                        const isInternalDeletion = ch === '-' && qch !== '-' && col >= r.sStart && col <= r.sEnd;
-                        const isInsertion = qch === '-' && ch !== '-';
+                        const qch = querySeq[col].toUpperCase();
+                        const isInternalDeletion = ch === '-' && col >= r.sStart && col <= r.sEnd;
 
                         if (wantIndel) {
-                            if (isInternalDeletion || isInsertion) { found = true; break; }
+                            if (isInternalDeletion) { found = true; break; }
                         } else {
-                            if (isInternalDeletion || isInsertion) continue;
-                            if (ch !== '-' && ch !== qch && qch !== '-') { found = true; break; }
+                            if (!isInternalDeletion && ch !== '-' && ch !== qch) { found = true; break; }
                         }
                     }
 
@@ -1168,6 +1280,15 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
                     }
                 }
             }
+        }
+
+        // Insertion markers (blue) come from the insert runs, not per-pixel sampling.
+        ctx.fillStyle = '#3b82f6';
+        for (const entry of insertEntries) {
+            if (entry.row % sampleStep !== 0) continue;
+            const bx = labelWidth + entry.boundary * cellW - scrollLeft;
+            if (bx < labelWidth || bx > availableWidth) continue;
+            ctx.fillRect(bx, msaTop + entry.row * msaRowH, 1.2, markerH);
         }
 
         ctx.fillStyle = isDark ? '#334155' : '#e2e8f0';
@@ -1213,34 +1334,34 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
         ctx.font = '9px ui-monospace, SFMono-Regular, monospace';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'bottom';
-        for (let col = firstCol; col <= lastCol; col++) {
-            if ((col + 1) % tickInterval === 0) {
-                const x = labelWidth + col * cellW - scrollLeft;
+        for (let a = firstCol; a <= lastCol; a++) {
+            if ((a + 1) % tickInterval === 0) {
+                const x = labelWidth + a * cellW - scrollLeft;
                 ctx.fillStyle = isDark ? '#334155' : '#cbd5e1';
                 ctx.fillRect(x, rulerY + RULER_HEIGHT - 6, 1, 6);
                 ctx.fillStyle = '#94a3b8';
-                ctx.fillText(String(col + 1), x, rulerY + RULER_HEIGHT - 7);
+                ctx.fillText(String(a + 1), x, rulerY + RULER_HEIGHT - 7);
             }
         }
 
         /* ── Oligo markers in main ruler ── */
-        if (primers) {
-            const p1x = labelWidth + primers.p1.start * cellW - scrollLeft;
-            const p1w = (primers.p1.end - primers.p1.start) * cellW;
+        if (primersA) {
+            const p1x = labelWidth + primersA.p1.start * cellW - scrollLeft;
+            const p1w = (primersA.p1.end - primersA.p1.start) * cellW;
             ctx.fillStyle = '#22c55e';
             ctx.fillRect(p1x, rulerY + RULER_HEIGHT - 4, p1w, 4);
 
-            const p2x = labelWidth + primers.p2.start * cellW - scrollLeft;
-            const p2w = (primers.p2.end - primers.p2.start) * cellW;
+            const p2x = labelWidth + primersA.p2.start * cellW - scrollLeft;
+            const p2w = (primersA.p2.end - primersA.p2.start) * cellW;
             ctx.fillStyle = '#facc15';
             ctx.fillRect(p2x, rulerY + RULER_HEIGHT - 4, p2w, 4);
         }
 
         /* ── Flanking primer markers in main ruler ── */
-        if (flankingPrimers) {
-            if (flankingPrimers.fwd) {
-                const fx = labelWidth + flankingPrimers.fwd.start * cellW - scrollLeft;
-                const fw = Math.max(3, (flankingPrimers.fwd.end - flankingPrimers.fwd.start) * cellW);
+        if (flankingPrimersA) {
+            if (flankingPrimersA.fwd) {
+                const fx = labelWidth + flankingPrimersA.fwd.start * cellW - scrollLeft;
+                const fw = Math.max(3, (flankingPrimersA.fwd.end - flankingPrimersA.fwd.start) * cellW);
                 ctx.fillStyle = 'rgba(16, 185, 129, 0.25)'; // emerald fill
                 ctx.fillRect(fx, rulerY, fw, RULER_HEIGHT - 4);
                 ctx.fillStyle = '#10b981';
@@ -1255,9 +1376,9 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
                     ctx.fillText('FWD', fx + fw / 2, rulerY + RULER_HEIGHT / 2);
                 }
             }
-            if (flankingPrimers.rev) {
-                const rx = labelWidth + flankingPrimers.rev.start * cellW - scrollLeft;
-                const rw = Math.max(3, (flankingPrimers.rev.end - flankingPrimers.rev.start) * cellW);
+            if (flankingPrimersA.rev) {
+                const rx = labelWidth + flankingPrimersA.rev.start * cellW - scrollLeft;
+                const rw = Math.max(3, (flankingPrimersA.rev.end - flankingPrimersA.rev.start) * cellW);
                 ctx.fillStyle = 'rgba(20, 184, 166, 0.25)'; // teal fill
                 ctx.fillRect(rx, rulerY, rw, RULER_HEIGHT - 4);
                 ctx.fillStyle = '#14b8a6';
@@ -1345,7 +1466,7 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
             hoverCvs.style.width = `${availableWidth}px`;
             hoverCvs.style.height = `${canvasH}px`;
         }
-    }, [sequences, querySeq, scrollLeft, scrollTop, cellW, seqAreaW, availableWidth, totalH, seqLen, viewMode, primers, flankingPrimers, gcContent, isDarkMode, oligoSelection, autofindBoundaryRow, restoredRegion]);
+    }, [sequences, querySeq, scrollLeft, scrollTop, cellW, seqAreaW, availableWidth, totalH, anchorLen, anchorCols, insertEntries, insertsByRow, viewMode, primersA, flankingPrimersA, gcContent, isDarkMode, oligoSelection, autofindBoundaryRow, restoredA]);
 
     /* ── lightweight hover overlay (draws only a thin line) ── */
     const drawHoverOverlay = useCallback(() => {
@@ -1368,18 +1489,18 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
         ctx.clearRect(0, 0, w, h);
 
         const hoverCol = hoverColRef.current;
-        if (hoverCol === null || hoverCol < 0 || hoverCol >= seqLen) return;
+        if (hoverCol === null || hoverCol < 0 || hoverCol >= anchorLen) return;
 
         const hx = labelWidth + hoverCol * cellW - scrollLeft + cellW / 2;
         if (hx < labelWidth || hx > labelWidth + seqAreaW) return;
 
-        ctx.strokeStyle = mismatchCols.has(hoverCol) ? '#ef4444' : '#3b82f6';
+        ctx.strokeStyle = mismatchCols.has(anchorCols[hoverCol]) ? '#ef4444' : '#3b82f6';
         ctx.lineWidth = 1;
         ctx.beginPath();
         ctx.moveTo(Math.floor(hx) + 0.5, 0);
         ctx.lineTo(Math.floor(hx) + 0.5, h);
         ctx.stroke();
-    }, [cellW, scrollLeft, seqAreaW, seqLen, mismatchCols]);
+    }, [cellW, scrollLeft, seqAreaW, anchorLen, anchorCols, mismatchCols]);
 
     useEffect(() => { draw(); }, [draw]);
     useEffect(() => { drawHoverOverlay(); }, [drawHoverOverlay]);
@@ -1482,12 +1603,12 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
 
         const mouseX = mouseXRaw - labelWidth;
         const col = Math.floor((scrollLeft + mouseX) / cellW);
-        const newCol = col >= 0 && col < seqLen ? col : null;
+        const newCol = col >= 0 && col < anchorLen ? col : null;
         if (newCol === hoverColRef.current) return;
         hoverColRef.current = newCol;
         cancelAnimationFrame(hoverRafRef.current);
         hoverRafRef.current = requestAnimationFrame(() => redrawRef.current());
-    }, [scrollLeft, cellW, seqLen, sequences, scrollTop, viewMode]);
+    }, [scrollLeft, cellW, anchorLen, sequences, scrollTop, viewMode]);
 
     const handleCanvasMouseLeave = useCallback(() => {
         setLabelHoverInfo(null);
@@ -1510,11 +1631,11 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
 
         const startClientX = e.clientX;
         const mouseX = mouseXCanvas - labelWidth;
-        const startC = Math.max(0, Math.min(seqLen - 1, Math.floor((scrollLeft + mouseX) / cellW)));
+        const startC = Math.max(0, Math.min(anchorLen - 1, Math.floor((scrollLeft + mouseX) / cellW)));
         setOligoSelection({ startCol: startC, endCol: startC });
 
         const colAt = (clientX: number) =>
-            Math.max(0, Math.min(seqLen - 1, Math.floor((scrollLeft + clientX - rect.left - labelWidth) / cellW)));
+            Math.max(0, Math.min(anchorLen - 1, Math.floor((scrollLeft + clientX - rect.left - labelWidth) / cellW)));
 
         // ── RIGHT BUTTON: zoom to dragged column range ───────────────────
         if (e.button === 2) {
@@ -1528,9 +1649,9 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
                 const e2 = Math.max(startC, endC);
                 if (e2 - s >= 5) {
                     const seqAreaWLocal = availableWidth - labelWidth - RIGHT_PADDING;
-                    const newVF = Math.max(0.005, (e2 - s + 1) / seqLen);
+                    const newVF = Math.max(0.005, (e2 - s + 1) / anchorLen);
                     const newTotalW = seqAreaWLocal / newVF;
-                    const newSL = (s / seqLen) * newTotalW;
+                    const newSL = (s / anchorLen) * newTotalW;
                     setViewFraction(newVF);
                     setScrollLeft(newSL);
                     if (scrollRef.current) scrollRef.current.scrollLeft = newSL;
@@ -1550,14 +1671,14 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
 
             const dragPx = Math.abs(ev.clientX - startClientX);
 
-            // Tiny drag = click → check for flanking primer hit
-            if (dragPx < 6 && onFlankingPrimerClick && flankingPrimers) {
-                if (flankingPrimers.fwd && startC >= flankingPrimers.fwd.start && startC < flankingPrimers.fwd.end) {
+            // Tiny drag = click → check for flanking primer hit (ranges in anchor space)
+            if (dragPx < 6 && onFlankingPrimerClick && flankingPrimers && flankingPrimersA) {
+                if (flankingPrimers.fwd && flankingPrimersA.fwd && startC >= flankingPrimersA.fwd.start && startC < flankingPrimersA.fwd.end) {
                     setOligoSelection(null);
                     onFlankingPrimerClick(flankingPrimers.fwd.start, flankingPrimers.fwd.end);
                     return;
                 }
-                if (flankingPrimers.rev && startC >= flankingPrimers.rev.start && startC < flankingPrimers.rev.end) {
+                if (flankingPrimers.rev && flankingPrimersA.rev && startC >= flankingPrimersA.rev.start && startC < flankingPrimersA.rev.end) {
                     setOligoSelection(null);
                     onFlankingPrimerClick(flankingPrimers.rev.start, flankingPrimers.rev.end);
                     return;
@@ -1568,14 +1689,15 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
                 if (!prev) return null;
                 const s = Math.min(prev.startCol, prev.endCol);
                 const e2 = Math.max(prev.startCol, prev.endCol);
-                if (e2 - s >= 5 && onOligoRegionSelect) onOligoRegionSelect(s, e2);
+                // oligoSelection is tracked in anchor indices; consumers expect gapped columns
+                if (e2 - s >= 5 && onOligoRegionSelect) onOligoRegionSelect(anchorCols[s], anchorCols[e2]);
                 return null; // clear rectangle after committing
             });
         };
         document.addEventListener('mousemove', onMove);
         document.addEventListener('mouseup', onUp);
         e.preventDefault();
-    }, [labelWidth, seqLen, scrollLeft, cellW, availableWidth, onOligoRegionSelect, flankingPrimers, onFlankingPrimerClick]);
+    }, [labelWidth, anchorLen, anchorCols, scrollLeft, cellW, availableWidth, onOligoRegionSelect, flankingPrimers, flankingPrimersA, onFlankingPrimerClick]);
 
     const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
         const cvs = canvasRef.current;
@@ -1601,6 +1723,7 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
     };
 
     if (!alignment || sequences.length === 0) return null;
+    if (anchorLen === 0) return null;
 
     return (
         <div ref={containerRef} className="mt-6 border border-slate-200 dark:border-slate-700 rounded-xl shadow-sm overflow-hidden bg-white dark:bg-slate-800 transition-colors">
@@ -1608,7 +1731,7 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
             <div className="px-5 py-3 bg-gradient-to-r from-slate-50 to-indigo-50/50 dark:from-slate-800 dark:to-indigo-900/20 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between flex-wrap gap-2">
                 <div className="flex items-center gap-3 flex-wrap">
                     <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-200">
-                        Multiple sequence alignment <span className="text-sm font-normal text-slate-500 dark:text-slate-400">({sequences.length} seq, {seqLen} bp)</span>
+                        Multiple sequence alignment <span className="text-sm font-normal text-slate-500 dark:text-slate-400">({sequences.length} seq, {anchorLen} bp)</span>
                     </h2>
                     <div className="flex items-center gap-1.5">
                         <button
@@ -1683,7 +1806,7 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
                                 const centerFrac = (scrollLeft + seqAreaW / 2) / currentTotalW;
 
                                 setViewMode('letters');
-                                const newVF = Math.min(1, 100 / seqLen); // ~100 bp zoom
+                                const newVF = Math.min(1, 100 / anchorLen); // ~100 bp zoom
                                 const newTotalW = seqAreaW / newVF;
 
                                 // Recalculate scroll to keep same center
@@ -1804,8 +1927,12 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
                     Mismatch
                 </span>
                 <span className="flex items-center gap-1">
+                    <span className="inline-block w-3 h-3 rounded-sm border border-blue-100 dark:border-blue-900" style={{ background: isDark ? '#1e3a8a' : '#dbeafe' }} />
+                    Insertion
+                </span>
+                <span className="flex items-center gap-1">
                     <span className="inline-block w-3 h-3 rounded-sm border border-purple-100 dark:border-purple-900" style={{ background: isDark ? '#3b0764' : '#f3e8ff' }} />
-                    Insertion / Deletion
+                    Deletion
                 </span>
                 <span className="ml-auto italic text-slate-400">
                     {viewMode === 'letters' ? 'Click a row to copy' : 'Drag overview to zoom · Ctrl/⌘ + scroll to zoom'}
