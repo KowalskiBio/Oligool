@@ -1,0 +1,413 @@
+import { useState, useEffect, useRef, useCallback } from 'react';
+
+interface UserReportProps {
+    open: boolean;
+    onClose: () => void;
+    /** Pre-fill the sequence field from the current query input. */
+    defaultSequence: string;
+    /** Job name used for the saved filename. */
+    jobName: string;
+}
+
+interface ReportImage {
+    id: string;
+    dataUrl: string;
+    name: string;
+}
+
+/** Build a filesystem-safe filename like `My_Gene_report_20260801.html`. */
+function buildReportFilename(jobName: string): string {
+    const safe = (jobName || 'oligool')
+        .trim()
+        .replace(/[^a-zA-Z0-9_-]+/g, '_')
+        .replace(/^_+|_+$/g, '') || 'oligool';
+    const d = new Date();
+    const stamp = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
+    return `${safe}_report_${stamp}.html`;
+}
+
+/** Escape HTML special characters so user text/sequence can't break the saved HTML. */
+function escapeHtml(s: string): string {
+    return s
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+}
+
+/** Build a self-contained HTML report embedding images as base64 data URLs. */
+function buildReportHtml(opts: {
+    jobName: string;
+    sequence: string;
+    notes: string;
+    images: ReportImage[];
+}): string {
+    const { jobName, sequence, notes, images } = opts;
+    const now = new Date().toLocaleString();
+    const safeJob = escapeHtml(jobName || 'Oligool Report');
+    const safeDate = escapeHtml(now);
+
+    const imgTags = images
+        .map(
+            (img, i) =>
+                `<figure><img src="${img.dataUrl}" alt="${escapeHtml(img.name)}" /><figcaption>Image ${i + 1} — ${escapeHtml(img.name)}</figcaption></figure>`
+        )
+        .join('\n');
+
+    // Render sequence line-by-line in a <pre> so FASTA structure is preserved
+    const seqBlock = sequence.trim()
+        ? `<pre class="seq">${escapeHtml(sequence)}</pre>`
+        : '<p class="muted">No sequence provided.</p>';
+
+    const notesBlock = notes.trim()
+        ? `<div class="notes">${escapeHtml(notes).replace(/\n/g, '<br>')}</div>`
+        : '<p class="muted">No notes provided.</p>';
+
+    const imagesBlock = images.length
+        ? `<section><h2>Images (${images.length})</h2>${imgTags}</section>`
+        : '';
+
+    return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>${safeJob} — Oligool Report</title>
+<style>
+  :root { color-scheme: light dark; }
+  body {
+    font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.6;
+    color: #1e293b;
+    background: #f8fafc;
+    max-width: 880px;
+    margin: 0 auto;
+    padding: 32px 24px;
+  }
+  header { border-bottom: 2px solid #c7d2fe; padding-bottom: 16px; margin-bottom: 24px; }
+  header h1 { font-size: 24px; margin: 0 0 4px; color: #3730a3; }
+  header .meta { font-size: 13px; color: #64748b; }
+  section { background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px; margin-bottom: 20px; }
+  h2 { font-size: 14px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: #475569; margin: 0 0 12px; padding-bottom: 8px; border-bottom: 1px solid #e2e8f0; }
+  .seq {
+    font-family: "Fira Code", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 13px; line-height: 1.5; white-space: pre-wrap; word-break: break-all;
+    background: #f1f5f9; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px;
+    margin: 0;
+  }
+  .notes { font-size: 14px; white-space: normal; }
+  .muted { color: #94a3b8; font-style: italic; font-size: 14px; }
+  figure { margin: 0 0 16px; text-align: center; }
+  figure:last-child { margin-bottom: 0; }
+  figure img { max-width: 100%; height: auto; border: 1px solid #e2e8f0; border-radius: 8px; }
+  figcaption { font-size: 12px; color: #64748b; margin-top: 6px; }
+  footer { text-align: center; font-size: 12px; color: #94a3b8; margin-top: 32px; padding-top: 16px; border-top: 1px solid #e2e8f0; }
+  @media (prefers-color-scheme: dark) {
+    body { background: #0f172a; color: #f1f5f9; }
+    header { border-color: #4f46e5; }
+    header h1 { color: #a5b4fc; }
+    header .meta { color: #94a3b8; }
+    section { background: #1e293b; border-color: #334155; }
+    h2 { color: #94a3b8; border-color: #334155; }
+    .seq { background: #334155; border-color: #334155; }
+    .muted { color: #64748b; }
+    figure img { border-color: #334155; }
+    figcaption { color: #64748b; }
+    footer { color: #64748b; border-color: #334155; }
+  }
+</style>
+</head>
+<body>
+  <header>
+    <h1>${safeJob}</h1>
+    <div class="meta">Oligool Report · ${safeDate}</div>
+  </header>
+
+  <section>
+    <h2>Sequence</h2>
+    ${seqBlock}
+  </section>
+
+  <section>
+    <h2>Notes</h2>
+    ${notesBlock}
+  </section>
+
+  ${imagesBlock}
+
+  <footer>Generated by Oligool</footer>
+</body>
+</html>`;
+}
+
+/** Trigger a browser download of the report as a self-contained HTML file. */
+function downloadReportHtml(html: string, jobName: string): void {
+    const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = buildReportFilename(jobName);
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+export default function UserReport({ open, onClose, defaultSequence, jobName }: UserReportProps) {
+    const [sequence, setSequence] = useState(defaultSequence);
+    const [notes, setNotes] = useState('');
+    const [images, setImages] = useState<ReportImage[]>([]);
+    const [status, setStatus] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
+
+    const fileInputRef = useRef<HTMLInputElement>(null);
+    const modalRef = useRef<HTMLDivElement>(null);
+
+    // Sync the sequence field when the modal opens (so it picks up the latest query input)
+    useEffect(() => {
+        if (open) {
+            setSequence(defaultSequence);
+        }
+    }, [open, defaultSequence]);
+
+    // Clear state when the modal closes
+    useEffect(() => {
+        if (!open) {
+            setNotes('');
+            setImages([]);
+            setStatus(null);
+        }
+    }, [open]);
+
+    const addImageFromFile = useCallback((file: File) => {
+        if (!file.type.startsWith('image/')) return;
+        const reader = new FileReader();
+        reader.onload = () => {
+            const dataUrl = reader.result as string;
+            setImages((prev) => [
+                ...prev,
+                { id: `img-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, dataUrl, name: file.name || `image-${prev.length + 1}` },
+            ]);
+        };
+        reader.readAsDataURL(file);
+    }, []);
+
+    // Paste handler: capture images from the clipboard anywhere in the modal
+    useEffect(() => {
+        if (!open) return;
+        const onPaste = (e: ClipboardEvent) => {
+            const items = e.clipboardData?.items;
+            if (!items) return;
+            let captured = 0;
+            for (const item of items) {
+                if (item.kind === 'file' && item.type.startsWith('image/')) {
+                    const file = item.getAsFile();
+                    if (file) {
+                        addImageFromFile(file);
+                        captured += 1;
+                    }
+                }
+            }
+            if (captured > 0) {
+                e.preventDefault();
+                setStatus({ kind: 'ok', text: `${captured} image${captured > 1 ? 's' : ''} pasted.` });
+                setTimeout(() => setStatus(null), 2500);
+            }
+        };
+        // Attach to the modal container so it captures paste while focused
+        const node = modalRef.current;
+        if (node) {
+            node.addEventListener('paste', onPaste);
+            return () => node.removeEventListener('paste', onPaste);
+        }
+    }, [open, addImageFromFile]);
+
+    const removeImage = useCallback((id: string) => {
+        setImages((prev) => prev.filter((img) => img.id !== id));
+    }, []);
+
+    const handleSave = useCallback(() => {
+        if (!sequence.trim() && !notes.trim() && images.length === 0) {
+            setStatus({ kind: 'err', text: 'Nothing to save — add a sequence, notes, or images first.' });
+            return;
+        }
+        try {
+            const html = buildReportHtml({ jobName, sequence, notes, images });
+            downloadReportHtml(html, jobName);
+            setStatus({ kind: 'ok', text: 'Report saved.' });
+            setTimeout(() => {
+                setStatus(null);
+                onClose();
+            }, 1200);
+        } catch (e) {
+            setStatus({ kind: 'err', text: e instanceof Error ? e.message : 'Failed to save report.' });
+        }
+    }, [sequence, notes, images, jobName, onClose]);
+
+    // Close on Escape
+    const handleKeyDown = (e: React.KeyboardEvent) => {
+        if (e.key === 'Escape') {
+            e.stopPropagation();
+            onClose();
+        }
+    };
+
+    if (!open) return null;
+
+    return (
+        <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm animate-in fade-in duration-150 p-4"
+            onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="user-report-title"
+        >
+            <div
+                ref={modalRef}
+                onKeyDown={handleKeyDown}
+                tabIndex={-1}
+                className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 w-full max-w-2xl max-h-[90vh] overflow-y-auto outline-none"
+            >
+                {/* Header */}
+                <div className="flex justify-between items-start px-6 py-4 border-b border-slate-100 dark:border-slate-700 sticky top-0 bg-white dark:bg-slate-800 rounded-t-2xl z-10">
+                    <div>
+                        <h3 id="user-report-title" className="text-lg font-bold text-slate-800 dark:text-slate-100">Report</h3>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Paste images, write notes, and save a standalone report.</p>
+                    </div>
+                    <button
+                        onClick={onClose}
+                        className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors p-1 -mr-2 -mt-1"
+                        aria-label="Close"
+                    >
+                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                    </button>
+                </div>
+
+                {/* Body */}
+                <div className="px-6 py-5 space-y-5">
+                    {/* Sequence */}
+                    <div>
+                        <label htmlFor="report-sequence" className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                            Sequence
+                            <span className="ml-2 font-normal text-slate-400 dark:text-slate-500">(FASTA or raw nucleotides)</span>
+                        </label>
+                        <textarea
+                            id="report-sequence"
+                            rows={5}
+                            value={sequence}
+                            onChange={(e) => setSequence(e.target.value)}
+                            placeholder={"ATCGATCGATCG... or >my_sequence\\nATCG..."}
+                            className="w-full rounded-lg border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 font-mono text-xs px-3 py-2 border resize-y"
+                        />
+                    </div>
+
+                    {/* Notes */}
+                    <div>
+                        <label htmlFor="report-notes" className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                            Notes
+                        </label>
+                        <textarea
+                            id="report-notes"
+                            rows={4}
+                            value={notes}
+                            onChange={(e) => setNotes(e.target.value)}
+                            placeholder="Write observations, experimental conditions, sample IDs…"
+                            className="w-full rounded-lg border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm px-3 py-2 border resize-y"
+                        />
+                    </div>
+
+                    {/* Images */}
+                    <div>
+                        <div className="flex items-center justify-between mb-2">
+                            <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300">
+                                Images
+                                {images.length > 0 && (
+                                    <span className="ml-2 font-normal text-slate-400 dark:text-slate-500">({images.length})</span>
+                                )}
+                            </label>
+                            <button
+                                type="button"
+                                onClick={() => fileInputRef.current?.click()}
+                                className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-md border border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-700 hover:bg-slate-50 dark:hover:bg-slate-600 transition-colors"
+                            >
+                                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                                </svg>
+                                Add file
+                            </button>
+                            <input
+                                ref={fileInputRef}
+                                type="file"
+                                accept="image/*"
+                                multiple
+                                className="hidden"
+                                onChange={(e) => {
+                                    const files = e.target.files;
+                                    if (files) {
+                                        for (const f of Array.from(files)) addImageFromFile(f);
+                                    }
+                                    e.target.value = '';
+                                }}
+                            />
+                        </div>
+                        {/* Paste zone */}
+                        <div className="rounded-lg border-2 border-dashed border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900/30 px-4 py-3 text-center">
+                            <p className="text-xs text-slate-500 dark:text-slate-400">
+                                Paste an image here with <kbd className="px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 font-mono text-[10px]">Ctrl/⌘ + V</kbd>
+                                {images.length === 0 && ' — or use “Add file” above.'}
+                            </p>
+                        </div>
+                        {/* Thumbnails */}
+                        {images.length > 0 && (
+                            <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 gap-3">
+                                {images.map((img) => (
+                                    <div key={img.id} className="relative group rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-900">
+                                        <img src={img.dataUrl} alt={img.name} className="w-full h-28 object-contain" />
+                                        <button
+                                            type="button"
+                                            onClick={() => removeImage(img.id)}
+                                            className="absolute top-1 right-1 w-6 h-6 flex items-center justify-center rounded-full bg-black/60 text-white opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600"
+                                            aria-label={`Remove ${img.name}`}
+                                        >
+                                            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
+                                            </svg>
+                                        </button>
+                                        <p className="text-[10px] text-slate-500 dark:text-slate-400 truncate px-1.5 py-1 bg-white dark:bg-slate-800">{img.name}</p>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Status */}
+                    {status && (
+                        <p className={`text-xs font-medium ${status.kind === 'ok' ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
+                            {status.text}
+                        </p>
+                    )}
+                </div>
+
+                {/* Footer */}
+                <div className="px-6 py-4 border-t border-slate-100 dark:border-slate-700 flex items-center justify-end gap-3 sticky bottom-0 bg-white dark:bg-slate-800 rounded-b-2xl">
+                    <button
+                        onClick={onClose}
+                        className="px-4 py-2 text-sm font-medium rounded-md border border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
+                    >
+                        Cancel
+                    </button>
+                    <button
+                        onClick={handleSave}
+                        className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-md bg-indigo-600 text-white hover:bg-indigo-700 transition-colors shadow-sm"
+                    >
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                        Save report
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+}
