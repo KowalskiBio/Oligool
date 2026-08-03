@@ -555,7 +555,7 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                 title="Kliknutím zobrazíte novinky a návod k použití"
                 className="btn-secondary whitespace-nowrap"
               >
-                v0.9.6 beta
+                v0.9.7 beta
               </button>
               {sessionMsg && (
                 <span
@@ -1172,6 +1172,45 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                 <button onClick={() => setShowWhatsNew(false)} className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 text-xl leading-none">&times;</button>
               </div>
               <div className="space-y-4 text-sm text-zinc-700 dark:text-zinc-300">
+                <section>
+                  <h3 className="font-semibold text-teal-700 dark:text-teal-300 mb-1">Nový MSA přehled na kotvové mřížce</h3>
+                  <p>
+                    MSA prohlížeč je přepracovaný na kotvovou mřížku: query sekvence tvoří
+                    souvislý řádek a ostatní řádky se na ni kotví. Inzerce v hit sekvencích
+                    označuje modrá svislá čára; u delších inzercí ji doprovází vodorovné čárky
+                    pouze vpravo, tedy tam, kde by vložená sekvence ležela. Značky mismatchů,
+                    delecí a inzercí v horní liště i v minimapě mají nově výšku přesně jednoho
+                    řádku, takže nikdy nepřesahují mimo pruh své sekvence.
+                  </p>
+                </section>
+                <section>
+                  <h3 className="font-semibold text-teal-700 dark:text-teal-300 mb-1">Barva pruhů Sequence / Match</h3>
+                  <p>
+                    Kliknutím na barevný čtvereček vedle popisku „Sequence / Match“ v legendě
+                    MSA přehledu přepnete pruhy sekvencí mezi šedou a bílou. Přepnutí se projeví
+                    v horní liště, v minimapě i v hlavním zobrazení pruhů.
+                  </p>
+                </section>
+                <section>
+                  <h3 className="font-semibold text-teal-700 dark:text-teal-300 mb-1">Nový vzhled aplikace</h3>
+                  <p>
+                    Aplikace přešla na jednotný design systém: typografie IBM Plex (Sans pro
+                    text, Mono pro sekvence), barevná paleta zinc a sdílené tokeny pro tlačítka,
+                    panely a modální okna ve všech částech aplikace. Specifikace je v souboru
+                    frontend/DESIGN.md.
+                  </p>
+                </section>
+                <section>
+                  <h3 className="font-semibold text-teal-700 dark:text-teal-300 mb-1">Opravy struktur a dimerů</h3>
+                  <p>
+                    Pokud IDT nevrátí strukturu, použije se lokální dot-bracket ze Strider.
+                    Dimery jsou v reportu vykreslené jako ASCII se svislými vazbami, stejně jako
+                    v panelu oligo, a dimer SVG má opravené prohozené popisky 3′/5′ konců.
+                    IDT analýzy uchovávají strukturální pole a kandidáty s IDT daty se řadí před
+                    strider-only výsledky. Strider dimer ΔG je přepočtené na 25 °C, aby bylo
+                    srovnatelné s ostatními enginy.
+                  </p>
+                </section>
                 <section>
                   <h3 className="font-semibold text-teal-700 dark:text-teal-300 mb-1">Viditelnost indelů v MSA přehledu</h3>
                   <p>
