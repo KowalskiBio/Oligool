@@ -76,7 +76,7 @@ export default function HairpinSVG({ seq, dotBracket }: HairpinSVGProps) {
         const allDots = dotBracket && !dotBracket.includes('(') && !dotBracket.includes(')');
         if (allDots) {
             return (
-                <div className="text-[10px] text-slate-400 dark:text-slate-500 italic py-1">
+                <div className="text-[10px] text-zinc-400 dark:text-zinc-500 italic py-1">
                     No secondary structure predicted
                 </div>
             );
@@ -87,7 +87,7 @@ export default function HairpinSVG({ seq, dotBracket }: HairpinSVGProps) {
             blockPairs.push(`${seq.slice(start, start + 60)}\n${dotBracket.slice(start, start + 60)}`);
         }
         return (
-            <pre className="font-mono text-[10px] text-slate-500 dark:text-slate-400 whitespace-pre">
+            <pre className="font-mono text-[10px] text-zinc-500 dark:text-zinc-400 whitespace-pre">
                 {blockPairs.join('\n\n')}
             </pre>
         );
