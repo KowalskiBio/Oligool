@@ -95,6 +95,7 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
     const scrollTrackRef = useRef<HTMLDivElement>(null);
     const [availableWidth, setAvailableWidth] = useState(900);
     const [labelHoverInfo, setLabelHoverInfo] = useState<{ text: string, x: number, y: number } | null>(null);
+    const [insertHoverInfo, setInsertHoverInfo] = useState<{ length: number; sequence: string; x: number; y: number } | null>(null);
     const [scrollLeft, setScrollLeft] = useState(0);
     const [scrollTop, setScrollTop] = useState(0);
 
@@ -1057,8 +1058,9 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
                     ctx.fillText(ch, x + cellW / 2, y + ROW_HEIGHT / 2);
                 }
 
-                // Inserted hit bases don't occupy anchor columns — overlay them as
-                // compressed underlined text on the boundary between columns.
+                // Inserted hit bases don't occupy anchor columns — mark the insertion point
+                // with a blue vertical bar; longer inserts get horizontal extent lines above
+                // and below the flanking bases so the rows are never prolonged.
                 if (!isQuery) {
                     const rowInserts = insertsByRow.get(row);
                     if (rowInserts) {
@@ -1067,34 +1069,18 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
                             const bx = labelWidth + entry.boundary * cellW - scrollLeft;
                             if (bx < labelWidth || bx > labelWidth + seqAreaW) continue;
                             const n = entry.text.length;
-                            const plaqueX = Math.max(labelWidth, bx - cellW / 2);
-                            const clampedW = Math.min(cellW, labelWidth + seqAreaW - plaqueX);
-                            if (clampedW <= 0) continue;
-                            ctx.fillStyle = isDark ? 'rgba(15,23,42,0.85)' : 'rgba(255,255,255,0.85)';
-                            ctx.fillRect(plaqueX, y, clampedW, ROW_HEIGHT);
-                            const charW = clampedW / n;
-                            const fs = charW / 0.6;
-                            if (fs >= 4) {
-                                ctx.fillStyle = isDark ? '#bfdbfe' : '#1d4ed8';
-                                ctx.font = `${Math.min(9, Math.max(4, fs))}px ui-monospace, SFMono-Regular, monospace`;
-                                ctx.textAlign = 'center';
-                                ctx.textBaseline = 'middle';
-                                for (let i = 0; i < n; i++) {
-                                    ctx.fillText(entry.text[i], plaqueX + i * charW + charW / 2, y + ROW_HEIGHT / 2);
-                                }
-                            } else {
-                                const label = `+${n}`;
-                                const labelFs = clampedW / (0.6 * label.length);
-                                if (labelFs >= 4) {
-                                    ctx.fillStyle = isDark ? '#bfdbfe' : '#1d4ed8';
-                                    ctx.font = `${Math.min(9, labelFs)}px ui-monospace, SFMono-Regular, monospace`;
-                                    ctx.textAlign = 'center';
-                                    ctx.textBaseline = 'middle';
-                                    ctx.fillText(label, plaqueX + clampedW / 2, y + ROW_HEIGHT / 2);
+                            ctx.fillStyle = '#3b82f6';
+                            if (n > 1) {
+                                const aS = firstAnchorAtOrAfter(anchorCols, sStart);
+                                const aE = lastAnchorAtOrBefore(anchorCols, sEnd);
+                                const leftX = Math.max(labelWidth, labelWidth + Math.max(aS, entry.boundary - n) * cellW - scrollLeft);
+                                const rightX = Math.min(labelWidth + seqAreaW, labelWidth + Math.min(aE + 1, entry.boundary + n) * cellW - scrollLeft);
+                                if (rightX > leftX) {
+                                    ctx.fillRect(leftX, y + 1.5, rightX - leftX, 1.5);
+                                    ctx.fillRect(leftX, y + ROW_HEIGHT - 3, rightX - leftX, 1.5);
                                 }
                             }
-                            ctx.fillStyle = '#3b82f6';
-                            ctx.fillRect(plaqueX, y + ROW_HEIGHT - 3.5, clampedW, 1.5);
+                            ctx.fillRect(Math.floor(bx) - 1, y + 1, 2, ROW_HEIGHT - 2);
                         }
                     }
                 }
@@ -1585,6 +1571,7 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
                 cvs.style.cursor = 'default';
             }
             // Clear sequence hover
+            setInsertHoverInfo(null);
             if (hoverColRef.current !== null) {
                 hoverColRef.current = null;
                 cancelAnimationFrame(hoverRafRef.current);
@@ -1594,8 +1581,53 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
         }
 
         setLabelHoverInfo(null);
+
+        // Insertion hit detection for hover tooltips
+        const rowsStartY = MAIN_GC_TRACK_H + MAIN_MSA_TRACK_H + RULER_HEIGHT;
+        const virtualY = mouseYRaw + scrollTop;
+        const hovRow = Math.floor((virtualY - rowsStartY) / ROW_HEIGHT);
+
+        let insertHit: InsertEntry | null = null;
+        if (hovRow >= 0 && hovRow < sequences.length && virtualY >= rowsStartY) {
+            const rowInserts = insertsByRow.get(hovRow);
+            if (rowInserts) {
+                let minDist = Infinity;
+                const tol = Math.max(4, Math.min(cellW, 10));
+
+                for (const entry of rowInserts) {
+                    const bx = labelWidth + entry.boundary * cellW - scrollLeft;
+                    if (bx < labelWidth || bx > labelWidth + seqAreaW) continue;
+
+                    const extent = entry.text.length > 1 ? entry.text.length * cellW : 0;
+                    const leftBound = bx - extent - tol;
+                    const rightBound = bx + extent + tol;
+
+                    if (mouseXRaw >= leftBound && mouseXRaw <= rightBound) {
+                        const dist = Math.abs(mouseXRaw - bx);
+                        if (dist < minDist) {
+                            minDist = dist;
+                            insertHit = entry;
+                        }
+                    }
+                }
+            }
+        }
+
+        const insertEntry = insertHit;
+        setInsertHoverInfo(prev => {
+            if (!insertEntry) return prev === null ? prev : null;
+            return {
+                length: insertEntry.text.length,
+                sequence: insertEntry.text,
+                x: e.clientX,
+                y: e.clientY
+            };
+        });
+
         // GC%/MSA track area gets a special crosshair for oligo selection
-        if (mouseYRaw < MAIN_GC_TRACK_H + MAIN_MSA_TRACK_H) {
+        if (insertEntry) {
+            cvs.style.cursor = 'help';
+        } else if (mouseYRaw < MAIN_GC_TRACK_H + MAIN_MSA_TRACK_H) {
             cvs.style.cursor = 'crosshair';
         } else {
             cvs.style.cursor = viewMode === 'letters' ? 'pointer' : 'crosshair';
@@ -1608,10 +1640,11 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
         hoverColRef.current = newCol;
         cancelAnimationFrame(hoverRafRef.current);
         hoverRafRef.current = requestAnimationFrame(() => redrawRef.current());
-    }, [scrollLeft, cellW, anchorLen, sequences, scrollTop, viewMode]);
+    }, [scrollLeft, cellW, anchorLen, sequences, scrollTop, viewMode, seqAreaW, insertsByRow, labelWidth]);
 
     const handleCanvasMouseLeave = useCallback(() => {
         setLabelHoverInfo(null);
+        setInsertHoverInfo(null);
         if (hoverColRef.current === null) return;
         hoverColRef.current = null;
         cancelAnimationFrame(hoverRafRef.current);
@@ -1726,24 +1759,24 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
     if (anchorLen === 0) return null;
 
     return (
-        <div ref={containerRef} className="mt-6 border border-slate-200 dark:border-slate-700 rounded-xl shadow-sm overflow-hidden bg-white dark:bg-slate-800 transition-colors">
+        <div ref={containerRef} className="mt-6 card overflow-hidden">
             {/* ── header ── */}
-            <div className="px-5 py-3 bg-gradient-to-r from-slate-50 to-indigo-50/50 dark:from-slate-800 dark:to-indigo-900/20 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between flex-wrap gap-2">
+            <div className="panel-header flex items-center justify-between flex-wrap gap-2">
                 <div className="flex items-center gap-3 flex-wrap">
-                    <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-200">
-                        Multiple sequence alignment <span className="text-sm font-normal text-slate-500 dark:text-slate-400">({sequences.length} seq, {anchorLen} bp)</span>
+                    <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                        Multiple sequence alignment <span className="text-xs font-normal text-zinc-500 dark:text-zinc-400 font-mono tabular-nums">({sequences.length} seq, {anchorLen} bp)</span>
                     </h2>
                     <div className="flex items-center gap-1.5">
                         <button
                             onClick={copyAllFasta}
-                            className="px-2 py-1 text-xs font-medium rounded-md border border-slate-300 dark:border-slate-600 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 hover:text-slate-700 dark:hover:text-slate-200 transition-colors flex items-center gap-1"
+                            className="px-2 py-1 text-xs font-medium rounded-md border border-zinc-300 dark:border-zinc-700 text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-700 hover:text-zinc-700 dark:hover:text-zinc-200 transition-colors flex items-center gap-1"
                             title="Copy full alignment as FASTA"
                         >
                             <ClipboardIcon /> FASTA
                         </button>
                         <button
                             onClick={copySelection}
-                            className="px-2 py-1 text-xs font-medium rounded-md border border-indigo-300 dark:border-indigo-800 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-colors flex items-center gap-1"
+                            className="btn-secondary font-mono tabular-nums"
                             title={`Copy visible selection (pos ${startCol + 1}–${endCol + 1})`}
                         >
                             <ClipboardIcon /> {startCol + 1}–{endCol + 1}
@@ -1751,10 +1784,7 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
                     </div>
                     <button
                         onClick={() => setShowOverview((v) => !v)}
-                        className={`px-2 py-1 text-xs font-medium rounded-md border transition-colors flex items-center gap-1 ${showOverview
-                            ? 'border-indigo-300 dark:border-indigo-800 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/30'
-                            : 'border-slate-300 dark:border-slate-600 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'
-                            }`}
+                        className={`btn-secondary ${showOverview ? 'icon-btn-active' : ''}`}
                         title={showOverview ? 'Hide overview bar' : 'Show overview bar'}
                     >
                         <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
@@ -1769,10 +1799,7 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
                     {showAutofindUI && (
                         <button
                             onClick={() => setAutofindActive((v) => !v)}
-                            className={`px-2 py-1 text-xs font-medium rounded-md border transition-colors flex items-center gap-1 ${autofindActive
-                                ? 'border-indigo-300 dark:border-indigo-800 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/30'
-                                : 'border-slate-300 dark:border-slate-600 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'
-                                }`}
+                            className={`btn-secondary ${autofindActive ? 'icon-btn-active' : ''}`}
                             title={autofindActive ? 'Hide autofind proposals' : 'Find zero-mismatch regions'}
                         >
                             autofind
@@ -1783,7 +1810,7 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
                     )}
                 </div>
                 <div className="flex items-center gap-3">
-                    <div className="flex rounded-md overflow-hidden border border-slate-300 dark:border-slate-600">
+                    <div className="flex rounded-md overflow-hidden border border-zinc-300 dark:border-zinc-700">
                         <button
                             onClick={() => {
                                 setViewMode('bars');
@@ -1792,8 +1819,8 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
                                 targetScrollRef.current = 0;
                             }}
                             className={`px-3 py-1 text-xs font-medium transition-colors ${viewMode === 'bars'
-                                ? 'bg-indigo-500 text-white'
-                                : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700'
+                                ? 'bg-teal-700/10 dark:bg-teal-300/10 text-teal-800 dark:text-teal-200'
+                                : 'bg-white dark:bg-zinc-900 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-700'
                                 }`}
                         >
                             Overview
@@ -1817,9 +1844,9 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
                                 setScrollLeft(clampedSL);
                                 targetScrollRef.current = clampedSL;
                             }}
-                            className={`px-3 py-1 text-xs font-medium transition-colors border-l border-slate-300 dark:border-slate-600 ${viewMode === 'letters'
-                                ? 'bg-indigo-500 text-white'
-                                : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700'
+                            className={`px-3 py-1 text-xs font-medium transition-colors border-l border-zinc-300 dark:border-zinc-800 ${viewMode === 'letters'
+                                ? 'bg-teal-700/10 dark:bg-teal-300/10 text-teal-800 dark:text-teal-200'
+                                : 'bg-white dark:bg-zinc-900 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-700'
                                 }`}
                         >
                             Sequence
@@ -1828,7 +1855,7 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
                     <div className="flex items-center gap-1.5">
                         <button
                             onClick={zoomOut}
-                            className="w-6 h-6 flex items-center justify-center rounded border border-slate-300 text-slate-500 hover:bg-slate-100 hover:text-slate-700 transition-colors text-sm font-bold"
+                            className="w-6 h-6 flex items-center justify-center rounded border border-zinc-300 text-zinc-500 hover:bg-zinc-100 hover:text-zinc-700 transition-colors text-sm font-bold"
                             title="Zoom out"
                         >−</button>
                         <input
@@ -1843,27 +1870,27 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
                                 // Anchor to the left edge so the slider does not teleport the view.
                                 applyZoom(factor, 0);
                             }}
-                            className="w-24 h-1.5 accent-indigo-500"
+                            className="w-24 h-1.5 accent-teal-700 dark:accent-teal-300"
                             style={{ direction: 'rtl' }}
                         />
                         <button
                             onClick={zoomIn}
-                            className="w-6 h-6 flex items-center justify-center rounded border border-slate-300 text-slate-500 hover:bg-slate-100 hover:text-slate-700 transition-colors text-sm font-bold"
+                            className="w-6 h-6 flex items-center justify-center rounded border border-zinc-300 text-zinc-500 hover:bg-zinc-100 hover:text-zinc-700 transition-colors text-sm font-bold"
                             title="Zoom in"
                         >+</button>
                     </div>
-                    <span className="text-xs text-slate-400 font-mono w-20 text-right">{Math.round(visibleBases)} bp</span>
+                    <span className="text-xs text-zinc-400 font-mono w-20 text-right">{Math.round(visibleBases)} bp</span>
                 </div>
             </div>
 
             {/* ── autofind proposals ── */}
             {showAutofindUI && autofindActive && (
-                <div className="px-5 py-3 bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700">
+                <div className="px-5 py-3 bg-zinc-50 dark:bg-zinc-950 border-b border-zinc-200 dark:border-zinc-800">
                     <div className="flex items-center justify-between mb-2">
-                        <span className="text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wide">
+                        <span className="text-xs font-semibold text-zinc-600 dark:text-zinc-400 uppercase tracking-wide">
                             Clean Regions
                         </span>
-                        <span className="text-xs text-slate-400 dark:text-slate-500">
+                        <span className="text-xs text-zinc-400 dark:text-zinc-500">
                             {cleanRegions.length} region{cleanRegions.length !== 1 ? 's' : ''}
                         </span>
                     </div>
@@ -1872,14 +1899,14 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
                             type="checkbox"
                             checked={autofindTreatIndelsAsMismatches}
                             onChange={(e) => onAutofindTreatIndelsAsMismatchesChange?.(e.target.checked)}
-                            className="rounded border-slate-300 dark:border-slate-600 text-indigo-600 focus:ring-indigo-500"
+                            className="rounded border-zinc-300 dark:border-zinc-700 text-teal-700 focus:ring-teal-700"
                         />
-                        <span className="text-xs text-slate-600 dark:text-slate-400">
+                        <span className="text-xs text-zinc-600 dark:text-zinc-400">
                             Count insertions/deletions as mismatches
                         </span>
                     </label>
                     {cleanRegions.length === 0 ? (
-                        <p className="text-xs text-slate-500 dark:text-slate-400">
+                        <p className="text-xs text-zinc-500 dark:text-zinc-400">
                             No clean regions found.
                         </p>
                     ) : (
@@ -1889,11 +1916,11 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
                                     key={`${region.start}-${region.end}`}
                                     data-testid="clean-region-pill"
                                     onClick={() => onAutofindRegionSelect?.(region.start, region.end)}
-                                    className="px-2.5 py-1 text-xs font-mono rounded-md border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 hover:border-indigo-300 dark:hover:border-indigo-800 transition-colors"
+                                    className="px-2.5 py-1 text-xs font-mono tabular-nums rounded-md border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 hover:border-teal-700/50 dark:hover:border-teal-300/50 hover:text-teal-800 dark:hover:text-teal-200 transition-colors"
                                     title={`Jump to columns ${region.start + 1}–${region.end + 1}`}
                                 >
                                     {region.start + 1}–{region.end + 1}
-                                    <span className="ml-1.5 text-slate-400 dark:text-slate-500">
+                                    <span className="ml-1.5 text-zinc-400 dark:text-zinc-500">
                                         ({region.length} bp)
                                     </span>
                                 </button>
@@ -1905,7 +1932,7 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
 
             {/* ── minimap navigator ── */}
             {showOverview && (
-                <div className="border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900">
+                <div className="border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950">
                     <canvas
                         ref={minimapRef}
                         style={{ display: 'block', cursor: 'crosshair' }}
@@ -1917,37 +1944,37 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
             )}
 
             {/* ── legend ── */}
-            <div className="px-5 py-1.5 border-b border-slate-100 dark:border-slate-700 bg-white dark:bg-slate-800 flex items-center gap-4 text-xs text-slate-500 dark:text-slate-400">
+            <div className="px-5 py-1.5 border-b border-zinc-100 dark:border-zinc-800 bg-white dark:bg-zinc-900 flex items-center gap-4 text-xs text-zinc-500 dark:text-zinc-400">
                 <span className="flex items-center gap-1">
-                    <span className="inline-block w-3 h-3 rounded-sm border border-slate-200 dark:border-slate-700" style={{ background: isDark ? '#1e293b' : '#f3f4f6' }} />
+                    <span className="inline-block w-3 h-3 rounded-sm border border-zinc-200 dark:border-zinc-800" style={{ background: isDark ? '#1e293b' : '#f3f4f6' }} />
                     Sequence / Match
                 </span>
                 <span className="flex items-center gap-1">
-                    <span className="inline-block w-3 h-3 rounded-sm border border-red-100 dark:border-red-900" style={{ background: isDark ? '#7f1d1d' : '#fee2e2' }} />
+                    <span className="inline-block w-3 h-3 rounded-sm" style={{ background: '#dc2626' }} />
                     Mismatch
                 </span>
                 <span className="flex items-center gap-1">
-                    <span className="inline-block w-3 h-3 rounded-sm border border-blue-100 dark:border-blue-900" style={{ background: isDark ? '#1e3a8a' : '#dbeafe' }} />
+                    <span className="inline-block w-1 h-3" style={{ background: '#3b82f6' }} />
                     Insertion
                 </span>
                 <span className="flex items-center gap-1">
-                    <span className="inline-block w-3 h-3 rounded-sm border border-purple-100 dark:border-purple-900" style={{ background: isDark ? '#3b0764' : '#f3e8ff' }} />
+                    <span className="inline-block w-3 h-3 rounded-sm" style={{ background: '#9333ea' }} />
                     Deletion
                 </span>
-                <span className="ml-auto italic text-slate-400">
+                <span className="ml-auto italic text-zinc-400">
                     {viewMode === 'letters' ? 'Click a row to copy' : 'Drag overview to zoom · Ctrl/⌘ + scroll to zoom'}
                 </span>
             </div>
 
             {/* ── scroll arrow bar ── */}
-            <div className="py-1 border-b border-slate-100 dark:border-slate-700 bg-white dark:bg-slate-800 flex items-center" style={{ paddingRight: `${RIGHT_PADDING}px` }}>
+            <div className="py-1 border-b border-zinc-100 dark:border-zinc-800 bg-white dark:bg-zinc-900 flex items-center" style={{ paddingRight: `${RIGHT_PADDING}px` }}>
                 {/* Arrows live in the label column so the track aligns with the sequence bars */}
                 <div style={{ width: `${labelWidth}px`, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '4px', paddingRight: '4px' }}>
                     <button
                         onMouseDown={() => startPan(-1)}
                         onMouseUp={stopPan}
                         onMouseLeave={stopPan}
-                        className="flex items-center justify-center w-7 h-7 rounded-md border border-slate-300 dark:border-slate-600 text-slate-500 dark:text-slate-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 hover:border-indigo-300 dark:hover:border-indigo-700 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors font-bold select-none"
+                        className="icon-btn w-7 h-7 font-bold select-none"
                         title="Scroll left"
                     >
                         ←
@@ -1956,7 +1983,7 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
                         onMouseDown={() => startPan(1)}
                         onMouseUp={stopPan}
                         onMouseLeave={stopPan}
-                        className="flex items-center justify-center w-7 h-7 rounded-md border border-slate-300 dark:border-slate-600 text-slate-500 dark:text-slate-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 hover:border-indigo-300 dark:hover:border-indigo-700 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors font-bold select-none"
+                        className="icon-btn w-7 h-7 font-bold select-none"
                         title="Scroll right"
                     >
                         →
@@ -1965,10 +1992,10 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
                 <div
                     ref={scrollTrackRef}
                     onMouseDown={handleBarMouseDown}
-                    className="flex-1 h-1.5 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden cursor-pointer relative"
+                    className="flex-1 h-1.5 bg-zinc-100 dark:bg-zinc-800 rounded-full overflow-hidden cursor-pointer relative"
                 >
                     <div
-                        className={`h-full bg-indigo-400 dark:bg-indigo-600 rounded-full transition-all ${isBarDragging ? 'duration-0' : 'duration-75'}`}
+                        className={`h-full bg-teal-600/60 dark:bg-teal-300/50 rounded-full transition-all ${isBarDragging ? 'duration-0' : 'duration-75'}`}
                         style={{ marginLeft: `${startFrac * 100}%`, width: `${viewFraction * 100}%` }}
                     />
                 </div>
@@ -2009,7 +2036,7 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
                     {/* ── Resizable Handle ── */}
                     <div
                         onMouseDown={handleResizeMouseDown}
-                        className={`absolute top-0 bottom-0 z-[30] w-1.5 cursor-col-resize hover:bg-indigo-400/30 transition-colors ${isResizingLabel ? 'bg-indigo-500/50' : 'bg-transparent'}`}
+                        className={`absolute top-0 bottom-0 z-[30] w-1.5 cursor-col-resize hover:bg-teal-600/30 transition-colors ${isResizingLabel ? 'bg-teal-600/50' : 'bg-transparent'}`}
                         style={{ left: `${labelWidth - 3}px` }}
                     />
                 </div>
@@ -2018,13 +2045,13 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
             {/* ── selection stats footer ── */}
             {
                 selectionStats && (
-                    <div className="bg-slate-50 dark:bg-slate-900 border-t border-slate-200 dark:border-slate-700 px-5 py-2 text-xs text-slate-600 dark:text-slate-400 font-mono flex items-center justify-between">
+                    <div className="bg-zinc-50 dark:bg-zinc-950 border-t border-zinc-200 dark:border-zinc-800 px-5 py-2 text-xs text-zinc-600 dark:text-zinc-400 font-mono flex items-center justify-between">
                         <div className="flex items-center gap-4">
-                            <span className="font-semibold text-slate-700 dark:text-slate-300">Visible Range: {startCol + 1}–{endCol + 1}</span>
+                            <span className="font-semibold text-zinc-700 dark:text-zinc-300">Visible Range: {startCol + 1}–{endCol + 1}</span>
                             <span>Length: {selectionStats.total} bp</span>
                             <span className="text-emerald-700 dark:text-emerald-400 font-medium">GC: {selectionStats.gcPct.toFixed(1)}%</span>
                         </div>
-                        <div className="flex items-center gap-3 text-slate-500 dark:text-slate-500">
+                        <div className="flex items-center gap-3 text-zinc-500 dark:text-zinc-500">
                             <span>A: {selectionStats.a}</span>
                             <span>T: {selectionStats.t}</span>
                             <span>G: {selectionStats.g}</span>
@@ -2037,7 +2064,7 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
             {/* ── label tooltip ── */}
             {labelHoverInfo && (
                 <div
-                    className="fixed z-[9999] px-2 py-1 bg-slate-800 text-white text-xs rounded shadow-lg pointer-events-none whitespace-nowrap border border-slate-600"
+                    className="fixed z-[9999] px-2 py-1 bg-zinc-800 text-white text-xs rounded shadow-lg pointer-events-none whitespace-nowrap border border-zinc-600"
                     style={{
                         left: `${labelHoverInfo.x + 12}px`,
                         top: `${labelHoverInfo.y + 12}px`
@@ -2046,28 +2073,41 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
                     {labelHoverInfo.text}
                 </div>
             )}
+            {/* ── insertion tooltip ── */}
+            {insertHoverInfo && (
+                <div
+                    className="fixed z-[9999] pointer-events-none px-2 py-1 bg-zinc-800 text-white text-xs rounded shadow-lg border border-zinc-600"
+                    style={{
+                        left: `${insertHoverInfo.x + 12}px`,
+                        top: `${insertHoverInfo.y + 12}px`
+                    }}
+                >
+                    <div>Length: {insertHoverInfo.length} bp</div>
+                    <div className="font-mono">Sequence: {insertHoverInfo.sequence.toUpperCase().length > 60 ? insertHoverInfo.sequence.toUpperCase().substring(0, 60) + '…' : insertHoverInfo.sequence.toUpperCase()}</div>
+                </div>
+            )}
             {/* ── NCBI link choice modal ── */}
             {ncbiModalAccession && (
                 <div
-                    className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
+                    className="modal-overlay"
                     onClick={() => setNcbiModalAccession(null)}
                 >
                     <div
-                        className="max-w-sm w-full bg-white dark:bg-slate-800 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-700 p-6"
+                        className="card shadow-xl max-w-sm w-full p-6"
                         onClick={e => e.stopPropagation()}
                     >
                         <div className="flex items-center justify-between mb-4">
-                            <h3 className="text-base font-semibold text-slate-800 dark:text-slate-200">
+                            <h3 className="text-base font-semibold text-zinc-800 dark:text-zinc-200">
                                 Open NCBI record
                             </h3>
                             <button
                                 onClick={() => setNcbiModalAccession(null)}
-                                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-xl leading-none"
+                                className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 text-xl leading-none"
                             >
                                 &times;
                             </button>
                         </div>
-                        <p className="text-sm text-slate-600 dark:text-slate-400 mb-5 font-mono break-all">
+                        <p className="text-sm text-zinc-600 dark:text-zinc-400 mb-5 font-mono break-all">
                             {ncbiModalAccession}
                         </p>
                         <div className="space-y-3">
@@ -2081,7 +2121,7 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
                                     window.open(url, '_blank', 'noopener,noreferrer');
                                     setNcbiModalAccession(null);
                                 }}
-                                className="w-full px-4 py-2.5 text-sm font-medium rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 transition-colors"
+                                className="btn-primary w-full justify-center px-4 py-2.5 text-sm"
                             >
                                 Whole genome
                             </button>
@@ -2097,13 +2137,13 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
                                         window.open(url, '_blank', 'noopener,noreferrer');
                                         setNcbiModalAccession(null);
                                     }}
-                                    className="w-full px-4 py-2.5 text-sm font-medium rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-600 transition-colors"
+                                    className="btn-secondary w-full justify-center px-4 py-2.5 text-sm"
                                 >
                                     Coding region
                                 </button>
                             )}
                         </div>
-                        <p className="mt-4 text-xs text-slate-500 dark:text-slate-400">
+                        <p className="mt-4 text-xs text-zinc-500 dark:text-zinc-400">
                             Choose whether to view the complete genome record or just the BLAST-aligned coding region.
                         </p>
                     </div>
