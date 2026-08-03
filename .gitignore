@@ -71,6 +71,9 @@ GEMINI.md
 frontend_desktop.png
 frontend_mobile.png
 frontend_settings.png
+deslop-*.png
+.playwright-mcp/
+.pytest_cache/
 
 # Environment files (may contain API keys)
 .env
@@ -98,8 +101,3 @@ tmp/
 temp/
 .tmp/
 
-testsprite_tests/tmp/
-# TestSprite generated artifacts (keep TC*.py tests, drop reports/plans)
-testsprite_tests/testsprite-mcp-test-report.*
-testsprite_tests/testsprite_backend_test_plan.json
-testsprite_tests/standard_prd.json
