@@ -45,6 +45,8 @@ def run_msa(sequences: List[Dict[str, str]]) -> str:
         if getattr(sys, 'frozen', False) or not mafft_exe:
             if sys.platform == 'win32':
                 local_mafft = os.path.join(base_path, '.bin', 'mafft', 'mafft-win', 'mafft.bat')
+            elif sys.platform.startswith('linux'):
+                local_mafft = os.path.join(base_path, '.bin', 'mafft', 'mafft-linux', 'bin', 'mafft')
             elif is_frozen_app:
                 local_mafft = os.path.join(base_path, '__dot__bin', 'mafft', 'mafft-mac', 'mafft-mac', 'mafftdir', 'bin', 'mafft')
             else:
