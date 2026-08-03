@@ -1,0 +1,133 @@
+name: Release
+
+# Push a version tag to build all platforms and publish a GitHub Release:
+#   git tag v1.0.0 && git push origin v1.0.0
+# workflow_dispatch runs the same builds without publishing (CI smoke test).
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  macos:
+    name: macOS (${{ matrix.arch }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: macos-14, arch: arm64 }   # Apple Silicon
+          - { os: macos-13, arch: x86_64 }  # Intel
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Build Oligool.app bundle
+        run: ./scripts/build_mac.sh
+      - name: Build installer package (.pkg wizard)
+        run: |
+          VER="${GITHUB_REF_NAME#v}"
+          [[ "$VER" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || VER="0.0.0"
+          rm -rf build_pkg && mkdir -p build_pkg/resources
+          cp LICENSE build_pkg/resources/
+          pkgbuild --component dist/Oligool.app \
+            --install-location /Applications \
+            --identifier com.oligool.app \
+            --version "$VER" \
+            build_pkg/component.pkg
+          productbuild --distribution scripts/macos_distribution.xml \
+            --resources build_pkg/resources \
+            --package-path build_pkg \
+            "dist/Oligool-${VER}-macos-${{ matrix.arch }}.pkg"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: oligool-macos-${{ matrix.arch }}
+          path: dist/Oligool-*.pkg
+          if-no-files-found: error
+
+  windows:
+    name: Windows (x86_64)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Build PyInstaller bundle
+        # "< nul" feeds EOF to the script's trailing `pause` so it exits in CI.
+        shell: cmd
+        run: cmd /c "scripts\build_win.bat" < nul
+      - name: Download WebView2 offline installer
+        # linkid=2124701 = Microsoft's official evergreen standalone x64 installer fwlink.
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force .bin\webview2 | Out-Null
+          Invoke-WebRequest -Uri "https://go.microsoft.com/fwlink/?linkid=2124701" -OutFile ".bin\webview2\MicrosoftEdgeWebView2RuntimeInstallerX64.exe"
+          if ((Get-Item ".bin\webview2\MicrosoftEdgeWebView2RuntimeInstallerX64.exe").Length -lt 100MB) { throw "WebView2 offline installer download looks truncated" }
+      - name: Compile installer wizard (Inno Setup)
+        shell: pwsh
+        run: |
+          choco install innosetup --no-progress -y
+          $v = $env:GITHUB_REF_NAME -replace '^v',''
+          if ($v -notmatch '^\d+\.\d+\.\d+$') { $v = '0.0.0' }
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "/DAppVersion=$v" scripts\installer_win.iss
+          if ($LASTEXITCODE -ne 0) { throw "ISCC failed with exit code $LASTEXITCODE" }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: oligool-windows-x86_64
+          path: dist/Oligool-Setup-*.exe
+          if-no-files-found: error
+
+  linux:
+    name: Linux (x86_64)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      # No setup-python: the build intentionally uses the distro python so the
+      # venv (--system-site-packages) can see the apt-installed PyGObject.
+      - name: Install build and pywebview runtime dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3-venv python3-pip python3-gi gir1.2-gtk-3.0 gir1.2-webkit2-4.1
+      - name: Build PyInstaller bundle and tarball
+        run: ./scripts/build_linux.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: oligool-linux-x86_64
+          path: dist/Oligool-linux-x86_64.tar.gz
+          if-no-files-found: error
+
+  release:
+    name: Publish GitHub Release
+    needs: [macos, windows, linux]
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v2
+        with:
+          name: Oligool ${{ github.ref_name }}
+          generate_release_notes: true
+          prerelease: ${{ startsWith(github.ref_name, 'v0.') }}
+          files: dist/*

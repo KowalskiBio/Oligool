@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<installer-gui-script minSpecVersion="2">
+  <title>Oligool</title>
+  <license file="LICENSE" mime-type="text/plain"/>
+  <options customize="never" require-scripts="false"/>
+  <choices-outline>
+    <line choice="default">
+      <line choice="com.oligool.app"/>
+    </line>
+  </choices-outline>
+  <choice id="default"/>
+  <choice id="com.oligool.app" visible="false">
+    <pkg-ref id="com.oligool.app"/>
+  </choice>
+  <pkg-ref id="com.oligool.app" onConclusion="none">component.pkg</pkg-ref>
+</installer-gui-script>
