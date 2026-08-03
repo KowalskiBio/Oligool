@@ -1,113 +1,91 @@
-# 🐰 Oligool
+# Oligool
 
-Oligool is a native desktop application for molecular biologists designed to streamline the design, alignment, and analysis of genetic sequences and oligos.
+Oligool is a desktop app for molecular biologists. It fetches gene and transcript sequences from NCBI or Ensembl, aligns them with MAFFT, and designs oligos and primers on the aligned result. The backend is FastAPI served in a native webview window. The frontend is React with Vite.
 
-## Core Capabilities
+## Features
 
-### 1. Dual-Source Search & Fetch
-- **NCBI & Ensembl Integration**: Toggle between data sources to find genes, transcripts, and sequences across thousands of organisms.
-- **Smart Filtering**: Persistent search parameters (E-value, Identity %, Organism) that survive application restarts.
+- Sequence search against NCBI or Ensembl, with organism, E-value, and identity filters that persist between sessions.
+- MSA viewer built on an anchor grid over the query sequence: minimap with GC track, zoom and pan, and per-row markers for mismatches, deletions, and insertions.
+- Oligize: split a region into two contiguous oligos with exact control over shift and length. Hairpin and self-dimer ΔG comes live from IDT OligoAnalyzer (requires IDT API credentials).
+- Primerize schematic: SVG view of the design with forward and reverse primer binding sites and TAG sequences, plus a seq mode with base-by-base lettering.
+- Flanking primers: Primer3 designs them upstream and downstream of MOLigo targets, or you select the regions directly in the MSA viewer. Each candidate runs on-demand IDT QC for hairpins, self-dimers, and heterodimers.
+- Standalone design reports with pasted images and notes, exportable to PDF and TXT.
 
-### 2. Interactive MSA Viewer
-- **High-Performance Alignment**: Powered by MAFFT for rapid multiple sequence alignment.
-- **2D Navigation**: Interactive minimap for scrubbing through massive alignments and identifying conservation patterns and variations.
+## Run from source
 
-### 3. "Oligize!" Design
-- **Precision Splitting**: Pivot genomic regions into two contiguous oligos with exact control over shift and lengths.
-- **Real-time Delta G**: Live integration with IDT OligoAnalyzer to analyze hairpin formation and self-dimerization (requires IDT API credentials).
+Frontend:
 
-### 4. "Primerize!" Schematic
-- **Visual Assembly**: A high-fidelity SVG schematic of your design, showing Forward and Reverse Primer Binding Sites (PBS) and TAG sequences.
-- **🔡 Seq Mode**: Toggle high-detail view to see base-by-base lettering along the schematic's architecture.
-- **Persistence**: Your TAGs, PBS sequences, and design preferences are remembered automatically.
-
-### 5. Flanking Primers Pipeline
-- **Automated Design**: Integrates with Primer3 for precise generation of flanking primers upstream and downstream of your MOLigo targets based on user-defined thermodynamic parameters.
-- **Manual Mode Bypass**: Allows explicit highlighted selection directly within the sequence viewer to instantly test specific primer regions, bypassing Primer3 algorithms.
-- **Per-Primer QC Diagnostics**: Triggers granular, on-demand IDT structural analysis (hairpins, self-dimers, and pairwise heterodimers) for each individual primer candidate directly within the UI, ensuring production-ready selections.
-
----
-
-## Setup & Development
-
-### Local Development
 ```bash
-# 1. Start the Frontend (Vite)
 cd frontend
 npm install
 npm run dev
+```
 
-# 2. Start the Backend (FastAPI) in a separate terminal
-# The backend uses a virtual environment and launches the native webview
+Backend, in a second terminal. This also opens the app window:
+
+```bash
 python3 -m venv venv
 source venv/bin/activate
 pip install -r backend/requirements.txt
 python3 webview_app.py
 ```
 
-### Ubuntu Server Setup
+You need Python 3, Node.js, and MAFFT installed. On Windows, `start.bat` checks for all three and installs whatever is missing.
 
-To instantly deploy Oligool on a fresh Ubuntu VM:
+## Ubuntu server
 
-1. Copy or clone the `Oligool` project folder onto your VM.
-2. Navigate into the root of the project:
-   ```bash
-   cd Oligool
-   ```
-3. Run the automated setup script (requires `sudo` privileges to install system dependencies and set up the service):
-   ```bash
-   chmod +x scripts/setup_ubuntu.sh
-   sudo bash scripts/setup_ubuntu.sh
-   ```
+Clone the repo on the VM and from its root run:
 
-*What the script does:*
-- Installs all system dependencies (Python, Node.js, `mafft`, etc.).
-- Builds the Vite frontend.
-- Sets up a Python virtual environment and installs the FastAPI backend.
-- Automatically creates and starts an `oligool.service` systemd daemon so the app runs in the background on port 8000 and restarts on boot.
+```bash
+chmod +x scripts/setup_ubuntu.sh
+sudo bash scripts/setup_ubuntu.sh
+```
 
-### Native Application Bundling
+The script installs system dependencies (Python, Node.js, MAFFT), builds the frontend, creates a virtualenv with the backend, and registers an `oligool.service` systemd unit that serves the app on port 8000 and restarts on boot.
 
-#### macOS (.app / .dmg)
-Build a standalone Mac bundle with a native transparent icon:
+## Desktop bundles
+
+macOS:
+
 ```bash
 ./scripts/build_mac.sh
 ```
-Find the output in `dist/Oligool.app`.
 
-#### Windows (.exe)
-Build a single-file executable for Windows (must run on Windows):
+Output is `dist/Oligool.app`.
+
+Windows, from a Windows machine:
+
 ```batch
 scripts\build_win.bat
 ```
-Find the output in `dist\Oligool.exe`. 
 
-*Note: If you do not have Python, Node.js, or MAFFT installed, the build script will automatically download and install everything required to package the application.*
+Output is `dist\Oligool.exe`. The Windows scripts download Python, Node.js, and MAFFT when missing.
 
-#### Running from Source (Windows)
-Double-click `start.bat`. This script will automatically check for Python, Node.js, and MAFFT. If any are missing, it will silently download and install them in the background before launching the application.
+## Remote access
 
----
+Oligool is a web service on port 8000, so a Cloudflare Tunnel exposes it without opening router ports. If you already run a tunnel, add a public hostname in the Zero Trust dashboard: subdomain `oligool`, service type HTTP, URL `YOUR_VM_IP:8000`.
 
-## Remote Access (Cloudflare Tunnel)
+For a dedicated tunnel on the VM:
 
-Since Oligool runs as a standard web service on port `8000`, you can easily expose it securely to the internet without opening router ports.
+```bash
+cloudflared tunnel login
+cloudflared tunnel create oligool
+cloudflared tunnel route dns oligool oligool.yourdomain.com
+cloudflared tunnel run --url http://localhost:8000
+```
 
-**If you already have a Cloudflare Tunnel (e.g., on a Raspberry Pi):**
-The easiest method is to go to your **Cloudflare Zero Trust Dashboard** -> **Access** -> **Tunnels**. Click your existing tunnel, go to **Public Hostname**, and add a new hostname:
-- **Subdomain**: `oligool`
-- **Domain**: `yourdomain.com`
-- **Service Type**: `HTTP`
-- **URL**: `YOUR_VM_IP:8000` (e.g., `192.168.1.100:8000`)
+## Design
 
-**To run a dedicated tunnel directly on the Ubuntu VM:**
-1. Install `cloudflared` on the VM.
-2. Authenticate: `cloudflared tunnel login`
-3. Create a tunnel: `cloudflared tunnel create oligool-tunnel`
-4. Route traffic: `cloudflared tunnel route dns oligool-tunnel oligool.yourdomain.com`
-5. Run the tunnel: `cloudflared tunnel run --url http://localhost:8000 oligool-tunnel`
+`frontend/DESIGN.md` specifies the interface design system: IBM Plex typography, zinc palette, shared tokens.
 
----
+## What's new
 
-## Privacy & Persistence
-All credentials (NCBI Key, IDT API) and design configurations are stored locally on your machine via `localStorage`. No sensitive data is transmitted to the cloud except for direct API calls to NCBI/IDT.
+The version button in the top right of the app opens the changelog for the current release.
+
+## Privacy
+
+Credentials (NCBI key, IDT API) and design settings stay in `localStorage` on your machine. Data leaves the machine only for direct API calls to NCBI and IDT.
+
+## License
+
+GPL-3.0. See `LICENSE`.
