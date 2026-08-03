@@ -375,7 +375,7 @@ const RabbitGame: React.FC = () => {
 
   return (
     <div className="flex flex-col items-center gap-2 mt-6">
-      <p className="text-xs text-slate-400 dark:text-slate-500 font-mono tracking-wide">
+      <p className="text-xs text-zinc-400 dark:text-zinc-500 font-mono tracking-wide">
         help the bunny survive while BLAST runs!
       </p>
       <div className="flex items-center gap-1.5">
@@ -385,8 +385,8 @@ const RabbitGame: React.FC = () => {
             onClick={() => setSpeed(s)}
             className={`px-2.5 py-1 text-xs font-medium rounded-md border transition-colors ${
               speed === s
-                ? 'bg-indigo-600 border-indigo-600 text-white'
-                : 'bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:bg-indigo-50 dark:hover:bg-indigo-900/20'
+                ? 'bg-teal-700/10 dark:bg-teal-300/10 text-teal-800 dark:text-teal-200 border-teal-700/30 dark:border-teal-300/30'
+                : 'bg-white dark:bg-zinc-800 border-zinc-300 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700'
             }`}
           >
             {SPEED_PRESETS[s].label}
@@ -397,7 +397,7 @@ const RabbitGame: React.FC = () => {
         ref={canvasRef}
         width={CW}
         height={CH}
-        className="cursor-pointer rounded-lg border border-slate-700 shadow-lg select-none"
+        className="cursor-pointer rounded-lg border border-zinc-700 dark:border-zinc-800 shadow-lg select-none"
         style={{ maxWidth: '100%', imageRendering: 'pixelated' }}
       />
     </div>

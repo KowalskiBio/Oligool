@@ -515,15 +515,15 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
   }, [visibleAlignment]);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-indigo-50/30 dark:from-slate-900 dark:to-slate-950 py-8 px-4 sm:px-6 lg:px-8 transition-colors duration-200">
+    <div className="min-h-screen py-8 px-4 sm:px-6 lg:px-8">
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <header className="mb-8 flex items-start justify-between">
           <div>
-            <h1 className="text-3xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 dark:from-indigo-400 dark:to-purple-400 bg-clip-text text-transparent">
+            <h1 className="text-lg font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">
               Oligool
             </h1>
-            <p className="mt-1 text-slate-500 dark:text-slate-400">BLAST Search → Multiple Sequence Alignment</p>
+            <p className="mt-1 text-zinc-500 dark:text-zinc-400">BLAST Search → Multiple Sequence Alignment</p>
           </div>
           <div className="flex items-center gap-4">
             {/* Session Save / Load */}
@@ -543,7 +543,7 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                 type="button"
                 onClick={() => setShowUserReport(true)}
                 title="Create a standalone report with images and notes"
-                className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-indigo-200 dark:border-indigo-800 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 hover:border-indigo-300 dark:hover:border-indigo-700 transition-colors text-xs font-medium"
+                className="btn-secondary"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -553,13 +553,13 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
               <button
                 onClick={() => setShowWhatsNew(true)}
                 title="Kliknutím zobrazíte novinky a návod k použití"
-                className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800 whitespace-nowrap cursor-pointer hover:bg-amber-200 dark:hover:bg-amber-900/50 transition-colors"
+                className="btn-secondary whitespace-nowrap"
               >
                 v0.9.6 beta
               </button>
               {sessionMsg && (
                 <span
-                  className={`text-xs font-medium animate-in fade-in ${sessionMsg.type === 'ok' ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}
+                  className={`text-xs font-medium tabular-nums ${sessionMsg.type === 'ok' ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}
                 >
                   {sessionMsg.text}
                 </span>
@@ -567,7 +567,7 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
               <button
                 onClick={() => fileInputRef.current?.click()}
                 title="Load a saved Oligool session (.oligool.json)"
-                className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:border-indigo-300 dark:hover:border-indigo-700 transition-colors text-xs font-medium"
+                className="btn-secondary"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
@@ -578,7 +578,7 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                 <button
                   onClick={handleSaveSession}
                   title="Save this session (oligos, pinned positions, primers & alignment) to a file"
-                  className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-indigo-200 dark:border-indigo-800 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 hover:border-indigo-300 dark:hover:border-indigo-700 transition-colors text-xs font-medium"
+                  className="btn-secondary"
                 >
                   <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 16v1a3 3 0 01-3 3H7a3 3 0 01-3-3v-1m4-4l4 4m0 0l4-4m-4 4V4" />
@@ -591,48 +591,24 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
             {/* Theme Toggle Button (Primerool style) */}
             <button
               onClick={() => setIsDarkMode(!isDarkMode)}
-              aria-label="Toggle Dark Mode"
-              className="relative inline-flex h-8 w-16 items-center rounded-full transition-colors duration-300 focus:outline-none bg-slate-200 dark:bg-slate-700 border border-slate-300 dark:border-slate-600"
+              aria-label={isDarkMode ? 'Switch to light mode' : 'Switch to dark mode'}
+              className="icon-btn"
+              title={isDarkMode ? 'Switch to light mode' : 'Switch to dark mode'}
             >
-              <span className="sr-only">Toggle Dark Mode</span>
-              {/* Track Icons */}
-              <div className="absolute inset-0 flex items-center justify-between px-2">
-                {/* Sun (Left) */}
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-amber-500 transition-opacity" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              {isDarkMode ? (
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
                 </svg>
-                {/* Moon (Right) */}
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-indigo-400 transition-opacity" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              ) : (
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
                 </svg>
-              </div>
-              {/* Thumb */}
-              <span
-                className={`inline-block h-6 w-6 transform rounded-full bg-white shadow-md ring-0 transition-transform duration-300 ease-in-out ${isDarkMode ? 'translate-x-8' : 'translate-x-1'}`}
-              >
-                <span className="flex items-center justify-center w-full h-full">
-                  {/* Sun in Thumb (Light Mode) */}
-                  {!isDarkMode && (
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
-                    </svg>
-                  )}
-                  {/* Moon in Thumb (Dark Mode) */}
-                  {isDarkMode && (
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
-                    </svg>
-                  )}
-                </span>
-              </span>
+              )}
             </button>
 
             <button
               onClick={() => setShowSettings((v) => !v)}
-              className={`mt-0.5 p-2 rounded-lg border transition-colors ${showSettings
-                ? 'bg-indigo-50 border-indigo-200 text-indigo-600 dark:bg-indigo-900/30 dark:border-indigo-800 dark:text-indigo-400'
-                : 'bg-white border-slate-200 text-slate-400 hover:text-slate-600 hover:border-slate-300 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-500 dark:hover:text-slate-400'
-                }`}
+              className={`mt-0.5 icon-btn ${showSettings ? 'icon-btn-active' : ''}`}
               title="NCBI Settings"
             >
               <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
@@ -644,9 +620,9 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
 
         {/* NCBI API Key Settings */}
         {showSettings && (
-          <div className="mb-6 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-sm animate-in fade-in slide-in-from-top-2 duration-300">
-            <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center bg-slate-50/50 dark:bg-slate-900/50 rounded-t-xl">
-              <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300">API Credentials</h3>
+          <div className="mb-6 card">
+            <div className="panel-header flex justify-between items-center rounded-t-lg">
+              <h3 className="text-sm font-semibold text-zinc-700 dark:text-zinc-300">API Credentials</h3>
               <label className="flex items-center gap-2 cursor-pointer group">
                 <div className="relative">
                   <input
@@ -656,10 +632,10 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                     onChange={(e) => setShowSecrets(e.target.checked)}
                     aria-label="Show Secrets"
                   />
-                  <div className={`block w-8 h-4 rounded-full transition-colors ${showSecrets ? 'bg-indigo-500' : 'bg-slate-300 dark:bg-slate-600'}`}></div>
-                  <div className={`absolute left-0.5 top-0.5 bg-white w-3 h-3 rounded-full transition-transform ${showSecrets ? 'translate-x-4' : ''}`}></div>
+                  <div className={`block w-8 h-4 rounded-full transition-colors ${showSecrets ? 'bg-teal-600' : 'bg-zinc-300 dark:bg-zinc-700'}`}></div>
+                  <div className={`absolute left-0.5 top-0.5 bg-white w-3 h-3 rounded-full transition-transform ${showSecrets ? 'tranzinc-x-4' : ''}`}></div>
                 </div>
-                <span className="text-xs font-medium text-slate-500 dark:text-slate-400 group-hover:text-slate-700 dark:group-hover:text-slate-300 transition-colors">
+                <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400 group-hover:text-zinc-700 dark:group-hover:text-zinc-300 transition-colors">
                   Show Passwords
                 </span>
               </label>
@@ -667,7 +643,7 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
             <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-3">
                 <div className="flex items-center gap-3">
-                  <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase w-24">
+                  <label className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider w-24">
                     NCBI Key
                   </label>
                   <input
@@ -675,17 +651,17 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                     value={apiKey}
                     onChange={(e) => handleApiKeyChange(e.target.value)}
                     placeholder="NCBI API key"
-                    className="flex-1 rounded-lg border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-xs p-2 border font-mono"
+                    className="input text-xs p-2 font-mono"
                   />
                 </div>
-                <p className="text-[10px] text-slate-400 dark:text-slate-500">
-                  Increases BLAST rate limit (3 → 10 req/s). Get from <a href="https://www.ncbi.nlm.nih.gov/account/settings/" target="_blank" rel="noopener noreferrer" className="text-indigo-500 underline">NCBI Settings</a>.
+                <p className="text-[10px] text-zinc-400 dark:text-zinc-500">
+                  Increases BLAST rate limit (3 → 10 req/s). Get from <a href="https://www.ncbi.nlm.nih.gov/account/settings/" target="_blank" rel="noopener noreferrer" className="text-teal-700 underline">NCBI Settings</a>.
                 </p>
               </div>
 
               <div className="space-y-3">
                 <div className="flex items-center gap-3">
-                  <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase w-24">
+                  <label className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider w-24">
                     IDT Client ID
                   </label>
                   <input
@@ -693,11 +669,11 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                     value={idtClientId}
                     onChange={(e) => handleIdtIdChange(e.target.value)}
                     placeholder="OligoAnalyzer Client ID"
-                    className="flex-1 rounded-lg border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-xs p-2 border font-mono"
+                    className="input text-xs p-2 font-mono"
                   />
                 </div>
                 <div className="flex items-center gap-3">
-                  <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase w-24">
+                  <label className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider w-24">
                     IDT Secret
                   </label>
                   <input
@@ -705,11 +681,11 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                     value={idtClientSecret}
                     onChange={(e) => handleIdtSecretChange(e.target.value)}
                     placeholder="OligoAnalyzer Client Secret"
-                    className="flex-1 rounded-lg border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-xs p-2 border font-mono"
+                    className="input text-xs p-2 font-mono"
                   />
                 </div>
                 <div className="flex items-center gap-3">
-                  <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase w-24">
+                  <label className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider w-24">
                     IDT User
                   </label>
                   <input
@@ -717,11 +693,11 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                     value={idtUsername}
                     onChange={(e) => handleIdtUsernameChange(e.target.value)}
                     placeholder="IDT Username"
-                    className="flex-1 rounded-lg border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-xs p-2 border font-mono"
+                    className="input text-xs p-2 font-mono"
                   />
                 </div>
                 <div className="flex items-center gap-3">
-                  <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase w-24">
+                  <label className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider w-24">
                     IDT Pass
                   </label>
                   <input
@@ -729,24 +705,24 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                     value={idtPassword}
                     onChange={(e) => handleIdtPasswordChange(e.target.value)}
                     placeholder="IDT Account Password"
-                    className="flex-1 rounded-lg border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-xs p-2 border font-mono"
+                    className="input text-xs p-2 font-mono"
                   />
                 </div>
                 <div className="flex items-center gap-3">
-                  <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase w-24">
+                  <label className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider w-24">
                     IDT Region
                   </label>
                   <select
                     value={idtRegion}
                     onChange={(e) => handleIdtRegionChange(e.target.value as 'us' | 'eu')}
-                    className="flex-1 rounded-lg border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-xs p-2 border font-mono"
+                    className="input text-xs p-2 font-mono"
                   >
                     <option value="eu">EU (eu.idtdna.com)</option>
                     <option value="us">US (www.idtdna.com)</option>
                   </select>
                 </div>
-                <p className="text-[10px] text-slate-400 dark:text-slate-500">
-                  Required for IDT OligoAnalyzer features. Obtain from <a href="https://www.idtdna.com/pages/scitools/plus-api" target="_blank" rel="noopener noreferrer" className="text-indigo-500 underline">IDT SciTools Plus API</a>. US and EU accounts use separate IDT regions.
+                <p className="text-[10px] text-zinc-400 dark:text-zinc-500">
+                  Required for IDT OligoAnalyzer features. Obtain from <a href="https://www.idtdna.com/pages/scitools/plus-api" target="_blank" rel="noopener noreferrer" className="text-teal-700 underline">IDT SciTools Plus API</a>. US and EU accounts use separate IDT regions.
                 </p>
               </div>
             </div>
@@ -761,16 +737,20 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                 <div className="flex flex-col items-center">
                   <div
                     className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium transition-all duration-300 ${isStepCurrent(s.key)
-                      ? 'bg-indigo-600 text-white ring-4 ring-indigo-100 dark:ring-indigo-900/40'
+                      ? 'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900'
                       : isStepActive(s.key)
-                        ? 'bg-indigo-600 text-white'
-                        : 'bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400'
+                        ? 'bg-teal-700 text-white dark:bg-teal-300 dark:text-zinc-900'
+                        : 'bg-zinc-200 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400'
                       }`}
                   >
-                    {isStepActive(s.key) && !isStepCurrent(s.key) ? '✓' : idx + 1}
+                    {isStepActive(s.key) && !isStepCurrent(s.key) ? (
+                      <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                      </svg>
+                    ) : idx + 1}
                   </div>
                   <span
-                    className={`mt-1.5 text-xs font-medium ${isStepActive(s.key) ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400 dark:text-slate-600'
+                    className={`mt-1.5 text-xs font-medium ${isStepActive(s.key) ? 'text-teal-700 dark:text-teal-300' : 'text-zinc-400 dark:text-zinc-600'
                       }`}
                   >
                     {s.label}
@@ -778,7 +758,7 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                 </div>
                 {idx < steps.length - 1 && (
                   <div
-                    className={`w-16 sm:w-24 h-0.5 mx-2 transition-colors duration-300 ${stepOrder.indexOf(step) > idx ? 'bg-indigo-400 dark:bg-indigo-600' : 'bg-slate-200 dark:bg-slate-700'
+                    className={`w-16 sm:w-24 h-0.5 mx-2 transition-colors duration-300 ${stepOrder.indexOf(step) > idx ? 'bg-teal-600 dark:bg-teal-400' : 'bg-zinc-200 dark:bg-zinc-800'
                       }`}
                   />
                 )}
@@ -799,11 +779,11 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
 
         <main>
           {/* Input Area */}
-          <div className={`bg-white dark:bg-slate-800 shadow-sm rounded-xl border border-slate-200 dark:border-slate-700 p-6 mb-6 transition-all duration-300 ${step === 'done' ? 'hidden' : 'block'}`}>
+          <div className={`card p-6 mb-6 ${step === 'done' ? 'hidden' : 'block'}`}>
 
             {/* Job Name Input */}
             <div className="mb-4">
-              <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">
+              <label className="block text-sm font-semibold text-zinc-700 dark:text-zinc-300 mb-1">
                 Job Name
               </label>
               <input
@@ -811,20 +791,20 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                 value={jobName}
                 onChange={(e) => setJobName(e.target.value)}
                 placeholder="e.g. My Gene Analysis"
-                className="w-full sm:w-1/2 rounded-lg border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm px-3 py-2 border"
+                className="input sm:w-1/2"
               />
             </div>
 
-            <label htmlFor="sequence" className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2">
+            <label htmlFor="sequence" className="block text-sm font-semibold text-zinc-700 dark:text-zinc-300 mb-2">
               Query Sequence
-              <span className="ml-2 font-normal text-slate-400 dark:text-slate-500">(FASTA or raw sequence)</span>
+              <span className="ml-2 font-normal text-zinc-400 dark:text-zinc-500">(FASTA or raw sequence)</span>
             </label>
             {/* ... textarea ... */}
             <textarea
               id="sequence"
               rows={8}
               disabled={step !== 'input'}
-              className="w-full rounded-lg border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 font-mono text-sm p-3 border disabled:opacity-50 disabled:bg-slate-50 dark:disabled:bg-slate-800"
+              className="input font-mono text-sm p-3"
               placeholder={">my_sequence\nATCGATCGATCGATCGATCGATCGATCG..."}
               value={input}
               onChange={(e) => setInput(e.target.value)}
@@ -835,37 +815,37 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
               </p>
             )}
 
-            <label htmlFor="genbank-header" className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2 mt-4">
+            <label htmlFor="genbank-header" className="block text-sm font-semibold text-zinc-700 dark:text-zinc-300 mb-2 mt-4">
               GenBank Header
-              <span className="ml-2 font-normal text-slate-400 dark:text-slate-500">(optional — paste the full header from GenBank)</span>
+              <span className="ml-2 font-normal text-zinc-400 dark:text-zinc-500">(optional — paste the full header from GenBank)</span>
             </label>
             <textarea
               id="genbank-header"
               rows={4}
               disabled={step !== 'input'}
-              className="w-full rounded-lg border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 font-mono text-xs p-3 border disabled:opacity-50 disabled:bg-slate-50 dark:disabled:bg-slate-800"
+              className="input font-mono text-xs p-3"
               placeholder={"LOCUS       PD166130                 981 bp    DNA     linear   PAT 29-JAN-2025\nDEFINITION  ...\nACCESSION   ...\nVERSION     ..."}
               value={genbankHeader}
               onChange={(e) => setGenbankHeader(e.target.value)}
             />
             {/* ... filters ... */}
-            <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4 border-t border-slate-100 dark:border-slate-700 pt-4">
+            <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4 border-t border-zinc-100 dark:border-zinc-800 pt-4">
               {/* Organism Filter */}
               <div>
-                <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1">Organism (Optional)</label>
+                <label className="block text-xs font-semibold text-zinc-500 dark:text-zinc-400 mb-1">Organism (Optional)</label>
                 <input
                   type="text"
                   value={organism}
                   onChange={(e) => setOrganism(e.target.value)}
                   disabled={step !== 'input'}
                   placeholder="e.g. human, mouse, txid9606"
-                  className="w-full rounded-lg border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 px-3 py-2 text-sm focus:border-indigo-500 focus:ring-indigo-500 disabled:opacity-50 placeholder-slate-400 dark:placeholder-slate-500 border"
+                  className="input placeholder-zinc-400 dark:placeholder-zinc-500"
                 />
               </div>
 
               {/* E-value Threshold */}
               <div>
-                <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1">E-value Threshold</label>
+                <label className="block text-xs font-semibold text-zinc-500 dark:text-zinc-400 mb-1">E-value Threshold</label>
                 <input
                   type="number"
                   step="1e-10"
@@ -873,13 +853,13 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                   value={eValue}
                   onChange={(e) => setEValue(e.target.value)}
                   disabled={step !== 'input'}
-                  className="w-full rounded-lg border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 px-3 py-2 text-sm focus:border-indigo-500 focus:ring-indigo-500 disabled:opacity-50 border"
+                  className="input"
                 />
               </div>
 
               {/* % Identity Threshold */}
               <div>
-                <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1">% Identity Threshold</label>
+                <label className="block text-xs font-semibold text-zinc-500 dark:text-zinc-400 mb-1">% Identity Threshold</label>
                 <input
                   type="number"
                   min="0"
@@ -887,15 +867,15 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                   value={percIdentity}
                   onChange={(e) => setPercIdentity(e.target.value)}
                   disabled={step !== 'input'}
-                  className="w-full rounded-lg border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 px-3 py-2 text-sm focus:border-indigo-500 focus:ring-indigo-500 disabled:opacity-50 border"
+                  className="input"
                 />
               </div>
             </div>
             {/* ... buttons ... */}
             <div className="mt-4 flex items-center justify-between flex-wrap gap-3 pt-2">
               <div className="flex items-center gap-2">
-                <label className="text-xs font-medium text-slate-500 dark:text-slate-400">Max hits:</label>
-                <div className="flex rounded-lg overflow-hidden border border-slate-300 dark:border-slate-600">
+                <label className="text-xs font-medium text-zinc-500 dark:text-zinc-400">Max hits:</label>
+                <div className="flex rounded-md overflow-hidden border border-zinc-300 dark:border-zinc-700">
                   {[
                     { value: 'all', label: 'All' },
                     { value: '1000', label: '1000' },
@@ -910,10 +890,10 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                       type="button"
                       onClick={() => setMaxHitsPreset(opt.value)}
                       disabled={step !== 'input'}
-                      className={`px-2.5 py-1 text-xs font-medium transition-colors disabled:opacity-50 ${i > 0 ? 'border-l border-slate-300 dark:border-slate-600' : ''
+                      className={`px-2.5 py-1 text-xs font-medium transition-colors disabled:opacity-50 ${i > 0 ? 'border-l border-zinc-300 dark:border-zinc-700' : ''
                         } ${maxHitsPreset === opt.value
-                          ? 'bg-indigo-500 text-white'
-                          : 'bg-white dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-600'
+                          ? 'bg-teal-700/10 dark:bg-teal-300/10 text-teal-800 dark:text-teal-200'
+                          : 'bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700'
                         }`}
                       title={opt.value === 'custom' ? 'Custom number' : opt.value === 'all' ? 'Up to 5000' : `Top ${opt.label}`}
                     >
@@ -933,20 +913,20 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                     onChange={(e) => setCustomHits(e.target.value)}
                     disabled={step !== 'input'}
                     placeholder="e.g. 200"
-                    className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 px-2 py-1 text-xs font-mono focus:border-indigo-500 focus:ring-indigo-500 disabled:opacity-50 placeholder-slate-400 dark:placeholder-slate-500"
+                    className="input px-2 py-1 text-xs font-mono placeholder-zinc-400 dark:placeholder-zinc-500"
                   />
                 </div>
               </div>
 
               {/* Filter Matches Toggle */}
               <div className="flex items-center gap-2">
-                <label className="text-xs font-medium text-slate-500 dark:text-slate-400">Filter matches:</label>
-                <div className="flex rounded-lg overflow-hidden border border-slate-300 dark:border-slate-600">
+                <label className="text-xs font-medium text-zinc-500 dark:text-zinc-400">Filter matches:</label>
+                <div className="flex rounded-md overflow-hidden border border-zinc-300 dark:border-zinc-700">
                   <button
                     type="button"
                     onClick={() => setFilterMatches(true)}
                     disabled={step !== 'input'}
-                    className={`px-2.5 py-1 text-xs font-medium transition-colors disabled:opacity-50 ${filterMatches ? 'bg-indigo-500 text-white' : 'bg-white dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-600'
+                    className={`px-2.5 py-1 text-xs font-medium transition-colors disabled:opacity-50 ${filterMatches ? 'bg-teal-700/10 dark:bg-teal-300/10 text-teal-800 dark:text-teal-200' : 'bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700'
                       }`}
                   >
                     Yes
@@ -955,7 +935,7 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                     type="button"
                     onClick={() => setFilterMatches(false)}
                     disabled={step !== 'input'}
-                    className={`px-2.5 py-1 text-xs font-medium transition-colors disabled:opacity-50 border-l border-slate-300 dark:border-slate-600 ${!filterMatches ? 'bg-indigo-500 text-white' : 'bg-white dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-600'
+                    className={`px-2.5 py-1 text-xs font-medium transition-colors disabled:opacity-50 border-l border-zinc-300 dark:border-zinc-700 ${!filterMatches ? 'bg-teal-700/10 dark:bg-teal-300/10 text-teal-800 dark:text-teal-200' : 'bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700'
                       }`}
                   >
                     No
@@ -967,7 +947,7 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                 {step !== 'input' && (
                   <button
                     onClick={handleReset}
-                    className="px-4 py-2 text-sm font-medium rounded-lg border border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-700 hover:bg-slate-50 dark:hover:bg-slate-600 transition-colors"
+                    className="btn-secondary px-4 py-2 text-sm"
                   >
                     Reset
                   </button>
@@ -975,7 +955,7 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                 {step === 'input' && blastHits.length > 0 && (
                   <button
                     onClick={() => setStep('done')}
-                    className="px-4 py-2 text-sm font-medium rounded-lg border border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-700 hover:bg-slate-50 dark:hover:bg-slate-600 transition-colors"
+                    className="btn-secondary px-4 py-2 text-sm"
                   >
                     Go Back
                   </button>
@@ -983,9 +963,9 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                 <button
                   onClick={handleSearch}
                   disabled={step !== 'input' || !input.trim()}
-                  className={`px-5 py-2 text-sm font-medium rounded-lg shadow-sm text-white transition-all duration-200 ${step !== 'input' || !input.trim()
-                    ? 'bg-slate-300 dark:bg-slate-700 dark:text-slate-500 cursor-not-allowed'
-                    : 'bg-indigo-600 hover:bg-indigo-700 hover:shadow-md'
+                  className={`px-5 py-2 text-sm font-medium rounded-md text-white transition-colors ${step !== 'input' || !input.trim()
+                    ? 'bg-zinc-300 dark:bg-zinc-800 dark:text-zinc-500 cursor-not-allowed'
+                    : 'bg-zinc-900 hover:bg-zinc-700 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300'
                     }`}
                 >
                   Search &amp; Align
@@ -999,52 +979,52 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
             <div className="space-y-6 mt-8">
               {/* Status Indicator */}
               <div className="flex flex-col items-center justify-center gap-2 mb-8 animate-pulse duration-1000">
-                <div className="flex items-center gap-3 text-slate-500 dark:text-slate-400 font-mono text-sm">
-                  <div className={`w-5 h-5 border-2 ${step === 'blasting' ? 'border-indigo-500' : 'border-purple-500'} border-t-transparent rounded-full animate-spin`}></div>
+                <div className="flex items-center gap-3 text-zinc-500 dark:text-zinc-400 font-mono text-sm">
+                  <div className="w-5 h-5 border-2 border-zinc-300 dark:border-zinc-600 border-t-zinc-700 dark:border-t-zinc-300 rounded-full animate-spin"></div>
                   {step === 'blasting' ? 'Running BLAST search and collecting homologs...' : 'Finalizing MAFFT alignment...'}
-                  <span className="font-semibold text-indigo-500 ml-2">
+                  <span className="font-semibold text-teal-700 ml-2">
                     {Math.floor(elapsedSeconds / 60)}:{(elapsedSeconds % 60).toString().padStart(2, '0')} elapsed
                   </span>
                 </div>
-                <p className="text-xs text-slate-400 dark:text-slate-500">This may take 1-2 minutes depending on sequence count. Preparing environment...</p>
+                <p className="text-xs text-zinc-400 dark:text-zinc-500">This may take 1-2 minutes depending on sequence count. Preparing environment...</p>
               </div>
 
               <div><RabbitGame /></div>
 
               {/* MSA Viewer Blueprint */}
-              <div className="border border-slate-200 dark:border-slate-700/50 rounded-xl overflow-hidden shadow-sm bg-white dark:bg-slate-800 opacity-60 pointer-events-none animate-pulse duration-1000">
-                <div className="h-14 bg-slate-50 dark:bg-slate-900/40 border-b border-slate-200 dark:border-slate-700/50 flex items-center px-4 gap-4">
-                  <div className="h-4 w-32 bg-slate-200 dark:bg-slate-700 rounded"></div>
-                  <div className="h-4 w-24 bg-slate-200 dark:bg-slate-700 rounded"></div>
+              <div className="card overflow-hidden opacity-60 pointer-events-none animate-pulse duration-1000">
+                <div className="h-14 bg-zinc-50 dark:bg-zinc-800/60 border-b border-zinc-200 dark:border-zinc-800/50 flex items-center px-4 gap-4">
+                  <div className="h-4 w-32 bg-zinc-200 dark:bg-zinc-800 rounded"></div>
+                  <div className="h-4 w-24 bg-zinc-200 dark:bg-zinc-800 rounded"></div>
                 </div>
-                <div className="h-10 border-b border-slate-200 dark:border-slate-700/50 bg-slate-50/50 dark:bg-slate-800/50 flex items-center px-4">
-                  <div className="h-2 w-full bg-slate-200 dark:bg-slate-700 rounded opacity-50"></div>
+                <div className="h-10 border-b border-zinc-200 dark:border-zinc-800/50 bg-zinc-50/50 dark:bg-zinc-800/50 flex items-center px-4">
+                  <div className="h-2 w-full bg-zinc-200 dark:bg-zinc-800 rounded opacity-50"></div>
                 </div>
-                <div className="p-4 space-y-3 bg-white dark:bg-slate-800">
-                  <div className="flex gap-4"><div className="w-24 h-4 bg-slate-200 dark:bg-slate-700 rounded"></div><div className="flex-1 h-4 bg-slate-100 dark:bg-slate-700/50 rounded"></div></div>
-                  <div className="flex gap-4"><div className="w-24 h-4 bg-slate-200 dark:bg-slate-700 rounded"></div><div className="flex-1 h-4 bg-slate-100 dark:bg-slate-700/50 rounded"></div></div>
-                  <div className="flex gap-4"><div className="w-24 h-4 bg-slate-200 dark:bg-slate-700 rounded"></div><div className="flex-1 h-4 bg-slate-100 dark:bg-slate-700/50 rounded"></div></div>
-                  <div className="flex gap-4"><div className="w-24 h-4 bg-slate-200 dark:bg-slate-700 rounded"></div><div className="flex-1 h-4 bg-slate-100 dark:bg-slate-700/50 rounded"></div></div>
-                  <div className="flex gap-4"><div className="w-24 h-4 bg-slate-200 dark:bg-slate-700 rounded"></div><div className="flex-1 h-4 bg-slate-100 dark:bg-slate-700/50 rounded"></div></div>
+                <div className="p-4 space-y-3 bg-white dark:bg-zinc-900">
+                  <div className="flex gap-4"><div className="w-24 h-4 bg-zinc-200 dark:bg-zinc-800 rounded"></div><div className="flex-1 h-4 bg-zinc-100 dark:bg-zinc-800/50 rounded"></div></div>
+                  <div className="flex gap-4"><div className="w-24 h-4 bg-zinc-200 dark:bg-zinc-800 rounded"></div><div className="flex-1 h-4 bg-zinc-100 dark:bg-zinc-800/50 rounded"></div></div>
+                  <div className="flex gap-4"><div className="w-24 h-4 bg-zinc-200 dark:bg-zinc-800 rounded"></div><div className="flex-1 h-4 bg-zinc-100 dark:bg-zinc-800/50 rounded"></div></div>
+                  <div className="flex gap-4"><div className="w-24 h-4 bg-zinc-200 dark:bg-zinc-800 rounded"></div><div className="flex-1 h-4 bg-zinc-100 dark:bg-zinc-800/50 rounded"></div></div>
+                  <div className="flex gap-4"><div className="w-24 h-4 bg-zinc-200 dark:bg-zinc-800 rounded"></div><div className="flex-1 h-4 bg-zinc-100 dark:bg-zinc-800/50 rounded"></div></div>
                 </div>
               </div>
 
               {/* Provenance Blueprint */}
-              <div className="border border-slate-200 dark:border-slate-700/50 rounded-xl overflow-hidden shadow-sm bg-white dark:bg-slate-800 opacity-40 mt-6 pointer-events-none">
-                <div className="h-14 bg-gradient-to-r from-slate-50 to-indigo-50/30 dark:from-slate-800 dark:to-indigo-900/10 border-b border-slate-200 dark:border-slate-700/50 px-5 flex items-center justify-between">
-                  <div className="h-5 w-48 bg-slate-200 dark:bg-slate-700 rounded"></div>
-                  <div className="h-4 w-24 bg-slate-200 dark:bg-slate-700 rounded"></div>
+              <div className="card overflow-hidden opacity-40 mt-6 pointer-events-none">
+                <div className="h-14 bg-zinc-50 dark:bg-zinc-800/60 border-b border-zinc-200 dark:border-zinc-800/50 px-5 flex items-center justify-between">
+                  <div className="h-5 w-48 bg-zinc-200 dark:bg-zinc-800 rounded"></div>
+                  <div className="h-4 w-24 bg-zinc-200 dark:bg-zinc-800 rounded"></div>
                 </div>
                 <div className="p-5 flex flex-col md:flex-row gap-6">
                   <div className="flex-1 space-y-4">
-                    <div className="h-32 bg-slate-100 dark:bg-slate-700/50 rounded-lg border border-slate-200 dark:border-slate-700/50"></div>
+                    <div className="h-32 bg-zinc-100 dark:bg-zinc-800/50 rounded-lg border border-zinc-200 dark:border-zinc-800/50"></div>
                     <div className="grid grid-cols-2 gap-4">
-                      <div className="h-12 bg-slate-100 dark:bg-slate-700/50 rounded-lg border border-slate-200 dark:border-slate-700/50"></div>
-                      <div className="h-12 bg-slate-100 dark:bg-slate-700/50 rounded-lg border border-slate-200 dark:border-slate-700/50"></div>
+                      <div className="h-12 bg-zinc-100 dark:bg-zinc-800/50 rounded-lg border border-zinc-200 dark:border-zinc-800/50"></div>
+                      <div className="h-12 bg-zinc-100 dark:bg-zinc-800/50 rounded-lg border border-zinc-200 dark:border-zinc-800/50"></div>
                     </div>
                   </div>
                   <div className="w-full md:w-64 space-y-4">
-                    <div className="h-40 bg-slate-100 dark:bg-slate-700/50 rounded-lg border border-slate-200 dark:border-slate-700/50"></div>
+                    <div className="h-40 bg-zinc-100 dark:bg-zinc-800/50 rounded-lg border border-zinc-200 dark:border-zinc-800/50"></div>
                   </div>
                 </div>
               </div>
@@ -1053,12 +1033,14 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
 
           {/* Error */}
           {error && (
-            <div className="rounded-xl bg-red-50 border border-red-200 p-4 mb-6">
+            <div className="rounded-lg bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900/50 p-4 mb-6">
               <div className="flex items-start">
-                <span className="text-red-500 mr-3 text-lg">⚠</span>
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-red-600 dark:text-red-400 mr-3 mt-0.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+                </svg>
                 <div>
-                  <h3 className="text-sm font-semibold text-red-800">Error</h3>
-                  <p className="mt-1 text-sm text-red-700">{error}</p>
+                  <h3 className="text-sm font-semibold text-red-800 dark:text-red-300">Error</h3>
+                  <p className="mt-1 text-sm text-red-700 dark:text-red-300">{error}</p>
                 </div>
               </div>
             </div>
@@ -1066,29 +1048,29 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
 
           {/* Results Summary & Actions */}
           {step === 'done' && blastMeta && (
-            <div className="mb-6 bg-white dark:bg-slate-800 shadow-sm rounded-xl border border-slate-200 dark:border-slate-700 p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div className="mb-6 card p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
               <div>
-                <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-2">
+                <h3 className="text-sm font-semibold text-zinc-800 dark:text-zinc-200 flex items-center gap-2">
                   <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
                   {(jobName && jobName !== 'Query') ? jobName : 'Search Analysis'} Completed
                 </h3>
-                <div className="mt-1 text-xs text-slate-500 dark:text-slate-400 font-mono flex flex-wrap gap-x-4 gap-y-1">
-                  <span>RID: <span className="text-slate-700 dark:text-slate-300">{blastMeta.rid}</span></span>
-                  <span>Len: <span className="text-slate-700 dark:text-slate-300">{blastMeta.query_len} bp</span></span>
-                  <span>Hits: <span className="text-slate-700 dark:text-slate-300">{blastHits.length}</span></span>
-                  <span>Time: <span className="text-slate-700 dark:text-slate-300">~{blastMeta.rtoe}s</span></span>
+                <div className="mt-1 text-xs text-zinc-500 dark:text-zinc-400 font-mono tabular-nums flex flex-wrap gap-x-4 gap-y-1">
+                  <span>RID: <span className="text-zinc-700 dark:text-zinc-300">{blastMeta.rid}</span></span>
+                  <span>Len: <span className="text-zinc-700 dark:text-zinc-300">{blastMeta.query_len} bp</span></span>
+                  <span>Hits: <span className="text-zinc-700 dark:text-zinc-300">{blastHits.length}</span></span>
+                  <span>Time: <span className="text-zinc-700 dark:text-zinc-300">~{blastMeta.rtoe}s</span></span>
                 </div>
               </div>
               <div className="flex items-center gap-3">
                 <button
                   onClick={() => setStep('input')}
-                  className="px-3 py-1.5 text-xs font-medium rounded-md border border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-400 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 hover:text-slate-800 dark:hover:text-slate-200 transition-colors"
+                  className="btn-secondary"
                 >
                   Edit Search
                 </button>
                 <button
                   onClick={handleReset}
-                  className="px-3 py-1.5 text-xs font-medium rounded-md border border-red-200 dark:border-red-900/30 text-red-600 dark:text-red-400 bg-white dark:bg-slate-800 hover:bg-red-50 dark:hover:bg-red-900/10 transition-colors"
+                  className="btn-destructive"
                 >
                   Start Over
                 </button>
@@ -1183,15 +1165,15 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
         )}
 
         {showWhatsNew && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" onClick={() => setShowWhatsNew(false)}>
-            <div className="max-w-lg w-full max-h-[80vh] overflow-y-auto bg-white dark:bg-slate-800 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-700 p-6" onClick={e => e.stopPropagation()}>
+          <div className="modal-overlay" onClick={() => setShowWhatsNew(false)}>
+            <div className="card shadow-xl max-w-lg w-full max-h-[80vh] overflow-y-auto p-6" onClick={e => e.stopPropagation()}>
               <div className="flex items-center justify-between mb-4">
-                <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-200">Co je nového</h2>
-                <button onClick={() => setShowWhatsNew(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-xl leading-none">&times;</button>
+                <h2 className="text-lg font-semibold text-zinc-800 dark:text-zinc-200">Co je nového</h2>
+                <button onClick={() => setShowWhatsNew(false)} className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 text-xl leading-none">&times;</button>
               </div>
-              <div className="space-y-4 text-sm text-slate-700 dark:text-slate-300">
+              <div className="space-y-4 text-sm text-zinc-700 dark:text-zinc-300">
                 <section>
-                  <h3 className="font-semibold text-indigo-600 dark:text-indigo-400 mb-1">Viditelnost indelů v MSA přehledu</h3>
+                  <h3 className="font-semibold text-teal-700 dark:text-teal-300 mb-1">Viditelnost indelů v MSA přehledu</h3>
                   <p>
                     V horní MSA liště a v minimapě jsou nyní indely (inzerce/delece) viditelné
                     jako fialové pruhy vedle červených mismatchů. Indely se vykreslují ve třech
@@ -1202,7 +1184,7 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                   </p>
                 </section>
                 <section>
-                  <h3 className="font-semibold text-indigo-600 dark:text-indigo-400 mb-1">Tm hodnoty v reportu</h3>
+                  <h3 className="font-semibold text-teal-700 dark:text-teal-300 mb-1">Tm hodnoty v reportu</h3>
                   <p>
                     MOLigo 1 a 2 v reportu nyní zobrazují Tm řádek se všemi třemi hodnotami
                     (Primer3, Strider, IDT) vedle sebe, stejně jako flanking primery. Opraveno
@@ -1213,7 +1195,7 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                   </p>
                 </section>
                 <section>
-                  <h3 className="font-semibold text-indigo-600 dark:text-indigo-400 mb-1">Čistší layout reportu</h3>
+                  <h3 className="font-semibold text-teal-700 dark:text-teal-300 mb-1">Čistší layout reportu</h3>
                   <p>
                     Z reportu jsme odstranili duplicitní pairwise sekci („Moligo 1 with Moligo 2
                     pairwise“) — ponechali jsme pouze tu v „Secondary structure predictions“.
@@ -1225,14 +1207,14 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                   </p>
                 </section>
                 <section>
-                  <h3 className="font-semibold text-indigo-600 dark:text-indigo-400 mb-1">Tlačítko Save dole</h3>
+                  <h3 className="font-semibold text-teal-700 dark:text-teal-300 mb-1">Tlačítko Save dole</h3>
                   <p>
                     Vedle tlačítka „Create a report“ v pravém dolním rohu je nyní k dispozici
                     tlačítko Save, takže relaci uložíte bez nutnosti scrollovat nahoru.
                   </p>
                 </section>
                 <section>
-                  <h3 className="font-semibold text-indigo-600 dark:text-indigo-400 mb-1">Přepracovaný design reportu (PDF/TXT)</h3>
+                  <h3 className="font-semibold text-teal-700 dark:text-teal-300 mb-1">Přepracovaný design reportu (PDF/TXT)</h3>
                   <p>
                     Report má nově horní záhlaví s menším názvem, datem a vlastním GenBank headerem vloženým
                     přímo na vstupní stránce. Sekce MOLigo 1 a 2 jsou kompaktnější a jsou chráněny proti
@@ -1242,7 +1224,7 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                   </p>
                 </section>
                 <section>
-                  <h3 className="font-semibold text-indigo-600 dark:text-indigo-400 mb-1">MOLigo schéma a kopírovatelné sekvence</h3>
+                  <h3 className="font-semibold text-teal-700 dark:text-teal-300 mb-1">MOLigo schéma a kopírovatelné sekvence</h3>
                   <p>
                     Z MOLigo provenance schématu jsme odstranili režim tvarů — nyní se vždy zobrazuje
                     pouze sekvencí režim s jednotlivými bázemi. Přímo nad tlačítkem „Proceed with the Design“
@@ -1252,7 +1234,7 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                   </p>
                 </section>
                 <section>
-                  <h3 className="font-semibold text-indigo-600 dark:text-indigo-400 mb-1">Sekundární struktury a ASCII stabilita</h3>
+                  <h3 className="font-semibold text-teal-700 dark:text-teal-300 mb-1">Sekundární struktury a ASCII stabilita</h3>
                   <p>
                     Sekce IDT analýzy se přejmenovala na „Secondary structures“ a tlačítka pro analýzu
                     nyní nesou název „Structural analysis“ / „Re-run Structural analysis“. ASCII schéma
@@ -1261,7 +1243,7 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                   </p>
                 </section>
                 <section>
-                  <h3 className="font-semibold text-indigo-600 dark:text-indigo-400 mb-1">Drobná vylepšení</h3>
+                  <h3 className="font-semibold text-teal-700 dark:text-teal-300 mb-1">Drobná vylepšení</h3>
                   <p>
                     Opravili jsme označení koncentrace Mg²⁺ na správné jednotky (mM) a doladili
                     uživatelské rozhraní pro konzistentnější pojmenování funkcí.
@@ -1271,7 +1253,7 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
               <div className="mt-6 flex justify-end">
                 <button
                   onClick={() => setShowWhatsNew(false)}
-                  className="px-4 py-2 text-sm font-medium rounded-md bg-indigo-600 text-white hover:bg-indigo-700 transition-colors"
+                  className="btn-primary px-4 py-2 text-sm"
                 >
                   Rozumím
                 </button>
@@ -1281,44 +1263,44 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
         )}
 
         {showPreview && pendingSession && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" onClick={rejectPendingSession}>
-            <div className="max-w-md w-full bg-white dark:bg-slate-800 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-700 p-6" onClick={e => e.stopPropagation()}>
+          <div className="modal-overlay" onClick={rejectPendingSession}>
+            <div className="card shadow-xl max-w-md w-full p-6" onClick={e => e.stopPropagation()}>
               <div className="flex items-center justify-between mb-4">
-                <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-200">Restore session?</h2>
-                <button onClick={rejectPendingSession} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-xl leading-none">&times;</button>
+                <h2 className="text-lg font-semibold text-zinc-800 dark:text-zinc-200">Restore session?</h2>
+                <button onClick={rejectPendingSession} className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 text-xl leading-none">&times;</button>
               </div>
-              <div className="space-y-3 text-sm text-slate-700 dark:text-slate-300">
-                <div className="flex justify-between border-b border-slate-100 dark:border-slate-700 pb-2">
-                  <span className="text-slate-500">Job name</span>
+              <div className="space-y-3 text-sm text-zinc-700 dark:text-zinc-300">
+                <div className="flex justify-between border-b border-zinc-100 dark:border-zinc-800 pb-2">
+                  <span className="text-zinc-500">Job name</span>
                   <span className="font-medium">{pendingSession.jobName}</span>
                 </div>
-                <div className="flex justify-between border-b border-slate-100 dark:border-slate-700 pb-2">
-                  <span className="text-slate-500">Alignment length</span>
+                <div className="flex justify-between border-b border-zinc-100 dark:border-zinc-800 pb-2">
+                  <span className="text-zinc-500">Alignment length</span>
                   <span className="font-medium">{pendingSession.results.alignment.split('\n').find(l => !l.startsWith('>'))?.length ?? 0} bp</span>
                 </div>
-                <div className="flex justify-between border-b border-slate-100 dark:border-slate-700 pb-2">
-                  <span className="text-slate-500">Pinned positions</span>
+                <div className="flex justify-between border-b border-zinc-100 dark:border-zinc-800 pb-2">
+                  <span className="text-zinc-500">Pinned positions</span>
                   <span className="font-medium">{pendingSession.oligo?.savedPositions.length ?? 0}</span>
                 </div>
-                <div className="flex justify-between border-b border-slate-100 dark:border-slate-700 pb-2">
-                  <span className="text-slate-500">Current oligo</span>
+                <div className="flex justify-between border-b border-zinc-100 dark:border-zinc-800 pb-2">
+                  <span className="text-zinc-500">Current oligo</span>
                   <span className="font-medium">{pendingSession.oligo?.currentOligo ? 'yes' : 'no'}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-slate-500">Saved</span>
+                  <span className="text-zinc-500">Saved</span>
                   <span className="font-medium">{new Date(pendingSession.savedAt).toLocaleString()}</span>
                 </div>
               </div>
               <div className="mt-6 flex justify-end gap-3">
                 <button
                   onClick={rejectPendingSession}
-                  className="px-4 py-2 text-sm font-medium rounded-md border border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
+                  className="btn-secondary px-4 py-2 text-sm"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={() => confirmApplySession(pendingSession)}
-                  className="px-4 py-2 text-sm font-medium rounded-md bg-indigo-600 text-white hover:bg-indigo-700 transition-colors"
+                  className="btn-primary px-4 py-2 text-sm"
                 >
                   Restore
                 </button>
@@ -1327,21 +1309,21 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
           </div>
         )}
 
-        <footer className="mt-10 pt-6 border-t border-slate-200 dark:border-slate-700 text-center text-xs text-slate-500 dark:text-slate-400 space-y-1">
+        <footer className="mt-10 pt-6 border-t border-zinc-200 dark:border-zinc-800 text-center text-xs text-zinc-500 dark:text-zinc-400 space-y-1">
           <p>
             Oligool is developed by{' '}
-            <strong className="text-slate-700 dark:text-slate-300">Mgr. Vojtěch Rejtar</strong>.
+            <strong className="text-zinc-700 dark:text-zinc-300">Mgr. Vojtěch Rejtar</strong>.
           </p>
           <p>
             Contact:{' '}
-            <a href="mailto:rejtarv@gmail.com" className="text-indigo-500 hover:underline">rejtarv@gmail.com</a>
+            <a href="mailto:rejtarv@gmail.com" className="text-teal-700 dark:text-teal-300 hover:underline">rejtarv@gmail.com</a>
             {' | '}
-            <a href="mailto:rejtarv@sci.muni.cz" className="text-indigo-500 hover:underline">rejtarv@sci.muni.cz</a>
+            <a href="mailto:rejtarv@sci.muni.cz" className="text-teal-700 dark:text-teal-300 hover:underline">rejtarv@sci.muni.cz</a>
           </p>
           <p>In case of bugs or errors, please contact the author.</p>
           <p className="pt-1">
             Licensed under the{' '}
-            <a href="https://www.gnu.org/licenses/gpl-3.0.html" target="_blank" rel="noopener noreferrer" className="text-indigo-500 hover:underline">
+            <a href="https://www.gnu.org/licenses/gpl-3.0.html" target="_blank" rel="noopener noreferrer" className="text-teal-700 dark:text-teal-300 hover:underline">
               GNU General Public License v3.0
             </a>.
           </p>
