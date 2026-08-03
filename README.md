@@ -2,6 +2,25 @@
 
 Oligool is a desktop app for molecular biologists. It fetches gene and transcript sequences from NCBI or Ensembl, aligns them with MAFFT, and designs oligos and primers on the aligned result. The backend is FastAPI served in a native webview window. The frontend is React with Vite.
 
+## Download (beta)
+
+The current release is **v0.9.8 beta**. Everything the app needs — Python, the backend, MAFFT, the interface — is inside the installer; nothing else has to be installed first. Download the file for your system from [GitHub Releases](https://github.com/KowalskiBio/Oligool/releases):
+
+| Platform | File |
+|---|---|
+| Windows 10/11 (64-bit) | `Oligool-Setup-0.9.8-windows-x86_64.exe` |
+| macOS, Apple Silicon (M1 and newer) | `Oligool-0.9.8-macos-arm64.pkg` |
+| macOS, Intel | `Oligool-0.9.8-macos-x86_64.pkg` |
+| Linux (Debian/Ubuntu) | `Oligool-linux-x86_64.tar.gz` |
+
+**Windows.** Run the setup file and follow the wizard — no admin rights needed. If SmartScreen shows "Windows protected your PC", click **More info → Run anyway** (the installer is not code-signed yet). On the rare PC without the Microsoft WebView2 runtime, the wizard installs it automatically. Oligool then starts from the Start menu or the desktop shortcut.
+
+**macOS.** Pick the package for your chip — arm64 for Apple Silicon, x86_64 for Intel. Double-click it and follow the installer; macOS asks for your password to place Oligool in Applications. If macOS blocks the package as coming from an unidentified developer, right-click it and choose **Open**.
+
+**Linux.** Extract the archive (`tar -xzf Oligool-linux-x86_64.tar.gz`), install the windowing runtime once (`sudo apt install gir1.2-webkit2-4.1`), and run `./Oligool/Oligool`.
+
+Releases are marked *Pre-release* while Oligool is in beta. Please report problems through [GitHub Issues](https://github.com/KowalskiBio/Oligool/issues).
+
 ## Features
 
 - Sequence search against NCBI or Ensembl, with organism, E-value, and identity filters that persist between sessions.
