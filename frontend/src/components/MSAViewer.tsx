@@ -128,6 +128,7 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
     const redrawRef = useRef<() => void>(() => { });
     const [showOverview, setShowOverview] = useState(true);
     const [autofindActive, setAutofindActive] = useState(false);
+    const [lightMatchBars, setLightMatchBars] = useState(false);
     const scrollPressRef = useRef<ReturnType<typeof setInterval> | null>(null);
     // Live-value refs for use inside setInterval (avoid stale closures)
     const viewFractionRef = useRef(viewFraction);
@@ -559,6 +560,11 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
         return { g, c, a, t, total, gcPct };
     }, [sequences, startCol, endCol, anchorLen, anchorCols]);
 
+    // Bar-color toggle invalidates the cached static minimap layer
+    useEffect(() => {
+        staticMinimapDrawnRef.current = false;
+    }, [lightMatchBars]);
+
     const drawMinimapBackground = useCallback(() => {
         if (!sequences.length) return;
         if (availableWidth <= 0 || MINIMAP_HEIGHT <= 0) return;
@@ -623,7 +629,6 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
 
         const sampleStep = Math.max(1, Math.floor(sequences.length / 200));
         const pxStep = Math.max(1, anchorLen / mmSeqW);
-        const mmMarkerH = Math.max(3, rowDrawH);
 
         const mmSampled = [];
         for (let row = 0; row < sequences.length; row += sampleStep) {
@@ -640,14 +645,18 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
             if (r.aS <= r.aE) {
                 const x1 = MINIMAP_LABEL_W + (r.aS / anchorLen) * mmSeqW;
                 const x2 = MINIMAP_LABEL_W + ((r.aE + 1) / anchorLen) * mmSeqW;
-                ctx.fillStyle = r.isQuery ? (isDark ? '#1e3a8a' : '#bfdbfe') : (isDark ? '#334155' : '#d1d5db');
+                ctx.fillStyle = r.isQuery
+                    ? (isDark ? '#1e3a8a' : '#bfdbfe')
+                    : lightMatchBars
+                        ? (isDark ? '#f8fafc' : '#ffffff')
+                        : (isDark ? '#334155' : '#d1d5db');
                 ctx.fillRect(x1, r.y, x2 - x1, rowDrawH);
             }
         }
 
         // Per-row mismatch markers (red) then deletion markers (purple, on top).
-        // Per-row Y preserves which rows have variation; 3px minimum height
-        // keeps rare single-row indels visible even with hundreds of sequences.
+        // Per-row Y preserves which rows have variation; marker height is
+        // capped at the row height so markers never bleed outside the bar.
         for (let pass = 1; pass <= 2; pass++) {
             const wantIndel = pass === 2;
             ctx.fillStyle = wantIndel ? '#9333ea' : '#dc2626';
@@ -674,7 +683,7 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
                     }
 
                     if (found) {
-                        ctx.fillRect(MINIMAP_LABEL_W + x, r.y, 1.2, mmMarkerH);
+                        ctx.fillRect(MINIMAP_LABEL_W + x, r.y, 1.2, rowDrawH);
                     }
                 }
             }
@@ -685,7 +694,7 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
         for (const entry of insertEntries) {
             if (entry.row % sampleStep !== 0) continue;
             const x = MINIMAP_LABEL_W + (entry.boundary / anchorLen) * mmSeqW;
-            ctx.fillRect(x, rowsTop + entry.row * rowH, 1.2, mmMarkerH);
+            ctx.fillRect(x, rowsTop + entry.row * rowH, 1.2, rowDrawH);
         }
 
         if (primersA) {
@@ -732,7 +741,7 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
         ctx.fillRect(MINIMAP_LABEL_W - 1, 0, 1, MINIMAP_HEIGHT);
 
         staticMinimapDrawnRef.current = true;
-    }, [sequences, querySeq, anchorLen, anchorCols, insertEntries, availableWidth, gcContent, primersA, flankingPrimersA, isDark, restoredA]);
+    }, [sequences, querySeq, anchorLen, anchorCols, insertEntries, availableWidth, gcContent, primersA, flankingPrimersA, isDark, restoredA, lightMatchBars]);
 
     const drawMinimap = useCallback(() => {
         const cvs = minimapRef.current;
@@ -1096,7 +1105,9 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
                     if (barX2 > barX1) {
                         ctx.fillStyle = isQuery
                             ? (isDark ? '#1e3a8a' : '#bfdbfe')
-                            : (isDark ? '#334155' : '#e2e8f0');
+                            : lightMatchBars
+                                ? (isDark ? '#f8fafc' : '#ffffff')
+                                : (isDark ? '#334155' : '#e2e8f0');
                         ctx.fillRect(barX1, y + 3, barX2 - barX1, ROW_HEIGHT - 6);
                     }
                 }
@@ -1196,7 +1207,6 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
         const msaTop = stickyY + MAIN_GC_TRACK_H;
         const msaRowH = MAIN_MSA_TRACK_H / sequences.length;
         const msaDrawH = Math.max(1, msaRowH);
-        const markerH = Math.max(3, msaDrawH);
         ctx.fillStyle = isDark ? '#0f172a' : '#f1f5f9';
         ctx.fillRect(labelWidth, msaTop, availableWidth - labelWidth, MAIN_MSA_TRACK_H);
 
@@ -1227,15 +1237,17 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
                 if (barX2 > barX1) {
                     ctx.fillStyle = r.isQuery
                         ? (isDark ? '#1e3a8a' : '#bfdbfe')
-                        : (isDark ? '#334155' : '#e2e8f0');
+                        : lightMatchBars
+                            ? (isDark ? '#f8fafc' : '#ffffff')
+                            : (isDark ? '#334155' : '#e2e8f0');
                     ctx.fillRect(barX1, r.y, barX2 - barX1, msaDrawH);
                 }
             }
         }
 
         // Per-row mismatch markers (red) then deletion markers (purple, on top).
-        // Per-row Y preserves which rows have variation; 3px minimum height
-        // keeps rare single-row indels visible even with hundreds of sequences.
+        // Per-row Y preserves which rows have variation; marker height is
+        // capped at the row height so markers never bleed outside the bar.
         for (let pass = 1; pass <= 2; pass++) {
             const wantIndel = pass === 2;
             ctx.fillStyle = wantIndel ? '#9333ea' : '#dc2626';
@@ -1263,7 +1275,7 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
                     }
 
                     if (found) {
-                        ctx.fillRect(labelWidth + x, r.y, 1.2, markerH);
+                        ctx.fillRect(labelWidth + x, r.y, 1.2, msaDrawH);
                     }
                 }
             }
@@ -1275,7 +1287,7 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
             if (entry.row % sampleStep !== 0) continue;
             const bx = labelWidth + entry.boundary * cellW - scrollLeft;
             if (bx < labelWidth || bx > availableWidth) continue;
-            ctx.fillRect(bx, msaTop + entry.row * msaRowH, 1.2, markerH);
+            ctx.fillRect(bx, msaTop + entry.row * msaRowH, 1.2, msaDrawH);
         }
 
         ctx.fillStyle = isDark ? '#334155' : '#e2e8f0';
@@ -1453,7 +1465,7 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
             hoverCvs.style.width = `${availableWidth}px`;
             hoverCvs.style.height = `${canvasH}px`;
         }
-    }, [sequences, querySeq, scrollLeft, scrollTop, cellW, seqAreaW, availableWidth, totalH, anchorLen, anchorCols, insertEntries, insertsByRow, viewMode, primersA, flankingPrimersA, gcContent, isDarkMode, oligoSelection, autofindBoundaryRow, restoredA]);
+    }, [sequences, querySeq, scrollLeft, scrollTop, cellW, seqAreaW, availableWidth, totalH, anchorLen, anchorCols, insertEntries, insertsByRow, viewMode, primersA, flankingPrimersA, gcContent, isDarkMode, oligoSelection, autofindBoundaryRow, restoredA, lightMatchBars]);
 
     /* ── lightweight hover overlay (draws only a thin line) ── */
     const drawHoverOverlay = useCallback(() => {
@@ -1947,7 +1959,13 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
             {/* ── legend ── */}
             <div className="px-5 py-1.5 border-b border-zinc-100 dark:border-zinc-800 bg-white dark:bg-zinc-900 flex items-center gap-4 text-xs text-zinc-500 dark:text-zinc-400">
                 <span className="flex items-center gap-1">
-                    <span className="inline-block w-3 h-3 rounded-sm border border-zinc-200 dark:border-zinc-800" style={{ background: isDark ? '#1e293b' : '#f3f4f6' }} />
+                    <button
+                        type="button"
+                        onClick={() => setLightMatchBars(v => !v)}
+                        title={lightMatchBars ? 'Switch sequence/match bars back to grey' : 'Switch sequence/match bars to white'}
+                        className="inline-block w-3 h-3 rounded-sm border border-zinc-200 dark:border-zinc-800 cursor-pointer p-0 hover:ring-1 hover:ring-zinc-400"
+                        style={{ background: lightMatchBars ? (isDark ? '#f8fafc' : '#ffffff') : (isDark ? '#1e293b' : '#f3f4f6') }}
+                    />
                     Sequence / Match
                 </span>
                 <span className="flex items-center gap-1">
