@@ -834,9 +834,15 @@ async def analyze_idt_oligos(request: IdtAnalyzeRequest):
                 if idt_error is not None:
                     item["IDT_Error"] = idt_error
                 if viz_struct:
-                    item["DotBracket"] = viz_struct
-                    for k in ["AsciiStructure", "VisualPrint", "asciiStructure", "visualPrint"]:
-                        item.pop(k, None)
+                    item["Local_DotBracket"] = viz_struct
+                    # Inject into DotBracket only when IDT gave no structure of
+                    # its own — a plain overwrite would keep IDT's ΔG but pair it
+                    # with a structure IDT never computed.
+                    if not any(item.get(k) for k in (
+                        "DotBracket", "AsciiStructure", "VisualPrint",
+                        "asciiStructure", "visualPrint", "Bonds",
+                    )):
+                        item["DotBracket"] = viz_struct
                 idt_dg = _extract_idt_delta_g(item)
                 if best_item is None or (idt_dg is not None and (best_idt_dg is None or idt_dg < best_idt_dg)):
                     best_item = item
@@ -911,23 +917,24 @@ async def analyze_idt_oligos(request: IdtAnalyzeRequest):
             if len(data) == 0:
                 return {"DeltaG": None, "raw": data}
             
-            # Sort items by the most stable available DeltaG: IDT first, then local Strider value.
-            def _best_dg(item):
+            # IDT-bearing items first (by IDT ΔG), then strider-only candidates
+            # (by Local ΔG). Mixing both engines on one ΔG scale can rank a
+            # strider-only fold above IDT's best and leave the summary empty.
+            def _sort_key(item):
                 idt_dg = _extract_idt_delta_g(item)
                 if idt_dg is not None:
-                    return idt_dg
+                    return (0, idt_dg)
                 local_dg = item.get("Local_DeltaG")
                 if local_dg is not None:
-                    return local_dg
-                return 999.0
-            
-            scored_items = [(_best_dg(item), item) for item in data]
-            scored_items.sort(key=lambda x: x[0])
-            top_items = [x[1] for x in scored_items[:5]]
-            top_idt_dgs = [_extract_idt_delta_g(x[1]) for x in scored_items[:5]]
-            top_local_dgs = [x[1].get("Local_DeltaG") for x in scored_items[:5]]
-            top_idt_tms = [x[1].get("IDT_Tm") for x in scored_items[:5]]
-            top_local_tms = [x[1].get("Local_Tm") for x in scored_items[:5]]
+                    return (1, local_dg)
+                return (2, 0.0)
+
+            scored_items = sorted(data, key=_sort_key)
+            top_items = scored_items[:5]
+            top_idt_dgs = [_extract_idt_delta_g(item) for item in scored_items[:5]]
+            top_local_dgs = [item.get("Local_DeltaG") for item in scored_items[:5]]
+            top_idt_tms = [item.get("IDT_Tm") for item in scored_items[:5]]
+            top_local_tms = [item.get("Local_Tm") for item in scored_items[:5]]
 
             return {
                 "DeltaG": top_idt_dgs[0] if top_idt_dgs else None,
