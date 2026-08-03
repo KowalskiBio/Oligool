@@ -4,13 +4,13 @@ import type { CompleteReportData, IdtRawItem, IdtReportRawData, ReportContextMap
 import { calcGC, reverseComplement } from '../utils/report';
 import MOLigoSchematic from './MOLigoSchematic';
 import HairpinSVG from './HairpinSVG';
-import DimerSVG from './DimerSVG';
+import DimerAscii from './DimerAscii';
 
 interface QueryReportProps {
     data: CompleteReportData;
 }
 
-const V = ({ children }: { children: ReactNode }) => <span className="font-bold text-gray-900">{children}</span>;
+const V = ({ children }: { children: ReactNode }) => <span className="font-bold text-zinc-900">{children}</span>;
 
 const fmtNum = (v: number | undefined | null, digits = 1): string => {
     if (v === undefined || v === null) return 'N/A';
@@ -41,7 +41,7 @@ const rawItems = (result?: IdtReportRawData): IdtRawItem[] => {
 };
 
 const renderIdtSvg = (item: IdtRawItem, seq1?: string, seq2?: string) => {
-    const db = item.DotBracket || '';
+    const db = item.DotBracket || item.Local_DotBracket || '';
     let seq = item.Sequence;
     if (!seq && db.includes('&')) {
         seq = `${seq1 || ''}&${seq2 || seq1 || ''}`;
@@ -50,12 +50,12 @@ const renderIdtSvg = (item: IdtRawItem, seq1?: string, seq2?: string) => {
 
     const isDimer = seq.includes('&') || db.includes('&');
     if (!db) {
-        return <p className="text-xs text-gray-500 italic">No structure predicted</p>;
+        return <p className="text-xs text-zinc-500 italic">No structure predicted</p>;
     }
     return (
-        <div className="w-full bg-gray-50 rounded border border-gray-200 p-2">
+        <div className="w-full bg-zinc-50 rounded border border-zinc-200 p-2">
             {isDimer ? (
-                <DimerSVG seq={seq} dotBracket={db} />
+                <DimerAscii seq={seq} dotBracket={db} raw={item} className="print:max-h-none print:overflow-visible" />
             ) : (
                 <HairpinSVG seq={seq} dotBracket={db} />
             )}

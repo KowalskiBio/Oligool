@@ -82,20 +82,27 @@ describe('QueryReport', () => {
         expect(screen.getByText('MOLIGO PROVENANCE SCHEMATIC')).toBeInTheDocument();
     });
 
-    it('renders IDT hairpin and self-dimer SVGs when raw data is provided', () => {
-        const dots16 = '.'.repeat(16);
-        const hairpinDb = '....((......))..'; // 16 chars, simple hairpin
+    it('renders hairpin as SVG and dimers as vertical-bond ASCII matching the oligo panel', () => {
+        const hairpinDb = '....((......))..';
+        const dimerSeq = 'GCATGC&GCATGC';
+        const dimerDb = '((((((&))))))';
         const data: CompleteReportData = {
             ...baseData,
             idtM1Hairpin: { DeltaG: -1.23, raw: { DotBracket: hairpinDb, Sequence: baseData.moligo1Seq } },
-            idtM1SelfDimer: { DeltaG: -0.88, raw: { DotBracket: `${dots16}&${dots16}`, Sequence: `${baseData.moligo1Seq}&${baseData.moligo1Seq}` } },
-            idtPairwise: { DeltaG: -2.1, raw: { DotBracket: `${dots16}&${dots16}`, Sequence: `${baseData.moligo1Seq}&${baseData.moligo2Seq}` } },
+            idtM1SelfDimer: { DeltaG: -0.88, raw: { DotBracket: dimerDb, Sequence: dimerSeq } },
         };
         render(<QueryReport data={data} />);
-        const report = document.querySelector('.query-report');
-        const svgs = report!.querySelectorAll('svg');
-        expect(svgs.length).toBeGreaterThanOrEqual(4); // schematic + 3 structure SVGs
+        const report = document.querySelector('.query-report')!;
         expect(screen.getByText('SECONDARY STRUCTURE PREDICTIONS')).toBeInTheDocument();
+        expect(report.querySelectorAll('svg').length).toBeGreaterThanOrEqual(2); // schematic + hairpin
+        const dimerHeading = screen.getByText((_, node) =>
+            node?.tagName === 'H3' && !!node.textContent?.startsWith('MOLigo 1 Self-Dimer'));
+        const dimerSection = dimerHeading.parentElement!;
+        const bondPre = dimerSection.querySelector('pre');
+        expect(bondPre).toBeTruthy();
+        const bondRow = bondPre!.textContent!.split('\n')[1];
+        expect(bondRow.replace(/\s/g, '')).toBe('||||||');
+        expect(dimerSection.querySelector('svg')).toBeNull();
     });
 
     it('renders comprehensive IDT/Strider thermodynamic data and sequence-mode schematic', () => {

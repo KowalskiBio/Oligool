@@ -5,6 +5,7 @@ export { reverseComplement };
 
 export interface IdtRawItem {
     DotBracket?: string;
+    Local_DotBracket?: string;
     Sequence?: string;
     Bonds?: number[];
     TopLinePadding?: number;
