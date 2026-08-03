@@ -578,42 +578,42 @@ export default function FlankingPrimersPanel({
         const topDg = data.DeltaG;
 
         return (
-            <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-3 shadow-sm flex flex-col gap-2">
-                <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-800 pb-2">
-                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider text-ellipsis overflow-hidden whitespace-nowrap">{title}</span>
+            <div className="card p-3 flex flex-col gap-2">
+                <div className="flex justify-between items-center border-b border-zinc-100 dark:border-zinc-800 pb-2">
+                    <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider text-ellipsis overflow-hidden whitespace-nowrap">{title}</span>
                     <span className={`text-xs flex-shrink-0 ${getIdtStatusColor(topDg)}`}>{topDg != null ? `${topDg.toFixed(2)} kcal/mol` : 'N/A'}</span>
                 </div>
                 <div className="flex flex-col gap-3 mt-1">
                     {items.slice(0, 1).map((item: any, i: number) => (
                         <div key={i} className="flex flex-col gap-2">
-                            {item.DotBracket && (
-                                <div className="bg-slate-50 dark:bg-slate-800/50 rounded p-2">
+                            {(item.DotBracket || item.Local_DotBracket) && (
+                                <div className="bg-zinc-50 dark:bg-zinc-900/50 rounded p-2">
                                     {item.Sequence && item.Sequence.includes('&') ? (
-                                        <DimerAscii seq={item.Sequence} dotBracket={item.DotBracket} raw={item} />
+                                        <DimerAscii seq={item.Sequence} dotBracket={item.DotBracket || item.Local_DotBracket} raw={item} />
                                     ) : (
-                                        <HairpinSVG seq={item.Sequence || item.dot_bracket || ''} dotBracket={item.DotBracket} />
+                                        <HairpinSVG seq={item.Sequence || item.dot_bracket || ''} dotBracket={item.DotBracket || item.Local_DotBracket} />
                                     )}
                                 </div>
                             )}
                             {/* Provenance: IDT vs Strider, ΔG + Tm (mirrors the oligo card). */}
-                            {(!item.DotBracket && topDg == null && item.Local_DeltaG == null) ? (
-                                <div className="text-[9px] text-slate-400 italic text-center px-1 py-0.5">No stable structure found</div>
+                            {(!item.DotBracket && !item.Local_DotBracket && topDg == null && item.Local_DeltaG == null) ? (
+                                <div className="text-[9px] text-zinc-400 italic text-center px-1 py-0.5">No stable structure found</div>
                             ) : (
-                                <div className="flex flex-col gap-0.5 text-[9px] text-slate-400 font-medium px-1">
+                                <div className="flex flex-col gap-0.5 text-[9px] text-zinc-400 font-medium px-1">
                                     <div className="flex justify-between items-center">
                                         <span>IDT ΔG: <b className={getIdtStatusColor(topDg)}>{topDg != null ? `${topDg > 0 ? '+' : ''}${topDg.toFixed(2)}` : 'N/A'}</b></span>
-                                        <span>Strider ΔG: <b className={item.Local_DeltaG != null ? (item.Local_DeltaG <= 0 ? "text-amber-500" : "text-slate-400") : "text-slate-500"}>{item.Local_DeltaG != null ? `${item.Local_DeltaG > 0 ? '+' : ''}${item.Local_DeltaG.toFixed(2)}` : 'N/A'}</b></span>
+                                        <span>Strider ΔG: <b className={item.Local_DeltaG != null ? (item.Local_DeltaG <= 0 ? "text-amber-500" : "text-zinc-400") : "text-zinc-500"}>{item.Local_DeltaG != null ? `${item.Local_DeltaG > 0 ? '+' : ''}${item.Local_DeltaG.toFixed(2)}` : 'N/A'}</b></span>
                                     </div>
                                     <div className="flex justify-between items-center">
-                                        <span>IDT Tm: <b className="text-slate-500">{item.IDT_Tm != null ? `${Number(item.IDT_Tm).toFixed(1)}°C` : 'N/A'}</b></span>
-                                        <span>Strider Tm: <b className="text-slate-500">{item.Local_Tm != null ? `${item.Local_Tm.toFixed(1)}°C` : 'N/A'}</b></span>
+                                        <span>IDT Tm: <b className="text-zinc-500">{item.IDT_Tm != null ? `${Number(item.IDT_Tm).toFixed(1)}°C` : 'N/A'}</b></span>
+                                        <span>Strider Tm: <b className="text-zinc-500">{item.Local_Tm != null ? `${item.Local_Tm.toFixed(1)}°C` : 'N/A'}</b></span>
                                     </div>
                                 </div>
                             )}
                         </div>
                     ))}
                     {items.length === 0 && (
-                        <div className="text-[9px] text-slate-400 italic text-center px-1 py-0.5">No stable structure found</div>
+                        <div className="text-[9px] text-zinc-400 italic text-center px-1 py-0.5">No stable structure found</div>
                     )}
                 </div>
             </div>

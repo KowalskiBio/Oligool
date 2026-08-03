@@ -1573,25 +1573,25 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                 } else if (!fullSeq) {
                     fullSeq = seq || '';
                 }
-                
+
                 isDimer = fullSeq.includes('&') || db.includes('&');
 
-                if (item.DotBracket && !isDimer) {
-                    hairpinDotBracket = item.DotBracket;
+                if (db && !isDimer) {
+                    hairpinDotBracket = db;
                     hairpinSeq = fullSeq;
                 } else if (isDimer && seq) {
                     if (item.Bonds) {
                         asciiStructure = buildDimerAscii(item, seq, seq2);
-                    } else if (item.DotBracket) {
+                    } else if (db) {
                         const dimerSeq = seq2 ? `${seq}&${seq2}` : `${seq}&${seq}`;
-                        asciiStructure = dimerAsciiFromItem(dimerSeq, item.DotBracket);
+                        asciiStructure = dimerAsciiFromItem(dimerSeq, db);
                     }
                 }
             }
 
             return (
-                <div key={idx} className="border-t border-slate-200 dark:border-slate-700 pt-2 mt-2 first:mt-0 first:border-0 first:pt-0">
-                    <div className="flex flex-col gap-1 text-[10px] text-slate-400 mb-1">
+                <div key={idx} className="border-t border-zinc-200 dark:border-zinc-700 pt-2 mt-2 first:mt-0 first:border-0 first:pt-0">
+                    <div className="flex flex-col gap-1 text-[10px] text-zinc-400 mb-1">
                         <div className="flex justify-between items-center">
                             <span className="font-semibold">{title} {idx + 1}:</span>
                             <div className="flex gap-3">
