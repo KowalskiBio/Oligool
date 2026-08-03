@@ -537,6 +537,15 @@ class IdtAnalyzeRequest(BaseModel):
     idt_region: str = "eu"
 
 
+def _dg_rescale(dh_kcal: float, ds_cal_per_k: float, celsius: float = 25.0) -> float:
+    """Two-state ΔG(T) = ΔH − T·ΔS.
+
+    Strider anchors dimer ΔG at 37 °C (``dG37``); IDT's reference ΔG and this
+    app's hairpin path report at 25 °C, so dimer values are rescaled to match.
+    """
+    return round(dh_kcal - (273.15 + celsius) * ds_cal_per_k / 1000.0, 2)
+
+
 def _idt_host(region: str) -> str:
     return "www.idtdna.com" if region.lower() == "us" else "eu.idtdna.com"
 
@@ -741,7 +750,7 @@ async def analyze_idt_oligos(request: IdtAnalyzeRequest):
                     raw_mfe = res.structure
                     if _valid_paired(raw_mfe):
                         viz_struct_raw = raw_mfe
-                        viz_dg = round(float(res.dG37), 2)
+                        viz_dg = _dg_rescale(res.dH, res.dS)
                         mfe_tm = round(res.tm_celsius, 1) if res.tm_celsius and res.tm_celsius > 1.0 else None
                     else:
                         viz_struct_raw = None
@@ -768,7 +777,7 @@ async def analyze_idt_oligos(request: IdtAnalyzeRequest):
                             subopt_dimers.append({
                                 "Sequence": display_seq,
                                 "DotBracket": _with_div(r.structure),
-                                "DeltaG": round(float(r.dG37), 2),
+                                "DeltaG": _dg_rescale(r.dH, r.dS),
                                 "Tm": round(r.tm_celsius, 1) if r.tm_celsius and r.tm_celsius > 1.0 else None,
                                 "BasePairs": r.n_pairs,
                             })

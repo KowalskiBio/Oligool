@@ -4,6 +4,8 @@ import pytest
 from strider import ThermoEngine
 from strider.thermo.dimer_thermo import dimer_thermo
 
+from backend.main import _dg_rescale
+
 BENCHMARK_SEQ = "CAACAAGGTCCGTGAGCTTC"
 
 
@@ -79,6 +81,34 @@ class TestDimerThermoFlat:
             salt_model="auto",
         )
         assert res.dG37 < 0
+
+
+class TestDimerDG25Rescale:
+    """backend.main._dg_rescale: dimer ΔG rescaled from strider's 37 °C anchor to 25 °C."""
+
+    def _thermo(self):
+        return dimer_thermo(
+            BENCHMARK_SEQ,
+            BENCHMARK_SEQ,
+            sodium_M=0.05,
+            magnesium_M=0.0092,
+            material="dna",
+            structure=None,
+            strand_conc_M=2.5e-7,
+            salt_model="auto",
+        )
+
+    def test_identity_at_37_recovers_dG37(self):
+        r = self._thermo()
+        assert _dg_rescale(r.dH, r.dS, 37.0) == pytest.approx(r.dG37, abs=0.05)
+
+    def test_25c_is_more_negative_than_37c(self):
+        r = self._thermo()
+        assert _dg_rescale(r.dH, r.dS) < r.dG37
+
+    def test_default_celsius_is_25(self):
+        r = self._thermo()
+        assert _dg_rescale(r.dH, r.dS) == _dg_rescale(r.dH, r.dS, 25.0)
 
 
 class TestWithDivIdempotent:
