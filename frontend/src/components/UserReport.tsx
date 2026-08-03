@@ -76,44 +76,44 @@ function buildReportHtml(opts: {
 <style>
   :root { color-scheme: light dark; }
   body {
-    font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-family: "IBM Plex Sans", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     line-height: 1.6;
-    color: #1e293b;
-    background: #f8fafc;
+    color: #18181b;
+    background: #f4f4f5;
     max-width: 880px;
     margin: 0 auto;
     padding: 32px 24px;
   }
-  header { border-bottom: 2px solid #c7d2fe; padding-bottom: 16px; margin-bottom: 24px; }
-  header h1 { font-size: 24px; margin: 0 0 4px; color: #3730a3; }
-  header .meta { font-size: 13px; color: #64748b; }
-  section { background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px; margin-bottom: 20px; }
-  h2 { font-size: 14px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: #475569; margin: 0 0 12px; padding-bottom: 8px; border-bottom: 1px solid #e2e8f0; }
+  header { border-bottom: 2px solid #18181b; padding-bottom: 16px; margin-bottom: 24px; }
+  header h1 { font-size: 22px; margin: 0 0 4px; color: #18181b; letter-spacing: -0.01em; }
+  header .meta { font-size: 13px; color: #71717a; }
+  section { background: #fff; border: 1px solid #e4e4e7; border-radius: 8px; padding: 20px; margin-bottom: 20px; }
+  h2 { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: #71717a; margin: 0 0 12px; padding-bottom: 8px; border-bottom: 1px solid #e4e4e7; }
   .seq {
-    font-family: "Fira Code", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-family: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
     font-size: 13px; line-height: 1.5; white-space: pre-wrap; word-break: break-all;
-    background: #f1f5f9; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px;
+    background: #fafafa; border: 1px solid #e4e4e7; border-radius: 6px; padding: 12px;
     margin: 0;
   }
   .notes { font-size: 14px; white-space: normal; }
-  .muted { color: #94a3b8; font-style: italic; font-size: 14px; }
+  .muted { color: #a1a1aa; font-style: italic; font-size: 14px; }
   figure { margin: 0 0 16px; text-align: center; }
   figure:last-child { margin-bottom: 0; }
-  figure img { max-width: 100%; height: auto; border: 1px solid #e2e8f0; border-radius: 8px; }
-  figcaption { font-size: 12px; color: #64748b; margin-top: 6px; }
-  footer { text-align: center; font-size: 12px; color: #94a3b8; margin-top: 32px; padding-top: 16px; border-top: 1px solid #e2e8f0; }
+  figure img { max-width: 100%; height: auto; border: 1px solid #e4e4e7; border-radius: 6px; }
+  figcaption { font-size: 12px; color: #71717a; margin-top: 6px; }
+  footer { text-align: center; font-size: 12px; color: #a1a1aa; margin-top: 32px; padding-top: 16px; border-top: 1px solid #e4e4e7; }
   @media (prefers-color-scheme: dark) {
-    body { background: #0f172a; color: #f1f5f9; }
-    header { border-color: #4f46e5; }
-    header h1 { color: #a5b4fc; }
-    header .meta { color: #94a3b8; }
-    section { background: #1e293b; border-color: #334155; }
-    h2 { color: #94a3b8; border-color: #334155; }
-    .seq { background: #334155; border-color: #334155; }
-    .muted { color: #64748b; }
-    figure img { border-color: #334155; }
-    figcaption { color: #64748b; }
-    footer { color: #64748b; border-color: #334155; }
+    body { background: #09090b; color: #f4f4f5; }
+    header { border-color: #f4f4f5; }
+    header h1 { color: #f4f4f5; }
+    header .meta { color: #a1a1aa; }
+    section { background: #18181b; border-color: #27272a; }
+    h2 { color: #a1a1aa; border-color: #27272a; }
+    .seq { background: #222226; border-color: #27272a; }
+    .muted { color: #71717a; }
+    figure img { border-color: #27272a; }
+    figcaption { color: #71717a; }
+    footer { color: #71717a; border-color: #27272a; }
   }
 </style>
 </head>
@@ -255,7 +255,7 @@ export default function UserReport({ open, onClose, defaultSequence, jobName }: 
 
     return (
         <div
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm animate-in fade-in duration-150 p-4"
+            className="modal-overlay"
             onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
             role="dialog"
             aria-modal="true"
@@ -265,17 +265,17 @@ export default function UserReport({ open, onClose, defaultSequence, jobName }: 
                 ref={modalRef}
                 onKeyDown={handleKeyDown}
                 tabIndex={-1}
-                className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 w-full max-w-2xl max-h-[90vh] overflow-y-auto outline-none"
+                className="card shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto outline-none"
             >
                 {/* Header */}
-                <div className="flex justify-between items-start px-6 py-4 border-b border-slate-100 dark:border-slate-700 sticky top-0 bg-white dark:bg-slate-800 rounded-t-2xl z-10">
+                <div className="flex justify-between items-start px-6 py-4 border-b border-zinc-100 dark:border-zinc-800 sticky top-0 bg-white dark:bg-zinc-900 rounded-t-lg z-10">
                     <div>
-                        <h3 id="user-report-title" className="text-lg font-bold text-slate-800 dark:text-slate-100">Report</h3>
-                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Paste images, write notes, and save a standalone report.</p>
+                        <h3 id="user-report-title" className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">Report</h3>
+                        <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">Paste images, write notes, and save a standalone report.</p>
                     </div>
                     <button
                         onClick={onClose}
-                        className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors p-1 -mr-2 -mt-1"
+                        className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors p-1 -mr-2 -mt-1"
                         aria-label="Close"
                     >
                         <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -288,9 +288,9 @@ export default function UserReport({ open, onClose, defaultSequence, jobName }: 
                 <div className="px-6 py-5 space-y-5">
                     {/* Sequence */}
                     <div>
-                        <label htmlFor="report-sequence" className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                        <label htmlFor="report-sequence" className="block text-sm font-semibold text-zinc-700 dark:text-zinc-300 mb-1">
                             Sequence
-                            <span className="ml-2 font-normal text-slate-400 dark:text-slate-500">(FASTA or raw nucleotides)</span>
+                            <span className="ml-2 font-normal text-zinc-400 dark:text-zinc-500">(FASTA or raw nucleotides)</span>
                         </label>
                         <textarea
                             id="report-sequence"
@@ -298,13 +298,13 @@ export default function UserReport({ open, onClose, defaultSequence, jobName }: 
                             value={sequence}
                             onChange={(e) => setSequence(e.target.value)}
                             placeholder={"ATCGATCGATCG... or >my_sequence\\nATCG..."}
-                            className="w-full rounded-lg border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 font-mono text-xs px-3 py-2 border resize-y"
+                            className="input font-mono text-xs resize-y"
                         />
                     </div>
 
                     {/* Notes */}
                     <div>
-                        <label htmlFor="report-notes" className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                        <label htmlFor="report-notes" className="block text-sm font-semibold text-zinc-700 dark:text-zinc-300 mb-1">
                             Notes
                         </label>
                         <textarea
@@ -313,23 +313,23 @@ export default function UserReport({ open, onClose, defaultSequence, jobName }: 
                             value={notes}
                             onChange={(e) => setNotes(e.target.value)}
                             placeholder="Write observations, experimental conditions, sample IDs…"
-                            className="w-full rounded-lg border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm px-3 py-2 border resize-y"
+                            className="input text-sm resize-y"
                         />
                     </div>
 
                     {/* Images */}
                     <div>
                         <div className="flex items-center justify-between mb-2">
-                            <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300">
+                            <label className="block text-sm font-semibold text-zinc-700 dark:text-zinc-300">
                                 Images
                                 {images.length > 0 && (
-                                    <span className="ml-2 font-normal text-slate-400 dark:text-slate-500">({images.length})</span>
+                                    <span className="ml-2 font-normal text-zinc-400 dark:text-zinc-500">({images.length})</span>
                                 )}
                             </label>
                             <button
                                 type="button"
                                 onClick={() => fileInputRef.current?.click()}
-                                className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-md border border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-700 hover:bg-slate-50 dark:hover:bg-slate-600 transition-colors"
+                                className="btn-secondary"
                             >
                                 <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
@@ -352,9 +352,9 @@ export default function UserReport({ open, onClose, defaultSequence, jobName }: 
                             />
                         </div>
                         {/* Paste zone */}
-                        <div className="rounded-lg border-2 border-dashed border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900/30 px-4 py-3 text-center">
-                            <p className="text-xs text-slate-500 dark:text-slate-400">
-                                Paste an image here with <kbd className="px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 font-mono text-[10px]">Ctrl/⌘ + V</kbd>
+                        <div className="rounded-lg border-2 border-dashed border-zinc-300 dark:border-zinc-600 bg-zinc-50 dark:bg-zinc-900/30 px-4 py-3 text-center">
+                            <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                                Paste an image here with <kbd className="px-1.5 py-0.5 rounded bg-zinc-200 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300 font-mono text-[10px]">Ctrl/⌘ + V</kbd>
                                 {images.length === 0 && ' — or use “Add file” above.'}
                             </p>
                         </div>
@@ -362,7 +362,7 @@ export default function UserReport({ open, onClose, defaultSequence, jobName }: 
                         {images.length > 0 && (
                             <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 gap-3">
                                 {images.map((img) => (
-                                    <div key={img.id} className="relative group rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-900">
+                                    <div key={img.id} className="relative group rounded-lg overflow-hidden border border-zinc-200 dark:border-zinc-700 bg-zinc-100 dark:bg-zinc-900">
                                         <img src={img.dataUrl} alt={img.name} className="w-full h-28 object-contain" />
                                         <button
                                             type="button"
@@ -374,7 +374,7 @@ export default function UserReport({ open, onClose, defaultSequence, jobName }: 
                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
                                             </svg>
                                         </button>
-                                        <p className="text-[10px] text-slate-500 dark:text-slate-400 truncate px-1.5 py-1 bg-white dark:bg-slate-800">{img.name}</p>
+                                        <p className="text-[10px] text-zinc-500 dark:text-zinc-400 truncate px-1.5 py-1 bg-white dark:bg-zinc-800">{img.name}</p>
                                     </div>
                                 ))}
                             </div>
@@ -390,16 +390,16 @@ export default function UserReport({ open, onClose, defaultSequence, jobName }: 
                 </div>
 
                 {/* Footer */}
-                <div className="px-6 py-4 border-t border-slate-100 dark:border-slate-700 flex items-center justify-end gap-3 sticky bottom-0 bg-white dark:bg-slate-800 rounded-b-2xl">
+                <div className="px-6 py-4 border-t border-zinc-100 dark:border-zinc-800 flex items-center justify-end gap-3 sticky bottom-0 bg-white dark:bg-zinc-900 rounded-b-lg">
                     <button
                         onClick={onClose}
-                        className="px-4 py-2 text-sm font-medium rounded-md border border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
+                        className="btn-secondary px-4 py-2 text-sm"
                     >
                         Cancel
                     </button>
                     <button
                         onClick={handleSave}
-                        className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-md bg-indigo-600 text-white hover:bg-indigo-700 transition-colors shadow-sm"
+                        className="btn-primary px-4 py-2 text-sm"
                     >
                         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
