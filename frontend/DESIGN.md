@@ -1,115 +1,164 @@
-# Oligool Frontend Design System
+# Oligool Design System
+
+> Branch `slop` — full de-slop redesign. This file replaces the indigo/gradient era entirely.
+> Every visual decision traces back here. No orphan hex codes, no ad-hoc Tailwind palettes.
 
 ## 1. Atmosphere & Identity
 
-A calm, technical workbench for molecular biology. The interface favors clarity and information density over ornament: soft slate surfaces, crisp indigo accents, and generous whitespace around tools so sequence data remains the hero. The signature is restrained utility — every panel feels like a precision instrument.
+A precision lab instrument. Oligool feels like the software on a well-built bench device:
+quiet, flat, exact. Neutrals do all the structural work; color appears only where it carries
+meaning — one accent for interactivity to the exclusion of all decoration. Data (sequences,
+alignments, coordinates) is the hero and always renders in monospace with tabular figures.
+
+The signature is **flat exactness**: hairline borders and tonal surfaces instead of shadows
+and gradients; small, dense, confident type; square-ish corners; zero gradients anywhere.
 
 ## 2. Color
 
-### Palette
+One neutral family: **zinc**. One accent: **gel teal**. Status hues desaturated, sparing.
 
-| Role | Token | Light | Dark | Usage |
-|------|-------|-------|------|-------|
-| Surface/page | `--surface-page` | `#f8fafc` | `#0f172a` | Page background |
-| Surface/primary | `--surface-primary` | `#ffffff` | `#1e293b` | Cards, panels, header |
-| Surface/secondary | `--surface-secondary` | `#f1f5f9` | `#334155` | Subtle panel backgrounds, hovered rows |
-| Surface/elevated | `--surface-elevated` | `#ffffff` | `#1e293b` | Modals, popovers (same as primary) |
-| Text/primary | `--text-primary` | `#1e293b` | `#f1f5f9` | Headings, primary labels |
-| Text/secondary | `--text-secondary` | `#64748b` | `#94a3b8` | Captions, metadata, hints |
-| Text/tertiary | `--text-tertiary` | `#94a3b8` | `#64748b` | Disabled, muted text |
-| Border/default | `--border-default` | `#e2e8f0` | `#334155` | Cards, dividers, button borders |
-| Border/subtle | `--border-subtle` | `#f1f5f9` | `#1e293b` | Soft separations inside panels |
-| Accent/primary | `--accent-primary` | `#6366f1` | `#818cf8` | Primary buttons, active toggles, links |
-| Accent/hover | `--accent-hover` | `#4f46e5` | `#a5b4fc` | Hover state on accent elements |
-| Status/success | `--status-success` | `#10b981` | `#34d399` | Success feedback, completed steps |
-| Status/warning | `--status-warning` | `#f59e0b` | `#fbbf24` | Warnings, medium-identity badges |
-| Status/error | `--status-error` | `#ef4444` | `#f87171` | Errors, destructive actions, mismatches |
-| Status/info | `--status-info` | `#3b82f6` | `#60a5fa` | Informational highlights |
+| Role | Light (Tailwind class) | Dark | Usage |
+|------|------------------------|------|-------|
+| Surface/page | `zinc-100` #f4f4f5 | `zinc-950` #09090b | App background |
+| Surface/primary | `white` #ffffff | `zinc-900` #18181b | Cards, panels |
+| Surface/secondary | `zinc-50` #fafafa | `zinc-800/60` | Panel headers, hovered rows |
+| Surface/inset | `zinc-100` #f4f4f5 | `zinc-800` #27272a | Wells, inputs, skeleton blocks |
+| Text/primary | `zinc-900` #18181b | `zinc-100` #f4f4f5 | Headings, values |
+| Text/secondary | `zinc-500` #71717a | `zinc-400` #a1a1aa | Captions, metadata |
+| Text/tertiary | `zinc-400` #a1a1aa | `zinc-500` #71717a | Disabled, placeholders |
+| Border/default | `zinc-200` #e4e4e7 | `zinc-800` #27272a | Cards, dividers |
+| Border/strong | `zinc-300` #d4d4d8 | `zinc-700` #3f3f46 | Control borders, hover borders |
+| Accent/primary | `teal-700` #0f766e | `teal-300` #5eead4 | Links, active states, selection, focus |
+| Accent/tint | `teal-700/10` | `teal-300/10` | Active segmented/tab/badge background |
+| Accent/hover | `teal-800` #115e59 | `teal-200` #99f6e4 | Link/button hover |
+| Ink (primary button) | `zinc-900` #18181b | `zinc-100` #f4f4f5 | Primary action background (white/zinc-900 text on top) |
+| Status/success | `emerald-600` #059669 | `emerald-400` #34d399 | Completed, valid |
+| Status/warning | `amber-600` #d97706 | `amber-400` #fbbf24 | Caution, medium quality |
+| Status/error | `red-600` #dc2626 | `red-400` #f87171 | Errors, destructive |
+| Status/info | `teal-700` (accent) | `teal-300` | Informational — reuse accent, no blue |
+
+### Data-visualization palette (canvas/SVG sequence semantics — NOT chrome)
+
+Alignment data colors stay semantic and unchanged in meaning: match `zinc`,
+mismatch `red`, insertion `#3b82f6` (blue), deletion `purple`. These live inside
+MSAViewer canvas / SVG schematics only and never leak into UI chrome.
 
 ### Rules
-- Accent is reserved for interactive/active states; do not use it decoratively.
-- Dark mode is implemented via Tailwind `dark:` variants and the `.dark` class on `<html>`.
-- Raw hex codes outside this table should not be introduced; extend this table first.
+- **No gradients.** None. Not page backgrounds, not headers, not text, not buttons.
+- **No indigo, no purple, no blue, no slate in chrome.** Those scales are gone. (`slate-*` → `zinc-*`).
+- Accent teal is for interactive indication only (links, active, focus, selection). Never decorative.
+- Status colors appear as dots + text, never as saturated filled pills.
+- Dark mode: `.dark` class on `<html>`, Tailwind `dark:` variants.
 
 ## 3. Typography
 
+### Font Stack (self-hosted via `@fontsource`, imported in `index.css`)
+- Sans: `"IBM Plex Sans", ui-sans-serif, system-ui, sans-serif` — weights 400/500/600/700.
+- Mono: `"IBM Plex Mono", ui-monospace, SFMono-Regular, monospace` — weights 400/500/600.
+- No other families. No remote font URLs (desktop app must work offline).
+
 ### Scale
 
-| Level | Size | Weight | Line Height | Usage |
-|-------|------|--------|-------------|-------|
-| Page title | `1.875rem` / 30px | 700 | 1.2 | App title "Oligool" |
-| Section title | `1.125rem` / 18px | 600 | 1.3 | Card headers, MSA title |
-| Body | `0.875rem` / 14px | 400 | 1.5 | Default text, descriptions |
-| Body/sm | `0.75rem` / 12px | 400 | 1.4 | Metadata, monospaced positions |
-| Caption | `0.6875rem` / 11px | 500 | 1.3 | Labels, badges |
-
-### Font Stack
-- Primary: `ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif`
-- Mono: `"Fira Code", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace`
+| Level | Class recipe | Usage |
+|-------|--------------|-------|
+| App wordmark | `text-lg font-semibold tracking-tight` | "Oligool" — plain text, never gradient-clipped |
+| Panel title | `text-sm font-semibold` | Card/panel headers |
+| Overline label | `text-[11px] font-medium uppercase tracking-wider text-zinc-500` | Section labels, legend titles |
+| Body | `text-sm` | Default UI text |
+| Body/sm | `text-xs` | Secondary text, table cells |
+| Caption | `text-[11px]` | Hints, footers |
+| Data | `font-mono text-xs tabular-nums` | Sequences, coordinates, counts, RID, e-values |
 
 ### Rules
-- Body text never drops below 14px.
-- Monospace is used for sequence data, positions, accession IDs, and bp counts.
+- Sequence data, positions, accessions, bp counts, timers: always mono + `tabular-nums`.
+- Numbers in data contexts use tabular figures.
+- Headings are sentence case. Acronyms (BLAST, MSA, IDT, Tm, ΔG) stay uppercase.
+- Body never below 12px except captions/hints (11px).
 
 ## 4. Spacing & Layout
 
-### Base Unit
-
-All spacing derives from a base of **4px**.
+Base-4 rhythm; existing layout structure is preserved (this is a restyle, not a re-layout).
 
 | Token | Value | Usage |
 |-------|-------|-------|
-| `--space-1` | 4px | Tight icon-to-label gap |
-| `--space-2` | 8px | Inline button groups, small gaps |
-| `--space-3` | 12px | Toolbar gaps |
-| `--space-4` | 16px | Card padding (horizontal/vertical) |
-| `--space-5` | 20px | Section padding |
-| `--space-6` | 24px | Major component separation |
-| `--space-8` | 32px | Page-level vertical rhythm |
-| `--space-10` | 40px | Hero/header spacing |
+| space-2 | 8px | Inline groups, icon-label gap |
+| space-3 | 12px | Control padding, toolbar gaps |
+| space-4 | 16px | Card padding |
+| space-5 | 20px | Panel header padding (x) |
+| space-6 | 24px | Card separation, section gaps |
+| space-8 | 32px | Page vertical rhythm |
 
-### Layout
-- Max content width: `1280px` (`max-w-7xl`).
-- Page padding: `16px` mobile, `24px` tablet, `32px` desktop (`px-4 sm:px-6 lg:px-8`).
-- Cards: `rounded-xl`, `border border-slate-200 dark:border-slate-700`, `shadow-sm`.
+- Max width unchanged: `max-w-7xl`, page padding `px-4 sm:px-6 lg:px-8`, `py-8`.
+- Do not change grid/flex structures of working layouts — change surface/type/color only.
 
 ## 5. Components
 
-### Button / Toggle Pill
-- **Structure:** `<button>` with `px-2 py-1 text-xs font-medium rounded-md border`.
-- **Variants:**
-  - Default: `border-slate-300 dark:border-slate-600 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700`.
-  - Active/Accent: `border-indigo-300 dark:border-indigo-800 text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/30`.
-  - Destructive: `border-red-200 dark:border-red-900/30 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/10`.
-- **States:** hover, active, focus via Tailwind ring utilities; transitions use `transition-colors`.
+Shared utilities live in `index.css` under `@layer components`. Use them; do not hand-roll.
 
-### Card / Panel
-- **Structure:** Outer `div` with `border rounded-xl shadow-sm overflow-hidden bg-white dark:bg-slate-800`.
-- **Header:** Gradient background `from-slate-50 to-indigo-50/50 dark:from-slate-800 dark:to-indigo-900/20`, bottom border, `px-5 py-3` or `px-5 py-4`.
-- **Body:** `bg-white dark:bg-slate-800`.
+### `.card`
+`rounded-lg border border-zinc-200 dark:border-[#2e2e33] bg-white dark:bg-[#1b1b1f]` — no shadow.
 
-### Badge
-- **Structure:** `inline-block px-2 py-0.5 rounded-full text-xs font-medium`.
-- **Variants:** green (≥95%), yellow (≥80%), red (<80%), purple (100%).
+### `.panel-header`
+Flat `bg-zinc-50 dark:bg-[#222226]` strip with `border-b` + `px-5 py-3`, containing a
+`text-sm font-semibold` title and optional eyebrow captions (`.eyebrow` class). Never gradient.
+
+### `.btn` base
+`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md border transition-colors
+disabled:opacity-50 disabled:pointer-events-none`
+- `.btn-primary`: ink — `border-transparent bg-zinc-900 text-white hover:bg-zinc-700
+  dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300`.
+- `.btn-secondary`: `border-zinc-300 dark:border-[#3a3a40] bg-white dark:bg-[#222226]
+  text-zinc-700 dark:text-zinc-300 hover:border-zinc-400 dark:hover:border-zinc-500`.
+- `.btn-destructive`: like secondary but `text-red-600 dark:text-red-400` + red border/hover tint.
+- Focus: `focus-visible:outline-2 focus-visible:outline-offset-2 outline-teal-700 dark:outline-teal-300`.
+
+### `.input`
+`w-full rounded-md border border-zinc-300 dark:border-[#3a3a40] bg-white dark:bg-[#222226]
+text-sm px-3 py-2 text-zinc-900 dark:text-zinc-100 placeholder-zinc-400
+focus:border-teal-700 dark:focus:border-teal-300 focus:outline-none focus:ring-1
+focus:ring-teal-700 dark:focus:ring-teal-300 disabled:opacity-50`
+
+### Segmented control
+Bordered group (`rounded-md border overflow-hidden flex`), segments `px-2.5 py-1 text-xs font-medium`;
+active = `bg-teal-700/10 dark:bg-teal-300/10 text-teal-800 dark:text-teal-200`,
+inactive = default surface + secondary text. Never solid accent fills.
+
+### Status dot + text
+`w-1.5 h-1.5 rounded-full` dot in status hue + `text-xs font-medium tabular-nums` label.
+Replaces all rainbow pill badges (identity %, quality tiers).
+
+### Modal
+Overlay `bg-zinc-950/40` + `backdrop-blur-sm` (blur restored per user request — it improves
+popup/background separation), panel `.card` + `shadow-xl` (the only place shadows live,
+besides popovers/tooltips).
+
+### Icon buttons
+`p-2 rounded-md border border-transparent text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100
+dark:hover:bg-[#26262b]` — SVG stroke consistent with existing set (heroicons outline, strokeWidth 2).
+
+### Tooltips / popovers
+`bg-zinc-900 text-zinc-100 dark:bg-zinc-700` small rounded-md text-xs shadow-lg border border-zinc-700/50.
 
 ## 6. Motion & Interaction
 
-### Timing
-- Micro transitions: `150ms` `ease-out` — button hovers, toggles.
-- Standard transitions: `200ms` `ease-in-out` — panel visibility, mode switches.
+| Type | Duration | Easing | Usage |
+|------|----------|--------|-------|
+| Micro | 150ms | ease-out | Hovers, toggles |
+| Standard | 250ms | ease-in-out | Panel expand/collapse, stepper |
 
-### Rules
-- Only animate `transition-colors`, `transform`, and `opacity`.
-- Respect `prefers-reduced-motion` where feasible.
-- Every interactive element has a visible hover state.
+- Animate `colors`, `transform`, `opacity` only. **Never** the global `* { transition }` selector.
+- Spinners: `border-zinc-300 border-t-zinc-700 dark:border-zinc-600 dark:border-t-zinc-300` neutral.
+- Every interactive element keeps hover + focus-visible + disabled states.
+- Respect `prefers-reduced-motion`.
 
 ## 7. Depth & Surface
 
-### Strategy: Borders + subtle tonal shift
-
-Cards and panels use 1px borders plus soft gradient header backgrounds to create depth. Shadows are minimal (`shadow-sm`) and reserved for card containers.
+**Strategy: borders + tonal shift. Shadows are for floating layers only.**
 
 | Level | Value | Usage |
 |-------|-------|-------|
-| Card rest | `0 1px 2px 0 rgb(0 0 0 / 0.05)` | Cards, panels |
-| Header gradient | `bg-gradient-to-r from-slate-50 to-indigo-50/50` | Panel headers (light mode) |
+| Resting cards / panels | 1px `border/default`, zero shadow | Everything on the page |
+| Floating (modal, popover, tooltip) | `shadow-xl` neutral | Overlays only |
+| Skeleton / inset wells | `surface/inset` fill, no border | Loading placeholders |
+
+- Depth hierarchy comes from page → primary → secondary → inset tonal steps, not elevation.
