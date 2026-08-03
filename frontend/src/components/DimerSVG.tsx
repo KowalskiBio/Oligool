@@ -135,10 +135,10 @@ export default function DimerSVG({ seq, dotBracket }: DimerSVGProps) {
         }
     }
 
-    // Bottom strand (3'→5' displayed right-to-left in memory; seq2[0]=3' end at right, seq2[n-1]=5' at left)
+    // Bottom strand drawn antiparallel: seq2[n-1] (3' end) leftmost, seq2[0] (5' end) rightmost
     for (let i = 0; i < seq2.length; i++) {
         const x = bot(i);
-        elements.push(renderBase(x, botY, seq2[i], `s2-${i}`, i === 0 ? "3'" : i === seq2.length - 1 ? "5'" : undefined));
+        elements.push(renderBase(x, botY, seq2[i], `s2-${i}`, i === 0 ? "5'" : i === seq2.length - 1 ? "3'" : undefined));
         if (i < seq2.length - 1) {
             elements.push(
                 <line key={`bb2-${i}`} x1={x - baseR} y1={botY} x2={bot(i + 1) + baseR} y2={botY}
