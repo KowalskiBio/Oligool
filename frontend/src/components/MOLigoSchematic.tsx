@@ -156,7 +156,7 @@ export default function MOLigoSchematic({
 
     return (
         <div>
-            <div className={`rounded-xl border border-slate-200 ${dk('dark:border-slate-700')} bg-white ${dk('dark:bg-slate-900')} shadow-inner overflow-hidden`}>
+            <div className={`rounded-lg border border-zinc-200 ${dk('dark:border-zinc-800')} bg-white ${dk('dark:bg-zinc-950')} overflow-hidden`}>
                 <svg viewBox={`0 0 ${VW} ${VH}`} width="100%"
                     style={{ display: 'block', fontFamily: 'inherit' }}
                     aria-label="MOLigo provenance schematic">
@@ -204,50 +204,50 @@ export default function MOLigoSchematic({
                 </svg>
             </div>
 
-            <div className={`mt-5 px-3 mb-2 flex flex-col gap-y-4 text-sm text-slate-600 ${dk('dark:text-slate-300')}`}>
+            <div className={`mt-5 px-3 mb-2 flex flex-col gap-y-4 text-sm text-zinc-600 ${dk('dark:text-zinc-300')}`}>
                 <div className="flex flex-wrap gap-x-6 gap-y-3 justify-center">
                     {revLen > 0 && (
                         <div className="flex items-center gap-2">
                             <div className="w-4 h-4 rounded-sm" style={{ backgroundColor: C.revP }} />
-                            <span className={`font-semibold text-slate-700 ${dk('dark:text-slate-200')}`}>Reverse Primer</span>
-                            <span className="text-slate-400 font-mono text-xs">({revLen}nt)</span>
+                            <span className={`font-semibold text-zinc-700 ${dk('dark:text-zinc-200')}`}>Reverse Primer</span>
+                            <span className="text-zinc-400 font-mono text-xs">({revLen}nt)</span>
                         </div>
                     )}
                     <div className="flex items-center gap-2">
                         <div className="w-4 h-4 rounded-sm" style={{ backgroundColor: C.m2 }} />
-                        <span className={`font-semibold text-slate-700 ${dk('dark:text-slate-200')}`}>Oligo 2</span>
-                        <span className="text-slate-400 font-mono text-xs">({m2Len}nt)</span>
+                        <span className={`font-semibold text-zinc-700 ${dk('dark:text-zinc-200')}`}>Oligo 2</span>
+                        <span className="text-zinc-400 font-mono text-xs">({m2Len}nt)</span>
                     </div>
                     <div className="flex items-center gap-2">
                         <div className="w-4 h-4 rounded-sm" style={{ backgroundColor: C.m1 }} />
-                        <span className={`font-semibold text-slate-700 ${dk('dark:text-slate-200')}`}>Oligo 1</span>
-                        <span className="text-slate-400 font-mono text-xs">({m1Len}nt)</span>
+                        <span className={`font-semibold text-zinc-700 ${dk('dark:text-zinc-200')}`}>Oligo 1</span>
+                        <span className="text-zinc-400 font-mono text-xs">({m1Len}nt)</span>
                     </div>
                     {tagLen > 0 && (
                         <div className="flex items-center gap-2">
                             <div className="w-4 h-4 rounded-sm" style={{ backgroundColor: C.tag }} />
-                            <span className={`font-semibold text-slate-700 ${dk('dark:text-slate-200')}`}>TAG</span>
-                            <span className="text-slate-400 font-mono text-xs">({tagLen}nt)</span>
+                            <span className={`font-semibold text-zinc-700 ${dk('dark:text-zinc-200')}`}>TAG</span>
+                            <span className="text-zinc-400 font-mono text-xs">({tagLen}nt)</span>
                         </div>
                     )}
                     {fwdLen > 0 && (
                         <div className="flex items-center gap-2">
                             <div className="w-4 h-4 rounded-sm" style={{ backgroundColor: C.fwdRC }} />
-                            <span className={`font-semibold text-slate-700 ${dk('dark:text-slate-200')}`}>RC(Fwd Primer)</span>
-                            <span className="text-slate-400 font-mono text-xs">({fwdLen}nt)</span>
+                            <span className={`font-semibold text-zinc-700 ${dk('dark:text-zinc-200')}`}>RC(Fwd Primer)</span>
+                            <span className="text-zinc-400 font-mono text-xs">({fwdLen}nt)</span>
                         </div>
                     )}
                 </div>
 
-                <div className={`w-full h-px bg-slate-200 ${dk('dark:bg-slate-700/50')} hidden md:block`}></div>
+                <div className={`w-full h-px bg-zinc-200 ${dk('dark:bg-zinc-700/50')} hidden md:block`}></div>
 
                 <div className="flex items-center justify-center gap-2">
                     <div className="flex flex-col gap-[2px]">
                         <div className="w-4 h-[3px] rounded-full" style={{ backgroundColor: C.tmpl }} />
                         <div className="w-4 h-[3px] rounded-full" style={{ backgroundColor: C.tmpl }} />
                     </div>
-                    <span className={`font-semibold text-slate-700 ${dk('dark:text-slate-200')}`}>Target Template</span>
-                    <span className="text-slate-400 font-mono text-xs">({templateSeq?.length || 0}nt)</span>
+                    <span className={`font-semibold text-zinc-700 ${dk('dark:text-zinc-200')}`}>Target Template</span>
+                    <span className="text-zinc-400 font-mono text-xs">({templateSeq?.length || 0}nt)</span>
                 </div>
             </div>
         </div>

@@ -545,7 +545,7 @@ export default function FlankingPrimersPanel({
     }, []);
 
     const getIdtStatusColor = (dg: number | undefined) => {
-        if (dg === undefined || dg === null) return 'text-slate-400';
+        if (dg === undefined || dg === null) return 'text-zinc-400';
         if (dg < -9) return 'text-red-500 font-bold';
         if (dg < -6) return 'text-amber-500 font-medium';
         return 'text-emerald-500';
@@ -1003,7 +1003,7 @@ export default function FlankingPrimersPanel({
                     const posStr = String(lineStartPos).padStart(6, ' ');
                     return (
                         <div key={lineIdx} className="flex">
-                            <span className="text-slate-400 mr-4 select-none whitespace-pre">{posStr}</span>
+                            <span className="text-zinc-400 mr-4 select-none whitespace-pre">{posStr}</span>
                             <span className="whitespace-pre">
                                 {lineChars.map((char, charIdx) => {
                                     const i = viewStart + lineIdx * lineLength + charIdx;
@@ -1012,7 +1012,7 @@ export default function FlankingPrimersPanel({
                                     const isFwd = liveFwdInterval && i >= liveFwdInterval[0] && i < liveFwdInterval[1];
                                     const isRev = liveRevInterval && i >= liveRevInterval[0] && i < liveRevInterval[1];
 
-                                    let cn = 'text-slate-500 dark:text-slate-400';
+                                    let cn = 'text-zinc-500 dark:text-zinc-400';
                                     let handlers: React.HTMLAttributes<HTMLSpanElement> = {};
 
                                     if (isP1) cn = 'bg-green-200 dark:bg-green-900/40 text-green-900 dark:text-green-300 font-bold';
@@ -1063,7 +1063,7 @@ export default function FlankingPrimersPanel({
             const row = rawSeq.slice(rowStart, Math.min(rowStart + LINE, winEnd));
             rows.push(
                 <div key={rowStart} className="flex">
-                    <span className="text-slate-400 mr-4 select-none whitespace-pre">{String(rowStart + 1).padStart(6, ' ')}</span>
+                    <span className="text-zinc-400 mr-4 select-none whitespace-pre">{String(rowStart + 1).padStart(6, ' ')}</span>
                     <span className="whitespace-pre">
                         {row.split('').map((char, j) => {
                             const i = rowStart + j;
@@ -1071,7 +1071,7 @@ export default function FlankingPrimersPanel({
                             const isP2 = i >= p2Start && i < p2End;
                             const isPrimer = i >= iv[0] && i < iv[1];
                             const isPartner = partnerIv && i >= partnerIv[0] && i < partnerIv[1];
-                            let cn = 'text-slate-500 dark:text-slate-400';
+                            let cn = 'text-zinc-500 dark:text-zinc-400';
                             if (isP1) cn = 'bg-green-200 dark:bg-green-900/40 text-green-900 dark:text-green-300 font-bold';
                             if (isP2) cn = 'bg-amber-200 dark:bg-amber-900/40 text-amber-900 dark:text-amber-300 font-bold';
                             if (isPartner) cn = partnerCn;
@@ -1089,7 +1089,7 @@ export default function FlankingPrimersPanel({
     const renderCard = (p: DesignedPrimer, side: 'fwd' | 'rev', idx: number) => {
         const isSelected = side === 'fwd' ? selFwd?.sequence === p.sequence : selRev?.sequence === p.sequence;
         const statusDg = (dg: number | null) => {
-            if (dg === null) return 'text-slate-400';
+            if (dg === null) return 'text-zinc-400';
             if (dg < -6) return 'text-red-500 font-bold';
             if (dg < -3) return 'text-amber-500 font-bold';
             return 'text-emerald-500 font-bold';
@@ -1101,25 +1101,25 @@ export default function FlankingPrimersPanel({
         const isAnal = analyzingIndiv[p.sequence];
 
         return (
-            <div key={idx} className={`rounded-xl border p-3 text-xs transition-all ${isSelected ? 'border-emerald-400 bg-emerald-50 dark:bg-emerald-900/20 shadow-md' : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800'}`}>
+            <div key={idx} className={`rounded-lg border p-3 text-xs transition-all ${isSelected ? 'border-teal-600/60 dark:border-teal-300/40 bg-teal-700/5 dark:bg-teal-300/10' : 'border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900'}`}>
                 <div className="flex items-start justify-between gap-2 mb-2">
                     <div className="flex items-center gap-2">
-                        <span className="font-bold text-slate-500 dark:text-slate-400 text-[10px] uppercase tracking-wider">#{idx + 1}</span>
+                        <span className="font-bold text-zinc-500 dark:text-zinc-400 text-[10px] uppercase tracking-wider">#{idx + 1}</span>
                         {p.name && <span className="font-bold text-amber-600 dark:text-amber-400 text-[10px] uppercase tracking-wider">{p.name}</span>}
-                        <span className="font-mono text-slate-700 dark:text-slate-200 break-all">{p.sequence}</span>
+                        <span className="font-mono text-zinc-700 dark:text-zinc-200 break-all">{p.sequence}</span>
                         {relPos && (
-                            <span className="font-mono text-[10px] text-slate-400 dark:text-slate-500 whitespace-nowrap" title="Distance from the MOLigo region (bp)">
+                            <span className="font-mono text-[10px] text-zinc-400 dark:text-zinc-500 whitespace-nowrap" title="Distance from the MOLigo region (bp)">
                                 {relPos}
                             </span>
                         )}
                     </div>
                     <div className="flex gap-1 flex-shrink-0">
                         <button onClick={() => doCopy(p.sequence, copyKey)}
-                            className="text-[10px] px-2 py-0.5 rounded border border-slate-200 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors font-bold">
+                            className="btn-secondary text-[10px] px-2 py-0.5">
                             {copyFb === copyKey ? 'Copied' : 'Copy'}
                         </button>
                         <button onClick={() => openPreview(p, side)}
-                            className="text-[10px] px-2 py-0.5 rounded border border-indigo-200 dark:border-indigo-700 text-indigo-600 dark:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-colors font-bold">
+                            className="btn-secondary text-[10px] px-2 py-0.5 text-teal-700 dark:text-teal-300">
                             Preview
                         </button>
                         <button onClick={() => {
@@ -1135,19 +1135,19 @@ export default function FlankingPrimersPanel({
                                 else { setSelRev(null); setRevName(''); }
                             }
                         }}
-                            className={`text-[10px] px-2 py-0.5 rounded border font-bold transition-all ${isSelected ? 'bg-emerald-500 border-emerald-500 text-white' : 'border-emerald-300 text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/20'}`}>
+                            className={`text-[10px] px-2 py-0.5 rounded-md border font-bold transition-all ${isSelected ? 'bg-teal-600 border-teal-600 text-white' : 'border-teal-600/40 text-teal-700 dark:text-teal-300 hover:bg-teal-700/10 dark:hover:bg-teal-300/10'}`}>
                             {isSelected ? 'Used' : 'Use'}
                         </button>
                     </div>
                 </div>
-                <div className="grid grid-cols-7 gap-2 text-[10px] text-slate-500 dark:text-slate-400">
-                    <div><span className="font-bold text-slate-600 dark:text-slate-300">Len</span><br />{p.length} bp</div>
-                    <div><span className="font-bold text-slate-600 dark:text-slate-300">P3 Tm</span><br />{p.tm ?? p.primer3?.tm ?? '—'}°C</div>
-                    <div><span className="font-bold text-slate-600 dark:text-slate-300" title="IDT Tm">IDT Tm</span><br />{indivResult?.analyze ? (extractTm(indivResult.analyze)?.toFixed(1) || 'N/A') + '°C' : '—'}</div>
-                    <div><span className="font-bold text-slate-600 dark:text-slate-300" title="Strider duplex Tm">Strider Tm</span><br />{p.tm_strider != null ? `${p.tm_strider.toFixed(1)}°C` : '—'}</div>
-                    <div><span className="font-bold text-slate-600 dark:text-slate-300">GC</span><br />{p.gc_percent ?? p.primer3?.gc_percent ?? '—'}%</div>
-                    <div><span className="font-bold text-slate-600 dark:text-slate-300">Hairpin Tm</span><br /><span className={p.hairpin.structure_found ? 'text-amber-500' : 'text-emerald-500'}>{p.hairpin.structure_found ? `${p.primer3?.hairpin_th ?? '—'}°C` : 'None'}</span></div>
-                    <div><span className="font-bold text-slate-600 dark:text-slate-300">Self-dimer</span><br /><span className={statusDg(p.homodimer?.dg)}>{p.homodimer?.dg !== null ? `${p.homodimer.dg} kcal` : 'OK'}</span></div>
+                <div className="grid grid-cols-7 gap-2 text-[10px] text-zinc-500 dark:text-zinc-400">
+                    <div><span className="font-bold text-zinc-600 dark:text-zinc-300">Len</span><br />{p.length} bp</div>
+                    <div><span className="font-bold text-zinc-600 dark:text-zinc-300">P3 Tm</span><br />{p.tm ?? p.primer3?.tm ?? '—'}°C</div>
+                    <div><span className="font-bold text-zinc-600 dark:text-zinc-300" title="IDT Tm">IDT Tm</span><br />{indivResult?.analyze ? (extractTm(indivResult.analyze)?.toFixed(1) || 'N/A') + '°C' : '—'}</div>
+                    <div><span className="font-bold text-zinc-600 dark:text-zinc-300" title="Strider duplex Tm">Strider Tm</span><br />{p.tm_strider != null ? `${p.tm_strider.toFixed(1)}°C` : '—'}</div>
+                    <div><span className="font-bold text-zinc-600 dark:text-zinc-300">GC</span><br />{p.gc_percent ?? p.primer3?.gc_percent ?? '—'}%</div>
+                    <div><span className="font-bold text-zinc-600 dark:text-zinc-300">Hairpin Tm</span><br /><span className={p.hairpin.structure_found ? 'text-amber-500' : 'text-emerald-500'}>{p.hairpin.structure_found ? `${p.primer3?.hairpin_th ?? '—'}°C` : 'None'}</span></div>
+                    <div><span className="font-bold text-zinc-600 dark:text-zinc-300">Self-dimer</span><br /><span className={statusDg(p.homodimer?.dg)}>{p.homodimer?.dg !== null ? `${p.homodimer.dg} kcal` : 'OK'}</span></div>
                 </div>
 
                 {isSelected && (
@@ -1157,9 +1157,9 @@ export default function FlankingPrimersPanel({
                             {isAnal && <div className="w-3 h-3 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />}
                         </div>
                         {!idtCredentials ? (
-                            <div className="text-[10px] text-slate-400 italic">Configure IDT credentials in settings to view detailed structures.</div>
+                            <div className="text-[10px] text-zinc-400 italic">Configure IDT credentials in settings to view detailed structures.</div>
                         ) : indivResult ? (
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 animate-in fade-in slide-in-from-top-2 duration-300">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 ">
                                 {renderResultCard("Hairpin", indivResult.hairpin)}
                                 {renderResultCard("Self-Dimer", indivResult.selfdimer)}
                             </div>
@@ -1176,15 +1176,15 @@ export default function FlankingPrimersPanel({
 
     const numInput = (label: string, val: number, set: (v: number) => void, step = 1, min?: number, max?: number) => (
         <div className="flex flex-col gap-0.5">
-            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{label}</label>
+            <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">{label}</label>
             <input type="number" value={val} step={step} min={min} max={max}
                 onChange={e => set(parseFloat(e.target.value) || 0)}
-                className="w-full text-xs font-mono bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-emerald-400" />
+                className="input px-2 py-1 text-xs font-mono tabular-nums" />
         </div>
     );
 
     return (
-        <div className="bg-white dark:bg-slate-800 space-y-0">
+        <div className="bg-white dark:bg-zinc-900 space-y-0">
 
             {/* ── MSA Viewer (same as top, just relocated here) ── */}
             {alignment && (
@@ -1202,9 +1202,9 @@ export default function FlankingPrimersPanel({
 
             <div className="p-5 space-y-5">
                 {/* ── Static sequence view ── */}
-                <div className="rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden relative">
-                    <div className="px-4 py-2 border-b border-slate-100 dark:border-slate-700 flex flex-wrap items-center justify-between text-[10px] font-medium gap-2">
-                        <div className="flex gap-4 flex-wrap text-slate-400">
+                <div className="rounded-lg border border-zinc-200 dark:border-zinc-800 overflow-hidden relative">
+                    <div className="px-4 py-2 border-b border-zinc-100 dark:border-zinc-800 flex flex-wrap items-center justify-between text-[10px] font-medium gap-2">
+                        <div className="flex gap-4 flex-wrap text-zinc-400">
                             <span><span className="inline-block w-2.5 h-2.5 bg-amber-400 rounded-sm mr-1 align-middle" />Oligo 2</span>
                             <span><span className="inline-block w-2.5 h-2.5 bg-green-400 rounded-sm mr-1 align-middle" />Oligo 1</span>
                             {selFwd && <span><span className="inline-block w-2.5 h-2.5 bg-emerald-400 rounded-sm mr-1 align-middle" />Left Flanking</span>}
@@ -1215,13 +1215,15 @@ export default function FlankingPrimersPanel({
                         {(manualLeftStart !== null || manualRightStart !== null) && (
                             <div className="flex gap-1 items-center">
                                 {manualLeftStart !== null && (
-                                    <div className="bg-emerald-100 dark:bg-emerald-900/90 text-emerald-800 dark:text-emerald-200 text-[10px] font-bold px-2 py-0.5 rounded shadow-sm border border-emerald-300 dark:border-emerald-700 flex items-center gap-2">
+                                    <div className="bg-zinc-100 dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 text-[10px] font-medium px-2 py-0.5 rounded-md border border-zinc-200 dark:border-zinc-800 flex items-center gap-2 tabular-nums">
+                                        <span className="status-dot bg-emerald-500" />
                                         <span>Left Target: {manualLeftStart}-{manualLeftEnd}</span>
                                         <button onClick={() => { setManualLeftStart(null); setManualLeftEnd(null); }} className="hover:text-red-500">Clear</button>
                                     </div>
                                 )}
                                 {manualRightStart !== null && (
-                                    <div className="bg-teal-100 dark:bg-teal-900/90 text-teal-800 dark:text-teal-200 text-[10px] font-bold px-2 py-0.5 rounded shadow-sm border border-teal-300 dark:border-teal-700 flex items-center gap-2">
+                                    <div className="bg-zinc-100 dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 text-[10px] font-medium px-2 py-0.5 rounded-md border border-zinc-200 dark:border-zinc-800 flex items-center gap-2 tabular-nums">
+                                        <span className="status-dot bg-teal-400" />
                                         <span>Right Target: {manualRightStart}-{manualRightEnd}</span>
                                         <button onClick={() => { setManualRightStart(null); setManualRightEnd(null); }} className="hover:text-red-500">Clear</button>
                                     </div>
@@ -1229,14 +1231,14 @@ export default function FlankingPrimersPanel({
                             </div>
                         )}
                         <div className="flex items-center gap-2 flex-shrink-0">
-                            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider whitespace-nowrap">Flank (bp)</label>
+                            <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider whitespace-nowrap">Flank (bp)</label>
                             <input
                                 type="number"
                                 value={flankWindow}
                                 min={0}
                                 step={50}
                                 onChange={e => setFlankWindow(Math.max(0, parseInt(e.target.value) || 0))}
-                                className="w-20 text-xs font-mono bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded px-2 py-0.5 focus:outline-none focus:ring-1 focus:ring-emerald-400"
+                                className="input w-20 px-2 py-0.5 text-xs font-mono tabular-nums"
                             />
                         </div>
                     </div>
@@ -1244,7 +1246,7 @@ export default function FlankingPrimersPanel({
                     <div
                         ref={containerRef}
                         onMouseUp={handleMouseUp}
-                        className="p-4 overflow-y-auto overflow-x-hidden bg-white dark:bg-slate-800 relative"
+                        className="p-4 overflow-y-auto overflow-x-hidden bg-white dark:bg-zinc-900 relative"
                     >
                         {renderStaticSeq()}
                     </div>
@@ -1252,7 +1254,7 @@ export default function FlankingPrimersPanel({
 
                 {/* ── Amplicon Length ── */}
                 {ampliconBp != null && (
-                    <div className="rounded-xl border border-emerald-200 dark:border-emerald-800/50 bg-emerald-50/60 dark:bg-emerald-900/10 px-4 py-3 flex items-center justify-between shadow-sm">
+                    <div className="rounded-lg border border-emerald-200 dark:border-emerald-800/50 bg-emerald-50/60 dark:bg-emerald-900/10 px-4 py-3 flex items-center justify-between">
                         <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">
                             Amplicon Length
                         </span>
@@ -1266,15 +1268,15 @@ export default function FlankingPrimersPanel({
                 )}
 
                 {/* ── Primer3 Parameters ── */}
-                <div className="rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
-                    <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-700 flex items-center justify-between">
-                        <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Primer3 Parameters</span>
+                <div className="rounded-lg border border-zinc-200 dark:border-zinc-800 overflow-hidden">
+                    <div className="px-4 py-3 border-b border-zinc-100 dark:border-zinc-800 flex items-center justify-between">
+                        <span className="text-xs font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Primer3 Parameters</span>
                         <button onClick={() => setShowAdv(v => !v)}
-                            className="text-[10px] font-bold px-2 py-1 rounded border border-slate-200 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors text-slate-500">
+                            className="text-[10px] font-bold px-2 py-1 rounded border border-zinc-200 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-700 transition-colors text-zinc-500">
                             {showAdv ? '▲ Hide Advanced' : '▼ Advanced'}
                         </button>
                     </div>
-                    <div className="p-4 space-y-4 bg-white dark:bg-slate-800">
+                    <div className="p-4 space-y-4 bg-white dark:bg-zinc-900">
                         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                             {numInput('Opt Tm (°C)', optTm, setOptTm, 0.5)}
                             {numInput('Tm Min (°C)', minTm, setMinTm, 0.5)}
@@ -1291,8 +1293,8 @@ export default function FlankingPrimersPanel({
                             {numInput('Max GC (%)', maxGc, setMaxGc, 5, 0, 100)}
                         </div>
                         {showAdv && (
-                            <div className="border-t border-slate-100 dark:border-slate-700 pt-4">
-                                <p className="text-[10px] text-slate-400 mb-3 uppercase tracking-wider font-bold">Thermodynamic Parameters</p>
+                            <div className="border-t border-zinc-100 dark:border-zinc-800 pt-4">
+                                <p className="text-[10px] text-zinc-400 mb-3 uppercase tracking-wider font-bold">Thermodynamic Parameters</p>
                                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                                     {numInput('Mono [mM]', mvConc, setMvConc, 5, 0)}
                                     {numInput('Dival [mM]', dvConc, setDvConc, 0.5, 0)}
@@ -1303,7 +1305,7 @@ export default function FlankingPrimersPanel({
                         )}
                         <div className="flex gap-2">
                             <button onClick={design} disabled={loading}
-                                className={`flex-1 py-2.5 rounded-lg font-bold text-sm transition-all ${loading ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : 'bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white shadow-md active:scale-95'}`}>
+                                className={`flex-1 rounded-md font-bold text-sm transition-all ${loading ? 'py-2.5 bg-zinc-100 dark:bg-zinc-900 text-zinc-400 cursor-not-allowed' : 'btn-primary justify-center py-2.5 active:scale-95'}`}>
                                 {loading ? (
                                     <span className="flex items-center justify-center gap-2">
                                         <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
@@ -1312,7 +1314,7 @@ export default function FlankingPrimersPanel({
                                 ) : 'Design Flanking Primers'}
                             </button>
                             <button onClick={designManual} disabled={loading || (manualLeftStart === null && manualRightStart === null)}
-                                className="px-4 py-2.5 rounded-lg font-bold text-sm bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 transition-all border border-slate-200 dark:border-slate-700 shadow-sm disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap">
+                                className="btn-secondary font-bold text-sm px-4 py-2.5 whitespace-nowrap disabled:cursor-not-allowed">
                                 Manual
                             </button>
                         </div>
@@ -1322,7 +1324,7 @@ export default function FlankingPrimersPanel({
 
                 {/* ── Results ── */}
                 {(result || selFwd || selRev) && (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-5 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-5 ">
                         <div>
                             <div className="text-xs font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider mb-2 px-1">
                                 Left (Forward) Primers{result ? ` — ${result.forward.num_returned} found` : ''}
@@ -1335,7 +1337,7 @@ export default function FlankingPrimersPanel({
                                 </div>
                             )}
                             {result && (result.forward.primers.length === 0
-                                ? <p className="text-xs text-slate-400 px-1">{result.forward.explain || 'No primers found in upstream region.'}</p>
+                                ? <p className="text-xs text-zinc-400 px-1">{result.forward.explain || 'No primers found in upstream region.'}</p>
                                 : <div className="space-y-2">{result.forward.primers.map((p, i) => renderCard(p, 'fwd', i))}</div>)}
                         </div>
                         <div>
@@ -1350,25 +1352,25 @@ export default function FlankingPrimersPanel({
                                 </div>
                             )}
                             {result && (result.reverse.primers.length === 0
-                                ? <p className="text-xs text-slate-400 px-1">{result.reverse.explain || 'No primers found in downstream region.'}</p>
+                                ? <p className="text-xs text-zinc-400 px-1">{result.reverse.explain || 'No primers found in downstream region.'}</p>
                                 : <div className="space-y-2">{result.reverse.primers.map((p, i) => renderCard(p, 'rev', i))}</div>)}
                         </div>
                         {selFwd && selRev && (
-                            <div className="col-span-full rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden bg-slate-50 dark:bg-slate-900/50 shadow-sm mt-4 transition-all">
+                            <div className="col-span-full rounded-lg border border-zinc-200 dark:border-zinc-800 overflow-hidden bg-zinc-50 dark:bg-zinc-950 mt-4 transition-all">
                                 <button
                                     onClick={() => setIsAnalysisExpanded(!isAnalysisExpanded)}
-                                    className="w-full flex justify-between items-center px-5 py-3 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                                    className="w-full flex justify-between items-center px-5 py-3 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
                                 >
                                     <div className="flex items-center gap-3">
-                                        <svg className="w-5 h-5 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <svg className="w-5 h-5 text-teal-700 dark:text-teal-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
                                         </svg>
-                                        <span className="text-sm font-bold text-slate-700 dark:text-slate-200 uppercase tracking-widest">
+                                        <span className="text-sm font-bold text-zinc-700 dark:text-zinc-200 uppercase tracking-widest">
                                             Primer Pair Advanced QC
                                         </span>
                                     </div>
-                                    <div className="flex items-center gap-3 text-slate-400">
-                                        {isAnalyzing && <div className="w-4 h-4 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />}
+                                    <div className="flex items-center gap-3 text-zinc-400">
+                                        {isAnalyzing && <div className="w-4 h-4 border-2 border-zinc-300 dark:border-zinc-700 border-t-zinc-700 dark:border-t-zinc-300 rounded-full animate-spin" />}
                                         <svg className={`w-4 h-4 transform transition-transform ${isAnalysisExpanded ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                                         </svg>
@@ -1376,19 +1378,19 @@ export default function FlankingPrimersPanel({
                                 </button>
 
                                 {isAnalysisExpanded && (
-                                    <div className="p-5 border-t border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
+                                    <div className="p-5 border-t border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
                                         {!idtCredentials ? (
-                                            <div className="text-sm text-slate-500 italic">IDT Credentials required for advanced secondary structure analysis. Configure them in settings.</div>
+                                            <div className="text-sm text-zinc-500 italic">IDT Credentials required for advanced secondary structure analysis. Configure them in settings.</div>
                                         ) : analysisError ? (
                                             <div className="text-sm text-red-500 font-bold">Analysis Error: {analysisError}</div>
                                         ) : idtResults ? (
-                                            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                                            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 ">
                                                 {renderResultCard("Left Primer Stability (Hairpin/Self)", idtResults.m1.hairpin)}
                                                 {renderResultCard("Right Primer Stability (Hairpin/Self)", idtResults.m2.hairpin)}
                                                 {renderResultCard("HeteroDimer Pairwise", idtResults.pairwise)}
                                             </div>
                                         ) : (
-                                            <div className="text-sm text-slate-400">Waiting for analysis...</div>
+                                            <div className="text-sm text-zinc-400">Waiting for analysis...</div>
                                         )}
                                     </div>
                                 )}
@@ -1397,10 +1399,10 @@ export default function FlankingPrimersPanel({
 
                         {/* ── Rename Primers Panel ─────────────────────────── */}
                         {selFwd && selRev && (
-                            <div className="col-span-full mt-4 border-t border-slate-100 dark:border-slate-700 pt-4">
+                            <div className="col-span-full mt-4 border-t border-zinc-100 dark:border-zinc-800 pt-4">
                                 <div className="flex items-center gap-2 mb-3">
-                                    <div className="w-1.5 h-4 bg-slate-400 rounded-full"></div>
-                                    <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest">Rename Primers</h4>
+                                    <div className="w-1.5 h-4 bg-zinc-400 rounded-full"></div>
+                                    <h4 className="text-xs font-bold text-zinc-400 uppercase tracking-widest">Rename Primers</h4>
                                 </div>
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                     <div className="flex flex-col gap-1">
@@ -1410,7 +1412,7 @@ export default function FlankingPrimersPanel({
                                             value={fwdName}
                                             onChange={e => { setFwdName(e.target.value); setSelFwd(prev => prev ? { ...prev, name: e.target.value } : prev); }}
                                             placeholder="Forward Primer"
-                                            className="px-2.5 py-1.5 text-xs border border-emerald-200 dark:border-emerald-800/50 rounded-md bg-emerald-50/30 dark:bg-emerald-900/10 text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-1 focus:ring-emerald-400"
+                                            className="input text-xs"
                                         />
                                     </div>
                                     <div className="flex flex-col gap-1">
@@ -1420,7 +1422,7 @@ export default function FlankingPrimersPanel({
                                             value={revName}
                                             onChange={e => { setRevName(e.target.value); setSelRev(prev => prev ? { ...prev, name: e.target.value } : prev); }}
                                             placeholder="Reverse Primer"
-                                            className="px-2.5 py-1.5 text-xs border border-teal-200 dark:border-teal-800/50 rounded-md bg-teal-50/30 dark:bg-teal-900/10 text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-1 focus:ring-teal-400"
+                                            className="input text-xs"
                                         />
                                     </div>
                                 </div>
@@ -1450,28 +1452,28 @@ export default function FlankingPrimersPanel({
                 const msaMaxHeight = Math.max(120, Math.floor((window.innerHeight * 0.92 - 96) * (2 / 3)) - 116);
                 return (
                     <div
-                        className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm animate-in fade-in duration-150"
+                        className="modal-overlay"
                         onClick={(e) => { if (e.target === e.currentTarget) setPreviewPrimer(null); }}
                         role="dialog"
                         aria-modal="true"
                         aria-label={`${sideLabel} primer binding site preview`}
                     >
                         <div
-                            className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl max-w-4xl w-full mx-4 border border-slate-200 dark:border-slate-700 overflow-hidden h-[92vh] flex flex-col"
+                            className="card shadow-xl max-w-4xl w-full mx-4 overflow-hidden h-[92vh] flex flex-col"
                             onClick={(e) => e.stopPropagation()}
                         >
-                            <div className="flex items-center justify-between gap-3 px-5 py-3 bg-slate-50 dark:bg-slate-900/60 border-b border-slate-200 dark:border-slate-700">
+                            <div className="panel-header flex items-center justify-between gap-3">
                                 <div className="flex items-center gap-2 min-w-0">
                                     <span className={`text-sm font-bold uppercase tracking-widest flex-shrink-0 ${previewPrimer.side === 'fwd' ? 'text-emerald-600 dark:text-emerald-400' : 'text-teal-600 dark:text-teal-400'}`}>
                                         {sideLabel} primer preview
                                     </span>
-                                    <span className="font-mono text-xs text-slate-600 dark:text-slate-300 truncate">{previewPrimer.primer.sequence}</span>
+                                    <span className="font-mono text-xs text-zinc-600 dark:text-zinc-300 truncate">{previewPrimer.primer.sequence}</span>
                                     {relPos && (
-                                        <span className="font-mono text-xs text-slate-400 flex-shrink-0" title="Distance from the MOLigo region (bp)">{relPos}</span>
+                                        <span className="font-mono text-xs text-zinc-400 flex-shrink-0" title="Distance from the MOLigo region (bp)">{relPos}</span>
                                     )}
                                     {previewAmplicon != null && (
                                         <span
-                                            className="px-2.5 py-1 rounded-lg bg-emerald-100 dark:bg-emerald-900/40 border border-emerald-300 dark:border-emerald-700 text-emerald-700 dark:text-emerald-300 text-xs font-bold font-mono flex-shrink-0"
+                                            className="px-2 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 text-xs font-semibold font-mono tabular-nums flex-shrink-0"
                                             title="Amplicon size for the previewed pair: forward primer + template between primers + reverse primer"
                                         >
                                             Amplicon: {previewAmplicon.toLocaleString()} bp
@@ -1480,13 +1482,13 @@ export default function FlankingPrimersPanel({
                                 </div>
                                 <button
                                     onClick={() => setPreviewPrimer(null)}
-                                    className="text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 px-2 py-1 rounded hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors flex-shrink-0"
+                                    className="text-xs text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 px-2 py-1 rounded hover:bg-zinc-100 dark:hover:bg-zinc-700 transition-colors flex-shrink-0"
                                 >
                                     ✕ Close
                                 </button>
                             </div>
                             {previewPrimer.msaAlignment && previewPrimer.msaFlanking && (
-                                <div className="flex-shrink-0 border-b border-slate-200 dark:border-slate-700">
+                                <div className="flex-shrink-0 border-b border-zinc-200 dark:border-zinc-800">
                                     <DelayedNavMSA
                                         alignment={previewPrimer.msaAlignment}
                                         primers={gappedOligoPrimers}
@@ -1503,7 +1505,7 @@ export default function FlankingPrimersPanel({
                                     ? renderPreviewSeq(iv, previewPrimer.side, partnerIv, partnerSide)
                                     : <p className="text-xs text-red-500 font-medium">This primer could not be located on the template sequence.</p>}
                             </div>
-                            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 px-5 py-2.5 border-t border-slate-100 dark:border-slate-700 text-[10px] font-bold text-slate-500 dark:text-slate-400">
+                            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 px-5 py-2.5 border-t border-zinc-100 dark:border-zinc-800 text-[10px] font-bold text-zinc-500 dark:text-zinc-400">
                                 <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-green-300 dark:bg-green-700" /> MOLigo 1</span>
                                 <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-amber-300 dark:bg-amber-700" /> MOLigo 2</span>
                                 <span className="flex items-center gap-1.5"><span className={`w-2.5 h-2.5 rounded-sm ${previewPrimer.side === 'fwd' ? 'bg-emerald-400 dark:bg-emerald-600' : 'bg-teal-400 dark:bg-teal-600'}`} /> Previewed {sideLabel.toLowerCase()} primer (underlined)</span>

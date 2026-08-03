@@ -92,23 +92,23 @@ export default function MOLigoPanel(props: MOLigoProps) {
     const fwdLen = fwdPrimer?.length || 0;
 
     return (
-        <div className="mt-6 border-t border-slate-100 dark:border-slate-800 pt-4 max-w-[85rem] mx-auto px-2 md:px-6">
+        <div className="mt-6 pt-4 max-w-[85rem] mx-auto px-2 md:px-6">
             {/* Header */}
             <div 
                 className="flex items-center justify-between mb-3 cursor-pointer group"
                 onClick={() => setIsSchematicOpen(!isSchematicOpen)}
             >
                 <div className="flex items-center gap-2">
-                    <svg className={`w-4 h-4 text-slate-400 group-hover:text-slate-600 transition-transform duration-200 ${isSchematicOpen ? 'rotate-90' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <svg className={`w-4 h-4 text-zinc-400 group-hover:text-zinc-600 transition-transform duration-200 ${isSchematicOpen ? 'rotate-90' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                     </svg>
-                    <span className="text-sm font-bold text-slate-500 uppercase tracking-widest group-hover:text-slate-700 transition-colors">MOLigo Provenance Schematic</span>
+                    <span className="text-sm font-bold text-zinc-500 uppercase tracking-widest group-hover:text-zinc-700 transition-colors">MOLigo Provenance Schematic</span>
                 </div>
             </div>
 
             {/* ── SVG Schematic & Legend ── */}
             {isSchematicOpen && (
-                <div className="animate-in fade-in slide-in-from-top-4 duration-300">
+                <div>
                     <MOLigoSchematic
                         templateSeq={templateSeq}
                         moligo1Seq={moligo1Seq}
@@ -121,20 +121,21 @@ export default function MOLigoPanel(props: MOLigoProps) {
             )}
 
             {/* ── Sequence Inputs & TAG Picker ── */}
-            <div className="mt-8 pt-8 border-t border-slate-100 dark:border-slate-800">
+            <div className="mt-8 pt-8">
                 <div className="max-w-[85rem] mx-auto px-2 md:px-6 grid grid-cols-1 lg:grid-cols-3 gap-6 md:gap-8">
 
                     {/* Reverse Primer Input Box */}
-                    <div className="bg-white dark:bg-slate-800 rounded-lg border border-purple-200 dark:border-purple-900/30 p-3 shadow-sm flex flex-col h-full">
+                    <div className="card p-3 flex flex-col h-full">
                         <div className="flex justify-between items-start mb-2">
-                            <div className="text-xs font-bold text-purple-600 dark:text-purple-400 uppercase tracking-wider">
+                            <div className="eyebrow flex items-center gap-1.5">
+                                <span className="status-dot bg-purple-500" />
                                 Universal Reverse Primer
                             </div>
-                            <span className="text-[10px] font-mono text-slate-400 font-bold">{revLen}nt</span>
+                            <span className="text-[10px] font-mono tabular-nums text-zinc-400">{revLen}nt</span>
                         </div>
-                        <div className="flex-1 bg-purple-50/50 dark:bg-purple-900/10 p-2 rounded border border-purple-100 dark:border-purple-900/20">
+                        <div className="flex-1 bg-zinc-50 dark:bg-zinc-800/60 p-2 rounded-md border border-zinc-200 dark:border-zinc-700">
                             <textarea
-                                className="w-full h-full min-h-[4rem] text-sm font-mono bg-transparent border-none outline-none resize-none text-slate-700 dark:text-slate-300 p-0 focus:ring-0"
+                                className="w-full h-full min-h-[4rem] text-sm font-mono bg-transparent border-none outline-none resize-none text-zinc-700 dark:text-zinc-300 p-0 focus:ring-0"
                                 value={revPrimer || ""}
                                 onChange={(e) => onRevChange?.(e.target.value.toUpperCase().replace(/[^ATCGUatcgu]/g, ''))}
                                 placeholder="Enter reverse primer..."
@@ -144,17 +145,18 @@ export default function MOLigoPanel(props: MOLigoProps) {
                     </div>
 
                     {/* TAG Picker & Manual Input Box */}
-                    <div className="bg-white dark:bg-slate-800 rounded-lg border border-red-200 dark:border-red-900/30 p-3 shadow-sm flex flex-col h-full">
+                    <div className="card p-3 flex flex-col h-full">
                         <div className="flex justify-between items-start mb-2">
-                            <div className="text-xs font-bold text-red-600 dark:text-red-400 uppercase tracking-wider">
+                            <div className="eyebrow flex items-center gap-1.5">
+                                <span className="status-dot bg-red-500" />
                                 TAG Sequence
                             </div>
-                            <span className="text-[10px] font-mono text-slate-400 font-bold">{tagLen}nt</span>
+                            <span className="text-[10px] font-mono tabular-nums text-zinc-400">{tagLen}nt</span>
                         </div>
 
                         <div className="flex flex-col gap-2 flex-1">
                             <select
-                                className="w-full p-1.5 text-[10px] border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 rounded focus:ring-red-500 focus:border-red-500 outline-none transition-colors"
+                                className="input text-[10px] p-1.5"
                                 onChange={(e) => {
                                     const tag = TAG_DATABASE.find(t => t.partNumber === e.target.value);
                                     if (tag) onTagChange?.(tag.antiTag);
@@ -169,9 +171,9 @@ export default function MOLigoPanel(props: MOLigoProps) {
                                 ))}
                             </select>
 
-                            <div className="flex-1 bg-red-50/50 dark:bg-red-900/10 p-2 rounded border border-red-100 dark:border-red-900/20 flex flex-col">
+                            <div className="flex-1 bg-zinc-50 dark:bg-zinc-800/60 p-2 rounded-md border border-zinc-200 dark:border-zinc-700 flex flex-col">
                                 <textarea
-                                    className="w-full flex-1 min-h-[4rem] text-sm font-mono bg-transparent border-none outline-none resize-none text-slate-700 dark:text-slate-300 p-0 focus:ring-0"
+                                    className="w-full flex-1 min-h-[4rem] text-sm font-mono bg-transparent border-none outline-none resize-none text-zinc-700 dark:text-zinc-300 p-0 focus:ring-0"
                                     value={tagSeq || ""}
                                     onChange={(e) => onTagChange?.(e.target.value.toUpperCase().replace(/[^ATCGUatcgu]/g, ''))}
                                     placeholder="Manual entry..."
@@ -182,16 +184,17 @@ export default function MOLigoPanel(props: MOLigoProps) {
                     </div>
 
                     {/* Forward Primer Input Box */}
-                    <div className="bg-white dark:bg-slate-800 rounded-lg border border-pink-200 dark:border-pink-900/30 p-3 shadow-sm flex flex-col h-full">
+                    <div className="card p-3 flex flex-col h-full">
                         <div className="flex justify-between items-start mb-2">
-                            <div className="text-xs font-bold text-pink-600 dark:text-pink-400 uppercase tracking-wider">
+                            <div className="eyebrow flex items-center gap-1.5">
+                                <span className="status-dot bg-pink-500" />
                                 Universal Forward Primer
                             </div>
-                            <span className="text-[10px] font-mono text-slate-400 font-bold">{fwdLen}nt</span>
+                            <span className="text-[10px] font-mono tabular-nums text-zinc-400">{fwdLen}nt</span>
                         </div>
-                        <div className="flex-1 bg-pink-50/50 dark:bg-pink-900/10 p-2 rounded border border-pink-100 dark:border-pink-900/20 flex flex-col">
+                        <div className="flex-1 bg-zinc-50 dark:bg-zinc-800/60 p-2 rounded-md border border-zinc-200 dark:border-zinc-700 flex flex-col">
                             <textarea
-                                className="w-full flex-1 min-h-[4rem] text-sm font-mono bg-transparent border-none outline-none resize-none text-slate-700 dark:text-slate-300 p-0 focus:ring-0"
+                                className="w-full flex-1 min-h-[4rem] text-sm font-mono bg-transparent border-none outline-none resize-none text-zinc-700 dark:text-zinc-300 p-0 focus:ring-0"
                                 value={fwdPrimer || ""}
                                 onChange={(e) => onFwdChange?.(e.target.value.toUpperCase().replace(/[^ATCGUatcgu]/g, ''))}
                                 placeholder="Enter forward primer..."
@@ -199,8 +202,8 @@ export default function MOLigoPanel(props: MOLigoProps) {
                             />
                         </div>
                         {fwdLen > 0 && (
-                            <div className="mt-3 border-t border-slate-100 dark:border-slate-700 pt-2 flex items-center justify-between">
-                                <span className="text-[10px] text-slate-500 font-mono truncate">
+                            <div className="mt-3 border-t border-zinc-100 dark:border-zinc-700 pt-2 flex items-center justify-between">
+                                <span className="text-[10px] text-zinc-500 font-mono truncate">
                                     RC: {fwdRCSeq}
                                 </span>
                             </div>
@@ -210,47 +213,47 @@ export default function MOLigoPanel(props: MOLigoProps) {
 
                 {/* ── Copyable Final Oligos ── */}
                 <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-4 max-w-[85rem] mx-auto px-2 md:px-6">
-                    <div className="bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 p-3 shadow-sm">
+                    <div className="bg-white dark:bg-zinc-800 rounded-lg border border-zinc-200 dark:border-zinc-700 p-3 shadow-sm">
                         <div className="flex items-center justify-between mb-2">
-                            <div className="flex items-center gap-2 text-xs font-bold text-slate-500 uppercase tracking-wider">
+                            <div className="flex items-center gap-2 text-xs font-bold text-zinc-500 uppercase tracking-wider">
                                 <span className="w-2 h-2 rounded-full bg-purple-400" />
                                 <span className="w-2 h-2 rounded-full bg-amber-400" />
                                 <span>Left Oligo</span>
                             </div>
-                            <span className="text-[10px] font-mono text-slate-400 font-bold">{leftOligoSeq.length}nt</span>
+                            <span className="text-[10px] font-mono text-zinc-400 font-bold">{leftOligoSeq.length}nt</span>
                         </div>
                         <div className="relative">
-                            <div className="bg-slate-50 dark:bg-slate-900/50 p-2.5 rounded border border-slate-200 dark:border-slate-700 font-mono text-xs text-slate-700 dark:text-slate-300 break-all pr-16">
-                                {leftOligoSeq || <span className="text-slate-400 italic">Enter reverse primer and Oligo 2...</span>}
+                            <div className="bg-zinc-50 dark:bg-zinc-900/50 p-2.5 rounded border border-zinc-200 dark:border-zinc-700 font-mono text-xs text-zinc-700 dark:text-zinc-300 break-all pr-16">
+                                {leftOligoSeq || <span className="text-zinc-400 italic">Enter reverse primer and Oligo 2...</span>}
                             </div>
                             <button
                                 onClick={() => copyToClipboard(leftOligoSeq, 'left')}
                                 disabled={!leftOligoSeq}
-                                className="absolute right-1.5 top-1/2 -translate-y-1/2 px-2 py-1 text-[10px] font-bold rounded border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:border-indigo-400 hover:text-indigo-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                                className="absolute right-1.5 top-1/2 -tranzinc-y-1/2 btn-secondary text-[10px] px-2 py-1"
                             >
                                 {copiedLabel === 'left' ? 'Copied!' : 'Copy'}
                             </button>
                         </div>
                     </div>
 
-                    <div className="bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 p-3 shadow-sm">
+                    <div className="bg-white dark:bg-zinc-800 rounded-lg border border-zinc-200 dark:border-zinc-700 p-3 shadow-sm">
                         <div className="flex items-center justify-between mb-2">
-                            <div className="flex items-center gap-2 text-xs font-bold text-slate-500 uppercase tracking-wider">
+                            <div className="flex items-center gap-2 text-xs font-bold text-zinc-500 uppercase tracking-wider">
                                 <span className="w-2 h-2 rounded-full bg-emerald-400" />
                                 <span className="w-2 h-2 rounded-full bg-red-400" />
                                 <span className="w-2 h-2 rounded-full bg-pink-400" />
                                 <span>Right Oligo</span>
                             </div>
-                            <span className="text-[10px] font-mono text-slate-400 font-bold">{rightOligoSeq.length}nt</span>
+                            <span className="text-[10px] font-mono text-zinc-400 font-bold">{rightOligoSeq.length}nt</span>
                         </div>
                         <div className="relative">
-                            <div className="bg-slate-50 dark:bg-slate-900/50 p-2.5 rounded border border-slate-200 dark:border-slate-700 font-mono text-xs text-slate-700 dark:text-slate-300 break-all pr-16">
-                                {rightOligoSeq || <span className="text-slate-400 italic">Enter Oligo 1, TAG, and forward primer...</span>}
+                            <div className="bg-zinc-50 dark:bg-zinc-900/50 p-2.5 rounded border border-zinc-200 dark:border-zinc-700 font-mono text-xs text-zinc-700 dark:text-zinc-300 break-all pr-16">
+                                {rightOligoSeq || <span className="text-zinc-400 italic">Enter Oligo 1, TAG, and forward primer...</span>}
                             </div>
                             <button
                                 onClick={() => copyToClipboard(rightOligoSeq, 'right')}
                                 disabled={!rightOligoSeq}
-                                className="absolute right-1.5 top-1/2 -translate-y-1/2 px-2 py-1 text-[10px] font-bold rounded border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:border-indigo-400 hover:text-indigo-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                                className="absolute right-1.5 top-1/2 -tranzinc-y-1/2 btn-secondary text-[10px] px-2 py-1"
                             >
                                 {copiedLabel === 'right' ? 'Copied!' : 'Copy'}
                             </button>
@@ -263,7 +266,7 @@ export default function MOLigoPanel(props: MOLigoProps) {
                     <button
                         id="btn-proceed-design"
                         onClick={onProceed}
-                        className="flex items-center gap-2 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white px-6 py-2.5 rounded-lg font-bold transition-all shadow-lg shadow-emerald-200/50 dark:shadow-emerald-900/30 active:scale-95 border border-emerald-400"
+                        className="btn-primary px-6 py-2.5 text-sm active:scale-95"
                     >
                         Proceed with the Design
                     </button>

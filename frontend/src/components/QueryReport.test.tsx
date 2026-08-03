@@ -210,7 +210,7 @@ describe('QueryReport', () => {
             render(<QueryReport data={baseData} />);
             const report = document.querySelector('.query-report')!;
             expect(report.innerHTML).not.toContain('dark:bg-slate-900');
-            expect(report.querySelector('svg')!.closest('div.rounded-xl')?.className).not.toContain('dark:');
+            expect(report.querySelector('svg')!.closest('div.rounded-lg')?.className).not.toContain('dark:');
             expect(report.innerHTML).not.toContain('dark:text-slate-');
         } finally {
             document.documentElement.classList.remove('dark');
