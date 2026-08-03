@@ -1060,7 +1060,8 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
 
                 // Inserted hit bases don't occupy anchor columns — mark the insertion point
                 // with a blue vertical bar; longer inserts get horizontal extent lines above
-                // and below the flanking bases so the rows are never prolonged.
+                // and below, extending only to the right of the bar (where the inserted
+                // sequence would sit) so the rows are never prolonged.
                 if (!isQuery) {
                     const rowInserts = insertsByRow.get(row);
                     if (rowInserts) {
@@ -1073,7 +1074,7 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
                             if (n > 1) {
                                 const aS = firstAnchorAtOrAfter(anchorCols, sStart);
                                 const aE = lastAnchorAtOrBefore(anchorCols, sEnd);
-                                const leftX = Math.max(labelWidth, labelWidth + Math.max(aS, entry.boundary - n) * cellW - scrollLeft);
+                                const leftX = Math.max(labelWidth, labelWidth + Math.max(aS, entry.boundary) * cellW - scrollLeft);
                                 const rightX = Math.min(labelWidth + seqAreaW, labelWidth + Math.min(aE + 1, entry.boundary + n) * cellW - scrollLeft);
                                 if (rightX > leftX) {
                                     ctx.fillRect(leftX, y + 1.5, rightX - leftX, 1.5);
