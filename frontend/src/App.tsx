@@ -555,7 +555,7 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                 title="Kliknutím zobrazíte novinky a návod k použití"
                 className="btn-secondary whitespace-nowrap"
               >
-                v0.9.7 beta
+                v0.9.8 beta
               </button>
               {sessionMsg && (
                 <span
@@ -1172,6 +1172,16 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                 <button onClick={() => setShowWhatsNew(false)} className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 text-xl leading-none">&times;</button>
               </div>
               <div className="space-y-4 text-sm text-zinc-700 dark:text-zinc-300">
+                <section>
+                  <h3 className="font-semibold text-teal-700 dark:text-teal-300 mb-1">Samostatné instalátory</h3>
+                  <p>
+                    Oligool se nově šíří jako samostatný instalátor pro Windows a macOS a jako
+                    balíček pro Linux. Instalace obsahuje vše potřebné – Python, backend, MAFFT
+                    i sestavené rozhraní – takže na počítači nemusí být nic nainstalované.
+                    Na Windows stačí spustit průvodce instalací, na macOS otevřít balíček .pkg.
+                    Instalátory najdete na stránce Releases v repozitáři na GitHubu.
+                  </p>
+                </section>
                 <section>
                   <h3 className="font-semibold text-teal-700 dark:text-teal-300 mb-1">Nový MSA přehled na kotvové mřížce</h3>
                   <p>
