@@ -53,9 +53,11 @@ fi
 
 # The Debian package omits the tiny `version` helper the driver uses to verify
 # helper binaries match (it aborts with "v0.000 != vX" without it). Regenerate
-# it from the driver's own version string.
+# it from the driver's own version string; upstream prints the bare number
+# (e.g. "7.505", no leading v, no date).
 MAFFT_VER=$(grep -m1 '^version=' .bin/mafft/mafft-linux/bin/mafft | cut -d'"' -f2)
-printf '#!/bin/sh\necho "%s"\n' "$MAFFT_VER" > .bin/mafft/mafft-linux/libexec/version
+MAFFT_NUM="${MAFFT_VER#v}"
+printf '#!/bin/sh\necho "%s"\n' "${MAFFT_NUM%% *}" > .bin/mafft/mafft-linux/libexec/version
 chmod +x .bin/mafft/mafft-linux/libexec/version
 
 # The driver must honor MAFFT_BINARIES so it can find helpers after relocation.
