@@ -6,11 +6,11 @@ Oligool is a desktop app for molecular biologists. It fetches gene and transcrip
 
 The current release is **v0.9.8 beta**. Everything the app needs (Python, the backend, MAFFT, the interface) is inside the installer; nothing else has to be installed first.
 
-🪟 **[Windows 10/11 (64-bit)](https://github.com/KowalskiBio/Oligool/releases/download/v0.9.8/Oligool-Setup-0.9.8-windows-x86_64.exe)** · 🍎 **[macOS (Apple Silicon)](https://github.com/KowalskiBio/Oligool/releases/download/v0.9.8/Oligool-0.9.8-macos-arm64.pkg)** · 💻 **[macOS (Intel)](https://github.com/KowalskiBio/Oligool/releases/download/v0.9.8/Oligool-0.9.8-macos-x86_64.pkg)** · 🐧 **[Linux (Debian/Ubuntu)](https://github.com/KowalskiBio/Oligool/releases/download/v0.9.8/Oligool-linux-x86_64.tar.gz)**
+🪟 **[Windows 10/11 (64-bit)](https://github.com/KowalskiBio/Oligool/releases/download/v0.9.8/Oligool-Setup-0.9.8-windows-x86_64.exe)** · 🍎 **[macOS (Apple Silicon)](https://github.com/KowalskiBio/Oligool/releases/download/v0.9.8/Oligool-0.9.8-macos-arm64.pkg)** · 🐧 **[Linux (Debian/Ubuntu)](https://github.com/KowalskiBio/Oligool/releases/download/v0.9.8/Oligool-linux-x86_64.tar.gz)**
 
 **Windows.** Run the setup file and follow the wizard; no admin rights are needed. If SmartScreen shows "Windows protected your PC", click **More info → Run anyway** (the installer is not code-signed yet). On the rare PC without the Microsoft WebView2 runtime, the wizard installs it automatically. Oligool then starts from the Start menu or the desktop shortcut.
 
-**macOS.** Pick the package for your chip: Apple Silicon (M1 and newer) or Intel. Double-click it and follow the installer; macOS asks for your password to place Oligool in Applications. If macOS blocks the package as coming from an unidentified developer, right-click it and choose **Open**.
+**macOS.** The package is for Apple Silicon (M1 and newer). Double-click it and follow the installer; macOS asks for your password to place Oligool in Applications. If macOS blocks the package as coming from an unidentified developer, right-click it and choose **Open**.
 
 **Linux.** Extract the archive (`tar -xzf Oligool-linux-x86_64.tar.gz`), install the windowing runtime once (`sudo apt install gir1.2-webkit2-4.1`), and run `./Oligool/Oligool`.
 
