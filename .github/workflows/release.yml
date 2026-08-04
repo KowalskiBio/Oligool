@@ -24,7 +24,6 @@ jobs:
       matrix:
         include:
           - { os: macos-14, arch: arm64 }   # Apple Silicon
-          - { os: macos-13, arch: x86_64 }  # Intel
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
