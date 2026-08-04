@@ -46,7 +46,7 @@ if [ ! -f .bin/mafft/mafft-linux/bin/mafft ]; then
     ( cd "$TMPD" && apt-get download mafft )
     dpkg-deb -x "$TMPD"/mafft_*_amd64.deb "$TMPD/pkg"
     cp "$TMPD/pkg/usr/bin/mafft" .bin/mafft/mafft-linux/bin/mafft
-    cp -R "$TMPD/pkg/usr/lib/mafft/." .bin/mafft/mafft-linux/libexec/
+    cp -R "$TMPD/pkg/usr/lib/mafft/lib/mafft/." .bin/mafft/mafft-linux/libexec/
     chmod +x .bin/mafft/mafft-linux/bin/mafft
     rm -rf "$TMPD"
 fi
