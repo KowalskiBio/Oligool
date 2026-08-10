@@ -182,34 +182,17 @@ const section = (title: string): string => `\n=== ${title} ===\n`;
 export const buildCompleteReportTxt = (data: CompleteReportData): string => {
     const lines: string[] = [];
 
-    lines.push(section('FLANKING PRIMERS'));
-    if (data.flankingFwdSeq) {
-        lines.push(`${data.flankingFwdName || 'Forward Flanking Primer'}:`);
-        lines.push(data.flankingFwdSeq);
-    }
-    if (data.flankingRevSeq) {
-        lines.push(`${data.flankingRevName || 'Reverse Flanking Primer'}:`);
-        lines.push(data.flankingRevSeq);
-    }
-    if (!data.flankingFwdSeq && !data.flankingRevSeq) {
-        lines.push('No flanking primers designed yet.');
-    }
-
     lines.push(section('FINAL ORDER SEQUENCES'));
     const fwdRC = data.fwdPrimer ? reverseComplement(data.fwdPrimer) : '';
     const fullOligo2 = (data.revPrimer || '') + data.moligo2Seq;
     const fullOligo1 = data.moligo1Seq + (data.tagSeq || '') + fwdRC;
-    lines.push(`${data.moligo2Name || 'Oligo 2'} (RevP + M2):`);
-    lines.push(fullOligo2);
-    lines.push(`${data.moligo1Name || 'Oligo 1'} (M1 + TAG + RC-FwdP):`);
-    lines.push(fullOligo1);
+    lines.push(`${fullOligo2}\t${data.moligo2Name || 'Oligo 2'}`);
+    lines.push(`${fullOligo1}\t${data.moligo1Name || 'Oligo 1'}`);
     if (data.flankingFwdSeq) {
-        lines.push(`${data.flankingFwdName || 'Flanking Fwd'}:`);
-        lines.push(data.flankingFwdSeq);
+        lines.push(`${data.flankingFwdSeq}\t${data.flankingFwdName || 'Flanking Fwd'}`);
     }
     if (data.flankingRevSeq) {
-        lines.push(`${data.flankingRevName || 'Flanking Rev'}:`);
-        lines.push(data.flankingRevSeq);
+        lines.push(`${data.flankingRevSeq}\t${data.flankingRevName || 'Flanking Rev'}`);
     }
 
     lines.push('\n--- End of Report ---\n');

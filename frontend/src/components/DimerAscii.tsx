@@ -11,6 +11,8 @@ interface DimerAsciiProps {
     BondLinePadding?: number;
   } | null;
   className?: string;
+  /** True for print output: never apply dark-mode variants. */
+  light?: boolean;
 }
 
 const WC = new Set(['AT', 'TA', 'GC', 'CG', 'AU', 'UA']);
@@ -146,7 +148,8 @@ function buildFromDotBracket(seq1: string, seq2: string, db: string): string | u
   return [top, bond, bot].join('\n');
 }
 
-export default function DimerAscii({ seq, dotBracket, raw, className = '' }: DimerAsciiProps) {
+export default function DimerAscii({ seq, dotBracket, raw, className = '', light = false }: DimerAsciiProps) {
+  const dk = (darkClass: string): string => (light ? '' : darkClass);
   if (!seq || !dotBracket || !seq.includes('&')) {
     return <div className="text-[10px] text-zinc-400 italic">Invalid dimer sequence</div>;
   }
@@ -174,8 +177,8 @@ export default function DimerAscii({ seq, dotBracket, raw, className = '' }: Dim
   }
 
   return (
-    <div className={`w-full overflow-x-auto overflow-y-auto max-h-40 bg-zinc-100 dark:bg-zinc-800 rounded p-2 ${className}`}>
-      <pre className="font-mono text-[10px] sm:text-xs text-zinc-700 dark:text-zinc-300 whitespace-pre leading-[1.15] tracking-tighter">
+    <div className={`w-full overflow-x-auto overflow-y-auto max-h-40 bg-zinc-100 ${dk('dark:bg-zinc-800')} rounded p-2 ${className}`}>
+      <pre className={`font-mono text-[10px] sm:text-xs text-zinc-700 ${dk('dark:text-zinc-300')} whitespace-pre leading-[1.15] tracking-tighter`}>
         {ascii}
       </pre>
     </div>
