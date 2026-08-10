@@ -271,7 +271,7 @@ export const FLANKING_PANEL_DEFAULTS: FlankingPanelState = {
     params: {
         flankWindow: 200,
         optSize: 20, minSize: 16, maxSize: 27,
-        optTm: 62.0, minTm: 57.0, maxTm: 67.0,
+        optTm: 58.0, minTm: 57.0, maxTm: 67.0,
         minGc: 20.0, maxGc: 80.0,
         numReturn: 5,
         mvConc: 50.0, dvConc: 3, dntpConc: 0.8, dnaConc: 200.0,

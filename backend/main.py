@@ -1040,7 +1040,7 @@ class FlankingPrimerParams(BaseModel):
     opt_size: int = 20
     min_size: int = 16
     max_size: int = 27
-    opt_tm: float = 62.0
+    opt_tm: float = 58.0
     min_tm: float = 57.0
     max_tm: float = 67.0
     min_gc: float = 20.0

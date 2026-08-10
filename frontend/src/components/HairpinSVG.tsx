@@ -14,6 +14,8 @@ import React from 'react';
 interface HairpinSVGProps {
     seq: string;
     dotBracket: string;
+    /** True for print output: never apply dark-mode variants. */
+    light?: boolean;
 }
 
 /**
@@ -68,7 +70,8 @@ function baseColor(b: string): string {
     }
 }
 
-export default function HairpinSVG({ seq, dotBracket }: HairpinSVGProps) {
+export default function HairpinSVG({ seq, dotBracket, light = false }: HairpinSVGProps) {
+    const dk = (darkClass: string): string => (light ? '' : darkClass);
     const valid = seq && dotBracket && seq.length === dotBracket.length;
     const pairs = valid ? parsePairs(dotBracket) : null;
 
@@ -76,7 +79,7 @@ export default function HairpinSVG({ seq, dotBracket }: HairpinSVGProps) {
         const allDots = dotBracket && !dotBracket.includes('(') && !dotBracket.includes(')');
         if (allDots) {
             return (
-                <div className="text-[10px] text-zinc-400 dark:text-zinc-500 italic py-1">
+                <div className={`text-[10px] text-zinc-400 ${dk('dark:text-zinc-500')} italic py-1`}>
                     No secondary structure predicted
                 </div>
             );
@@ -87,7 +90,7 @@ export default function HairpinSVG({ seq, dotBracket }: HairpinSVGProps) {
             blockPairs.push(`${seq.slice(start, start + 60)}\n${dotBracket.slice(start, start + 60)}`);
         }
         return (
-            <pre className="font-mono text-[10px] text-zinc-500 dark:text-zinc-400 whitespace-pre">
+            <pre className={`font-mono text-[10px] text-zinc-500 ${dk('dark:text-zinc-400')} whitespace-pre`}>
                 {blockPairs.join('\n\n')}
             </pre>
         );

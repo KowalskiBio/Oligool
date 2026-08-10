@@ -55,9 +55,9 @@ const renderIdtSvg = (item: IdtRawItem, seq1?: string, seq2?: string) => {
     return (
         <div className="w-full bg-zinc-50 rounded border border-zinc-200 p-2">
             {isDimer ? (
-                <DimerAscii seq={seq} dotBracket={db} raw={item} className="print:max-h-none print:overflow-visible" />
+                <DimerAscii seq={seq} dotBracket={db} raw={item} className="print:max-h-none print:overflow-visible" light />
             ) : (
-                <HairpinSVG seq={seq} dotBracket={db} />
+                <HairpinSVG seq={seq} dotBracket={db} light />
             )}
         </div>
     );
@@ -357,10 +357,10 @@ export default function QueryReport({ data }: QueryReportProps) {
                     <h2 className="text-lg font-bold text-zinc-800 mb-2 border-b border-zinc-300 pb-1">FINAL ORDER SEQUENCES</h2>
                     <div className="font-mono text-xs whitespace-pre-wrap break-all bg-zinc-50 p-3 rounded border border-zinc-200">
                         {[
-                            `${data.moligo2Name || 'Oligo 2'} (RevP + M2)\t${fullOligo2}`,
-                            `${data.moligo1Name || 'Oligo 1'} (M1 + TAG + RC-FwdP)\t${fullOligo1}`,
-                            ...(data.flankingFwdSeq ? [`${data.flankingFwdName || 'Flanking Fwd'}\t${data.flankingFwdSeq}`] : []),
-                            ...(data.flankingRevSeq ? [`${data.flankingRevName || 'Flanking Rev'}\t${data.flankingRevSeq}`] : []),
+                            `${fullOligo2}\t${data.moligo2Name || 'Oligo 2'}`,
+                            `${fullOligo1}\t${data.moligo1Name || 'Oligo 1'}`,
+                            ...(data.flankingFwdSeq ? [`${data.flankingFwdSeq}\t${data.flankingFwdName || 'Flanking Fwd'}`] : []),
+                            ...(data.flankingRevSeq ? [`${data.flankingRevSeq}\t${data.flankingRevName || 'Flanking Rev'}`] : []),
                         ].join('\n')}
                     </div>
                 </div>

@@ -2151,7 +2151,12 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
                                         if (!range) return;
                                         const parts = ['report=genbank', 'log$=nuclalign', `blast_rank=${range.rank}`];
                                         if (blastRid) parts.push(`RID=${blastRid}`);
-                                        parts.push(`from=${range.sstart}`, `to=${range.send}`);
+                                        // sstart/send come straight from BLAST and are reported in subject-strand
+                                        // order (sstart > send for minus-strand hits) — NCBI's from/to params
+                                        // always need the lower coordinate first, regardless of strand.
+                                        const from = Math.min(range.sstart, range.send);
+                                        const to = Math.max(range.sstart, range.send);
+                                        parts.push(`from=${from}`, `to=${to}`);
                                         const url = `https://www.ncbi.nlm.nih.gov/nucleotide/${ncbiModalAccession}?${parts.join('&')}`;
                                         window.open(url, '_blank', 'noopener,noreferrer');
                                         setNcbiModalAccession(null);
