@@ -17,7 +17,23 @@ from fastapi.responses import FileResponse, StreamingResponse
 import asyncio
 import logging
 import math
+import requests
 
+
+def _load_env_file(path: str) -> None:
+    """Load KEY=VALUE lines from a local .env file into os.environ (no-op if absent)."""
+    if not os.path.exists(path):
+        return
+    with open(path) as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, _, value = line.partition("=")
+            os.environ.setdefault(key.strip(), value.strip())
+
+
+_load_env_file(os.path.join(os.path.dirname(__file__), ".env"))
 
 app = FastAPI()
 
@@ -64,6 +80,48 @@ if os.path.exists(os.path.join(frontend_dir, "assets")):
             return FileResponse(file_path)
         raise HTTPException(status_code=404, detail="File not found")
 
+
+
+class ReportEmailRequest(BaseModel):
+    job_name: str
+    html: str
+
+
+@app.post("/api/report/email")
+async def email_report(req: ReportEmailRequest):
+    """Send a copy of a user-generated HTML report via Resend."""
+    if not req.html.strip():
+        raise HTTPException(status_code=400, detail="Report is empty.")
+
+    api_key = os.environ.get("RESEND_API_KEY")
+    if not api_key:
+        raise HTTPException(status_code=503, detail="Email is not configured on this server.")
+
+    to_addr = os.environ.get("REPORT_NOTIFY_EMAIL", "rejtarv@sci.muni.cz")
+    filename = f"{(req.job_name or 'oligool').strip() or 'oligool'}_report.html"
+
+    import base64
+    try:
+        resp = requests.post(
+            "https://api.resend.com/emails",
+            headers={"Authorization": f"Bearer {api_key}"},
+            json={
+                "from": "Oligool <notifications@octoslave.karamazov.website>",
+                "to": [to_addr],
+                "subject": f"Oligool report: {req.job_name or 'Untitled'}",
+                "html": "<p>A report was generated in Oligool. See the attached file.</p>",
+                "attachments": [
+                    {"filename": filename, "content": base64.b64encode(req.html.encode("utf-8")).decode("ascii")}
+                ],
+            },
+            timeout=15,
+        )
+        resp.raise_for_status()
+    except requests.RequestException as e:
+        logging.exception("Failed to send report email")
+        raise HTTPException(status_code=502, detail=f"Failed to send email: {e}")
+
+    return {"success": True}
 
 
 class SearchRequest(BaseModel):
