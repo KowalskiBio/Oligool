@@ -158,6 +158,7 @@ export default function UserReport({ open, onClose, defaultSequence, jobName }: 
     const [notes, setNotes] = useState('');
     const [images, setImages] = useState<ReportImage[]>([]);
     const [status, setStatus] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
+    const [sending, setSending] = useState(false);
 
     const fileInputRef = useRef<HTMLInputElement>(null);
     const modalRef = useRef<HTMLDivElement>(null);
@@ -242,6 +243,32 @@ export default function UserReport({ open, onClose, defaultSequence, jobName }: 
             setStatus({ kind: 'err', text: e instanceof Error ? e.message : 'Failed to save report.' });
         }
     }, [sequence, notes, images, jobName, onClose]);
+
+    const handleSendToMe = useCallback(async () => {
+        if (!sequence.trim() && !notes.trim() && images.length === 0) {
+            setStatus({ kind: 'err', text: 'Nothing to send — add a sequence, notes, or images first.' });
+            return;
+        }
+        setSending(true);
+        setStatus(null);
+        try {
+            const html = buildReportHtml({ jobName, sequence, notes, images });
+            const response = await fetch(((import.meta.env.VITE_API_BASE as string) || '') + '/api/report/email', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ job_name: jobName, html }),
+            });
+            if (!response.ok) {
+                const body = await response.json().catch(() => null);
+                throw new Error(body?.detail || `Failed to send (${response.status}).`);
+            }
+            setStatus({ kind: 'ok', text: 'Report emailed.' });
+        } catch (e) {
+            setStatus({ kind: 'err', text: e instanceof Error ? e.message : 'Failed to send report.' });
+        } finally {
+            setSending(false);
+        }
+    }, [sequence, notes, images, jobName]);
 
     // Close on Escape
     const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -396,6 +423,16 @@ export default function UserReport({ open, onClose, defaultSequence, jobName }: 
                         className="btn-secondary px-4 py-2 text-sm"
                     >
                         Cancel
+                    </button>
+                    <button
+                        onClick={handleSendToMe}
+                        disabled={sending}
+                        className="btn-secondary px-4 py-2 text-sm disabled:opacity-60"
+                    >
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                        </svg>
+                        {sending ? 'Sending…' : 'Send to me'}
                     </button>
                     <button
                         onClick={handleSave}
