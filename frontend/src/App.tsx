@@ -769,9 +769,9 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
             <img
               src="/rabbit_oligool.png"
               alt="Oligool Logo"
-              className={`absolute h-24 w-auto object-contain z-10 pointer-events-none hidden lg:block opacity-90 transition-all duration-500 xl:left-[calc(100%+60px)] lg:left-[calc(100%+60px)] ${step === 'done'
+              className={`absolute h-32 w-auto object-contain z-10 pointer-events-none hidden lg:block opacity-90 transition-all duration-500 xl:left-[calc(100%+440px)] lg:left-[calc(100%+60px)] ${step === 'done'
                 ? 'top-[-10px]'
-                : 'top-[7px]'
+                : 'top-[-18px]'
                 }`}
             />
           </div>
