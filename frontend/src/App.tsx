@@ -774,6 +774,16 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                 : 'top-[-18px]'
                 }`}
             />
+
+            {/* Titmouse logo positioned right next to the rabbit's left side */}
+            <img
+              src="/titmouse_oligool.png"
+              alt="Oligool Titmouse Logo"
+              className={`absolute h-16 w-auto object-contain z-10 pointer-events-none hidden xl:block opacity-90 transition-all duration-500 xl:left-[calc(100%-150px)] ${step === 'done'
+                ? 'top-[-10px]'
+                : 'top-[-27px]'
+                }`}
+            />
           </div>
         </div>
 
