@@ -1362,7 +1362,7 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
           </div>
         )}
 
-        <footer className="mt-10 pt-6 border-t border-zinc-200 dark:border-zinc-800 text-center text-xs text-zinc-500 dark:text-zinc-400 space-y-1">
+        <footer className="relative mt-10 pt-6 border-t border-zinc-200 dark:border-zinc-800 text-center text-xs text-zinc-500 dark:text-zinc-400 space-y-1">
           <p>
             Oligool is developed by{' '}
             <strong className="text-zinc-700 dark:text-zinc-300">Mgr. Vojtěch Rejtar</strong>.
@@ -1380,6 +1380,11 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
               GNU General Public License v3.0
             </a>.
           </p>
+          <img
+            src="/kowalski_up_oligool.png"
+            alt="Kowalski"
+            className="absolute right-0 top-1/2 -translate-y-1/2 h-20 w-auto object-contain pointer-events-none hidden lg:block opacity-90"
+          />
         </footer>
       </div>
     </div>

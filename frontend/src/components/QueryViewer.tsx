@@ -2725,6 +2725,11 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                 aria-modal="true"
                 aria-labelledby="query-report-dialog-title"
             >
+                <img
+                    src="/kowalski_write_oligool.png"
+                    alt="Kowalski"
+                    className="hidden lg:block h-48 w-auto object-contain mr-4 pointer-events-none"
+                />
                 <div className="card shadow-xl p-6 max-w-md w-full mx-4" onClick={(e) => e.stopPropagation()}>
                     <div className="flex justify-between items-start mb-4">
                         <h3 id="query-report-dialog-title" className="text-lg font-bold text-zinc-800 dark:text-zinc-100">Create a report</h3>
