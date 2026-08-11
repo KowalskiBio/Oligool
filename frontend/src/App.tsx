@@ -780,7 +780,7 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
               src="/titmouse_oligool.png"
               alt="Oligool Titmouse Logo"
               className={`absolute h-16 w-auto object-contain z-10 pointer-events-none hidden xl:block opacity-90 transition-all duration-500 xl:left-[calc(100%-150px)] ${step === 'done'
-                ? 'top-[-10px]'
+                ? 'top-[-19px]'
                 : 'top-[-27px]'
                 }`}
             />
