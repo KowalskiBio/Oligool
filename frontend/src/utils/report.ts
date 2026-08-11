@@ -186,13 +186,13 @@ export const buildCompleteReportTxt = (data: CompleteReportData): string => {
     const fwdRC = data.fwdPrimer ? reverseComplement(data.fwdPrimer) : '';
     const fullOligo2 = (data.revPrimer || '') + data.moligo2Seq;
     const fullOligo1 = data.moligo1Seq + (data.tagSeq || '') + fwdRC;
-    lines.push(`${fullOligo2}\t${data.moligo2Name || 'Oligo 2'}`);
-    lines.push(`${fullOligo1}\t${data.moligo1Name || 'Oligo 1'}`);
+    lines.push(`${data.moligo2Name || 'Oligo 2'}\t${fullOligo2}`);
+    lines.push(`${data.moligo1Name || 'Oligo 1'}\t${fullOligo1}`);
     if (data.flankingFwdSeq) {
-        lines.push(`${data.flankingFwdSeq}\t${data.flankingFwdName || 'Flanking Fwd'}`);
+        lines.push(`${data.flankingFwdName || 'Flanking Fwd'}\t${data.flankingFwdSeq}`);
     }
     if (data.flankingRevSeq) {
-        lines.push(`${data.flankingRevSeq}\t${data.flankingRevName || 'Flanking Rev'}`);
+        lines.push(`${data.flankingRevName || 'Flanking Rev'}\t${data.flankingRevSeq}`);
     }
 
     lines.push('\n--- End of Report ---\n');
