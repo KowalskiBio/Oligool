@@ -95,7 +95,18 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
     const scrollTrackRef = useRef<HTMLDivElement>(null);
     const [availableWidth, setAvailableWidth] = useState(900);
     const [labelHoverInfo, setLabelHoverInfo] = useState<{ text: string, x: number, y: number } | null>(null);
-    const [insertHoverInfo, setInsertHoverInfo] = useState<{ length: number; sequence: string; x: number; y: number } | null>(null);
+    const [insertHoverInfo, setInsertHoverInfo] = useState<{ length: number; sequence: string; x: number; y: number; flipX?: boolean } | null>(null);
+    const [showPositions, setShowPositions] = useState(true);
+    const [positionHoverInfo, setPositionHoverInfo] = useState<{
+        x: number; y: number;
+        indelLabel?: string;
+        indelSeq?: string;
+        msaPos?: number;
+        cdsPos?: number;
+        genomePos?: number;
+        strand?: '+' | '-';
+        flipX?: boolean;
+    } | null>(null);
     const [scrollLeft, setScrollLeft] = useState(0);
     const [scrollTop, setScrollTop] = useState(0);
 
@@ -287,6 +298,19 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
 
     const seqLen = sequences.length > 0 ? Math.max(...sequences.map((s) => s.seq.length)) : 0;
     const querySeq = sequences.length > 0 ? sequences[0].seq : '';
+
+    /* ── per-sequence ungapped prefix sums for O(1) coding-position lookup ── */
+    const ungappedPrefix = useMemo<Int32Array[]>(() => {
+        return sequences.map(s => {
+            const arr = new Int32Array(s.seq.length + 1);
+            let count = 0;
+            for (let i = 0; i < s.seq.length; i++) {
+                if (s.seq[i] !== '-') count++;
+                arr[i + 1] = count;
+            }
+            return arr;
+        });
+    }, [sequences]);
 
     /* ── anchor grid: query residues only; inserts render as overlays ── */
     const anchorGrid = useMemo(() => buildAnchorGrid(querySeq), [querySeq]);
@@ -1585,6 +1609,7 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
             }
             // Clear sequence hover
             setInsertHoverInfo(null);
+            setPositionHoverInfo(null);
             if (hoverColRef.current !== null) {
                 hoverColRef.current = null;
                 cancelAnimationFrame(hoverRafRef.current);
@@ -1627,15 +1652,72 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
         }
 
         const insertEntry = insertHit;
-        setInsertHoverInfo(prev => {
-            if (!insertEntry) return prev === null ? prev : null;
-            return {
-                length: insertEntry.text.length,
-                sequence: insertEntry.text,
-                x: e.clientX,
-                y: e.clientY
-            };
-        });
+        const mouseX = mouseXRaw - labelWidth;
+        const col = Math.floor((scrollLeft + mouseX) / cellW);
+        const flipX = mouseXRaw > labelWidth + seqAreaW / 2;
+
+        /* ── coordinate tooltip: position numbers + indel info on hit rows ── */
+        if (showPositions) {
+            setInsertHoverInfo(null);
+            if (hovRow >= 1 && hovRow < sequences.length && virtualY >= rowsStartY) {
+                const s = sequences[hovRow];
+                const range = hitRanges[s.accession];
+                const ss = seqStart(s.seq);
+                const se = seqEnd(s.seq);
+                const gappedCol = (col >= 0 && col < anchorLen) ? anchorCols[col] : -1;
+                const ch = gappedCol >= 0 ? (s.seq[gappedCol] || '-').toUpperCase() : '-';
+                const isInternalDeletion = ch === '-' && gappedCol >= ss && gappedCol <= se;
+
+                let indelLabel: string | undefined;
+                let indelSeq: string | undefined;
+                if (insertHit) {
+                    indelLabel = `Insertion ${insertHit.text.length} bp`;
+                    indelSeq = insertHit.text.toUpperCase();
+                    if (indelSeq.length > 60) indelSeq = indelSeq.substring(0, 60) + '…';
+                } else if (isInternalDeletion) {
+                    let drStart = gappedCol;
+                    while (drStart > ss && s.seq[drStart - 1] === '-') drStart--;
+                    let drEnd = gappedCol;
+                    while (drEnd < se && s.seq[drEnd + 1] === '-') drEnd++;
+                    indelLabel = `Deletion ${drEnd - drStart + 1} bp`;
+                }
+
+                let msaPos: number | undefined;
+                let cdsPos: number | undefined;
+                let genomePos: number | undefined;
+                let strand: '+' | '-' | undefined;
+                if (range && gappedCol >= 0 && ((gappedCol >= ss && gappedCol <= se) || indelLabel)) {
+                    const prefix = ungappedPrefix[hovRow];
+                    cdsPos = Math.max(1, prefix[gappedCol + 1] - prefix[ss]);
+                    strand = range.sstart <= range.send ? '+' : '-';
+                    genomePos = strand === '+'
+                        ? range.sstart + (cdsPos - 1)
+                        : range.sstart - (cdsPos - 1);
+                    msaPos = col + 1;
+                }
+
+                const withinSpan = gappedCol >= ss && gappedCol <= se;
+                if (withinSpan || indelLabel) {
+                    setPositionHoverInfo({ x: e.clientX, y: e.clientY, indelLabel, indelSeq, msaPos, cdsPos, genomePos, strand, flipX });
+                } else {
+                    setPositionHoverInfo(null);
+                }
+            } else {
+                setPositionHoverInfo(null);
+            }
+        } else {
+            setPositionHoverInfo(null);
+            setInsertHoverInfo(prev => {
+                if (!insertEntry) return prev === null ? prev : null;
+                return {
+                    length: insertEntry.text.length,
+                    sequence: insertEntry.text,
+                    x: e.clientX,
+                    y: e.clientY,
+                    flipX
+                };
+            });
+        }
 
         // GC%/MSA track area gets a special crosshair for oligo selection
         if (insertEntry) {
@@ -1646,18 +1728,17 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
             cvs.style.cursor = viewMode === 'letters' ? 'pointer' : 'crosshair';
         }
 
-        const mouseX = mouseXRaw - labelWidth;
-        const col = Math.floor((scrollLeft + mouseX) / cellW);
         const newCol = col >= 0 && col < anchorLen ? col : null;
         if (newCol === hoverColRef.current) return;
         hoverColRef.current = newCol;
         cancelAnimationFrame(hoverRafRef.current);
         hoverRafRef.current = requestAnimationFrame(() => redrawRef.current());
-    }, [scrollLeft, cellW, anchorLen, sequences, scrollTop, viewMode, seqAreaW, insertsByRow, labelWidth]);
+    }, [scrollLeft, cellW, anchorLen, sequences, scrollTop, viewMode, seqAreaW, insertsByRow, labelWidth, showPositions, hitRanges, anchorCols, ungappedPrefix]);
 
     const handleCanvasMouseLeave = useCallback(() => {
         setLabelHoverInfo(null);
         setInsertHoverInfo(null);
+        setPositionHoverInfo(null);
         if (hoverColRef.current === null) return;
         hoverColRef.current = null;
         cancelAnimationFrame(hoverRafRef.current);
@@ -1816,6 +1897,15 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
                             title={autofindActive ? 'Hide autofind proposals' : 'Find zero-mismatch regions'}
                         >
                             autofind
+                        </button>
+                    )}
+                    {Object.keys(hitRanges).length > 0 && (
+                        <button
+                            onClick={() => setShowPositions((v) => !v)}
+                            className={`btn-secondary ${showPositions ? 'icon-btn-active' : ''}`}
+                            title={showPositions ? 'Hide coordinate tooltips on hits' : 'Show MSA, genome & coding-region coordinates on hits'}
+                        >
+                            Coordinates
                         </button>
                     )}
                     {copyFeedback && (
@@ -2092,17 +2182,38 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
                     {labelHoverInfo.text}
                 </div>
             )}
-            {/* ── insertion tooltip ── */}
-            {insertHoverInfo && (
+            {/* ── insertion tooltip (original, shown when coordinate feature is off) ── */}
+            {!showPositions && insertHoverInfo && (
                 <div
                     className="fixed z-[9999] pointer-events-none px-2 py-1 bg-zinc-800 text-white text-xs rounded shadow-lg border border-zinc-600"
-                    style={{
-                        left: `${insertHoverInfo.x + 12}px`,
-                        top: `${insertHoverInfo.y + 12}px`
-                    }}
+                    style={insertHoverInfo.flipX
+                        ? { left: `${insertHoverInfo.x - 12}px`, top: `${insertHoverInfo.y + 12}px`, transform: 'translateX(-100%)' }
+                        : { left: `${insertHoverInfo.x + 12}px`, top: `${insertHoverInfo.y + 12}px` }
+                    }
                 >
                     <div>Length: {insertHoverInfo.length} bp</div>
                     <div className="font-mono">Sequence: {insertHoverInfo.sequence.toUpperCase().length > 60 ? insertHoverInfo.sequence.toUpperCase().substring(0, 60) + '…' : insertHoverInfo.sequence.toUpperCase()}</div>
+                </div>
+            )}
+            {/* ── coordinate tooltip (unified: indel info + position numbers) ── */}
+            {showPositions && positionHoverInfo && (
+                <div
+                    className="fixed z-[9999] pointer-events-none px-2 py-1 bg-zinc-800 text-white text-xs rounded shadow-lg border border-zinc-600 whitespace-nowrap"
+                    style={positionHoverInfo.flipX
+                        ? { left: `${positionHoverInfo.x - 12}px`, top: `${positionHoverInfo.y + 12}px`, transform: 'translateX(-100%)' }
+                        : { left: `${positionHoverInfo.x + 12}px`, top: `${positionHoverInfo.y + 12}px` }
+                    }
+                >
+                    {positionHoverInfo.indelLabel && (
+                        <div className="font-mono text-blue-300">
+                            {positionHoverInfo.indelLabel}{positionHoverInfo.indelSeq ? `: ${positionHoverInfo.indelSeq}` : ''}
+                        </div>
+                    )}
+                    {positionHoverInfo.msaPos !== undefined && (
+                        <div className="font-mono tabular-nums">
+                            MSA {positionHoverInfo.msaPos} · Genome {positionHoverInfo.genomePos?.toLocaleString()} · CDS {positionHoverInfo.cdsPos}{positionHoverInfo.strand === '-' ? ' (−)' : ''}
+                        </div>
+                    )}
                 </div>
             )}
             {/* ── NCBI link choice modal ── */}
@@ -2133,9 +2244,12 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
                             <button
                                 onClick={() => {
                                     const range = hitRanges[ncbiModalAccession];
-                                    const parts = ['report=genbank', 'log$=nuclalign'];
-                                    if (range?.rank !== undefined) parts.push(`blast_rank=${range.rank}`);
-                                    if (blastRid) parts.push(`RID=${blastRid}`);
+                                    const parts = ['report=genbank'];
+                                    if (blastRid) {
+                                        parts.push('log$=nuclalign');
+                                        if (range?.rank !== undefined) parts.push(`blast_rank=${range.rank}`);
+                                        parts.push(`RID=${blastRid}`);
+                                    }
                                     const url = `https://www.ncbi.nlm.nih.gov/nucleotide/${ncbiModalAccession}?${parts.join('&')}`;
                                     window.open(url, '_blank', 'noopener,noreferrer');
                                     setNcbiModalAccession(null);
@@ -2149,8 +2263,10 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
                                     onClick={() => {
                                         const range = hitRanges[ncbiModalAccession];
                                         if (!range) return;
-                                        const parts = ['report=genbank', 'log$=nuclalign', `blast_rank=${range.rank}`];
-                                        if (blastRid) parts.push(`RID=${blastRid}`);
+                                        const parts = ['report=genbank'];
+                                        if (blastRid) {
+                                            parts.push('log$=nuclalign', `blast_rank=${range.rank}`, `RID=${blastRid}`);
+                                        }
                                         // sstart/send come straight from BLAST and are reported in subject-strand
                                         // order (sstart > send for minus-strand hits) — NCBI's from/to params
                                         // always need the lower coordinate first, regardless of strand.
