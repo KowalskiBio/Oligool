@@ -572,10 +572,12 @@ export default function FlankingPrimersPanel({
         return getTmFromObj(analyzeData);
     };
 
-    const renderResultCard = (title: string, data: any) => {
+    const renderResultCard = (title: string, data: any, maxItems = 1, itemOffset = 0) => {
         if (!data || data.error) return null;
         const items = (Array.isArray(data.raw) ? data.raw : [data.raw]).filter((item: unknown) => !!item && typeof item === 'object');
-        const topDg = data.DeltaG;
+        const displayItems = items.slice(itemOffset, itemOffset + maxItems);
+        if (displayItems.length === 0) return null;
+        const topDg = displayItems[0]?.DeltaG ?? data.DeltaG;
 
         return (
             <div className="card p-3 flex flex-col gap-2">
@@ -584,37 +586,45 @@ export default function FlankingPrimersPanel({
                     <span className={`text-xs flex-shrink-0 ${getIdtStatusColor(topDg)}`}>{topDg != null ? `${topDg.toFixed(2)} kcal/mol` : 'N/A'}</span>
                 </div>
                 <div className="flex flex-col gap-3 mt-1">
-                    {items.slice(0, 1).map((item: any, i: number) => (
-                        <div key={i} className="flex flex-col gap-2">
-                            {(item.DotBracket || item.Local_DotBracket) && (
-                                <div className="bg-zinc-50 dark:bg-zinc-900/50 rounded p-2">
-                                    {item.Sequence && item.Sequence.includes('&') ? (
-                                        <DimerAscii seq={item.Sequence} dotBracket={item.DotBracket || item.Local_DotBracket} raw={item} />
-                                    ) : (
-                                        <HairpinSVG seq={item.Sequence || item.dot_bracket || ''} dotBracket={item.DotBracket || item.Local_DotBracket} />
-                                    )}
-                                </div>
-                            )}
-                            {/* Provenance: IDT vs Strider, ΔG + Tm (mirrors the oligo card). */}
-                            {(!item.DotBracket && !item.Local_DotBracket && topDg == null && item.Local_DeltaG == null) ? (
-                                <div className="text-[9px] text-zinc-400 italic text-center px-1 py-0.5">No stable structure found</div>
-                            ) : (
-                                <div className="flex flex-col gap-0.5 text-[9px] text-zinc-400 font-medium px-1">
-                                    <div className="flex justify-between items-center">
-                                        <span>IDT ΔG: <b className={getIdtStatusColor(topDg)}>{topDg != null ? `${topDg > 0 ? '+' : ''}${topDg.toFixed(2)}` : 'N/A'}</b></span>
-                                        <span>Strider ΔG: <b className={item.Local_DeltaG != null ? (item.Local_DeltaG <= 0 ? "text-amber-500" : "text-zinc-400") : "text-zinc-500"}>{item.Local_DeltaG != null ? `${item.Local_DeltaG > 0 ? '+' : ''}${item.Local_DeltaG.toFixed(2)}` : 'N/A'}</b></span>
+                    {displayItems.map((item: any, i: number) => {
+                        const itemDg = item.DeltaG ?? null;
+                        const itemLocalDg = item.Local_DeltaG ?? null;
+                        const itemIdtTm = item.IDT_Tm ?? null;
+                        const itemLocalTm = item.Local_Tm ?? null;
+                        const hasStructure = !!(item.DotBracket || item.Local_DotBracket || item.Bonds);
+                        return (
+                            <div key={i} className={`flex flex-col gap-2 ${maxItems > 1 && i > 0 ? 'border-t border-zinc-100 dark:border-zinc-800 pt-3' : ''}`}>
+                                {/* Provenance block (dG + Tm together, above the structure — mirrors MOLigo). */}
+                                {(!hasStructure && topDg == null && itemLocalDg == null) ? (
+                                    <div className="text-[9px] text-zinc-400 italic text-center px-1 py-0.5">No stable structure found</div>
+                                ) : (
+                                    <div className="flex flex-col gap-0.5 text-[9px] text-zinc-400 font-medium px-1">
+                                        <div className="flex justify-between items-center">
+                                            {maxItems > 1 && <span className="font-semibold text-[10px]">{title} {i + 1}</span>}
+                                            <div className={`flex gap-3 ${maxItems > 1 ? 'ml-auto' : ''}`}>
+                                                <span>IDT ΔG: <b className={getIdtStatusColor(itemDg ?? undefined)}>{itemDg != null ? `${itemDg > 0 ? '+' : ''}${itemDg.toFixed(2)}` : 'N/A'}</b></span>
+                                                <span>Strider ΔG: <b className={itemLocalDg != null ? (itemLocalDg <= 0 ? "text-amber-500" : "text-zinc-400") : "text-zinc-500"}>{itemLocalDg != null ? `${itemLocalDg > 0 ? '+' : ''}${itemLocalDg.toFixed(2)}` : 'N/A'}</b></span>
+                                            </div>
+                                        </div>
+                                        <div className={`flex gap-3 ${maxItems > 1 ? 'justify-end opacity-80' : 'justify-between'}`}>
+                                            <span>IDT Tm: <b className="text-zinc-500">{itemIdtTm != null ? `${Number(itemIdtTm).toFixed(1)}°C` : 'N/A'}</b></span>
+                                            <span>Strider Tm: <b className="text-zinc-500">{itemLocalTm != null ? `${itemLocalTm.toFixed(1)}°C` : 'N/A'}</b></span>
+                                        </div>
                                     </div>
-                                    <div className="flex justify-between items-center">
-                                        <span>IDT Tm: <b className="text-zinc-500">{item.IDT_Tm != null ? `${Number(item.IDT_Tm).toFixed(1)}°C` : 'N/A'}</b></span>
-                                        <span>Strider Tm: <b className="text-zinc-500">{item.Local_Tm != null ? `${item.Local_Tm.toFixed(1)}°C` : 'N/A'}</b></span>
+                                )}
+                                {/* Structure below provenance. */}
+                                {hasStructure && (
+                                    <div className="bg-zinc-50 dark:bg-zinc-900/50 rounded p-2">
+                                        {item.Sequence && item.Sequence.includes('&') ? (
+                                            <DimerAscii seq={item.Sequence} dotBracket={item.DotBracket || item.Local_DotBracket} raw={item} />
+                                        ) : (
+                                            <HairpinSVG seq={item.Sequence || item.dot_bracket || ''} dotBracket={item.DotBracket || item.Local_DotBracket} />
+                                        )}
                                     </div>
-                                </div>
-                            )}
-                        </div>
-                    ))}
-                    {items.length === 0 && (
-                        <div className="text-[9px] text-zinc-400 italic text-center px-1 py-0.5">No stable structure found</div>
-                    )}
+                                )}
+                            </div>
+                        );
+                    })}
                 </div>
             </div>
         );
@@ -1159,9 +1169,12 @@ export default function FlankingPrimersPanel({
                         {!idtCredentials ? (
                             <div className="text-[10px] text-zinc-400 italic">Configure IDT credentials in settings to view detailed structures.</div>
                         ) : indivResult ? (
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 ">
-                                {renderResultCard("Hairpin", indivResult.hairpin)}
-                                {renderResultCard("Self-Dimer", indivResult.selfdimer)}
+                            <div className="flex flex-col gap-4">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    {renderResultCard("Hairpin 1", indivResult.hairpin, 1, 0)}
+                                    {renderResultCard("Hairpin 2", indivResult.hairpin, 1, 1)}
+                                </div>
+                                {renderResultCard("Self-Dimer", indivResult.self_dimer, 5)}
                             </div>
                         ) : isAnal ? (
                             <div className="text-[10px] text-emerald-500/70">Analyzing via IDT...</div>
