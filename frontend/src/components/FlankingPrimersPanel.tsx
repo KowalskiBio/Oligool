@@ -601,14 +601,14 @@ export default function FlankingPrimersPanel({
                                     <div className="flex flex-col gap-0.5 text-[9px] text-zinc-400 font-medium px-1">
                                         <div className="flex justify-between items-center">
                                             {maxItems > 1 && <span className="font-semibold text-[10px]">{title} {i + 1}</span>}
-                                            <div className={`flex gap-3 ${maxItems > 1 ? 'ml-auto' : ''}`}>
-                                                <span>IDT ΔG: <b className={getIdtStatusColor(itemDg ?? undefined)}>{itemDg != null ? `${itemDg > 0 ? '+' : ''}${itemDg.toFixed(2)}` : 'N/A'}</b></span>
-                                                <span>Strider ΔG: <b className={itemLocalDg != null ? (itemLocalDg <= 0 ? "text-amber-500" : "text-zinc-400") : "text-zinc-500"}>{itemLocalDg != null ? `${itemLocalDg > 0 ? '+' : ''}${itemLocalDg.toFixed(2)}` : 'N/A'}</b></span>
+                                            <div className="flex gap-3 ml-auto">
+                                                {itemDg != null && <span>IDT ΔG: <b className={getIdtStatusColor(itemDg ?? undefined)}>{itemDg > 0 ? '+' : ''}{itemDg.toFixed(2)}</b></span>}
+                                                {itemLocalDg != null && <span>Strider ΔG: <b className={itemLocalDg <= 0 ? "text-amber-500" : "text-zinc-400"}>{itemLocalDg > 0 ? '+' : ''}{itemLocalDg.toFixed(2)}</b></span>}
                                             </div>
                                         </div>
-                                        <div className={`flex gap-3 ${maxItems > 1 ? 'justify-end opacity-80' : 'justify-between'}`}>
-                                            <span>IDT Tm: <b className="text-zinc-500">{itemIdtTm != null ? `${Number(itemIdtTm).toFixed(1)}°C` : 'N/A'}</b></span>
-                                            <span>Strider Tm: <b className="text-zinc-500">{itemLocalTm != null ? `${itemLocalTm.toFixed(1)}°C` : 'N/A'}</b></span>
+                                        <div className="flex gap-3 justify-end opacity-80">
+                                            {itemIdtTm != null && <span>IDT Tm: <b className="text-zinc-500">{Number(itemIdtTm).toFixed(1)}°C</b></span>}
+                                            {itemLocalTm != null && <span>Strider Tm: <b className="text-zinc-500">{itemLocalTm.toFixed(1)}°C</b></span>}
                                         </div>
                                     </div>
                                 )}

@@ -876,7 +876,7 @@ async def analyze_idt_oligos(request: IdtAnalyzeRequest):
             best_item = None
             best_idt_dg = None
             for item in data_list:
-                idt_tm = item.get("thermo") or item.get("MeltingTemperature") or item.get("Tm") or item.get("tm") or item.get("MeltTemp")
+                idt_tm = item.get("thermo") or item.get("MeltingTemperature") or item.get("Tm") or item.get("tm") or item.get("MeltTemp") or item.get("MeltingTemp") or item.get("meltingTemp")
                 # Same sentinel class as the ΔG guard: IDT returns absurd Tm
                 # placeholders (e.g. 146888.6 °C) when a sequence cannot fold.
                 try:
@@ -902,6 +902,9 @@ async def analyze_idt_oligos(request: IdtAnalyzeRequest):
                     )):
                         item["DotBracket"] = viz_struct
                 idt_dg = _extract_idt_delta_g(item)
+                # Normalize IDT ΔG to the "DeltaG" key so the frontend can read
+                # item.DeltaG regardless of which key IDT used (dG, deltaG, etc.)
+                item["DeltaG"] = idt_dg
                 if best_item is None or (idt_dg is not None and (best_idt_dg is None or idt_dg < best_idt_dg)):
                     best_item = item
                     best_idt_dg = idt_dg

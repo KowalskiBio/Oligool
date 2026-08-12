@@ -137,7 +137,6 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
     const hoverColRef = useRef<number | null>(null);
     const hoverRafRef = useRef<number>(0);
     const redrawRef = useRef<() => void>(() => { });
-    const [showOverview, setShowOverview] = useState(true);
     const [autofindActive, setAutofindActive] = useState(false);
     const [lightMatchBars, setLightMatchBars] = useState(false);
     const scrollPressRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -1846,7 +1845,24 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
             return;
         }
 
-        setAutofindBoundaryRow(row);
+        // Field-click on a sequence row
+        if (autofindActive) {
+            // Analysis! mode — set the autofind boundary
+            setAutofindBoundaryRow(row);
+        } else if (row > 0) {
+            // Kowalski mode — open the NCBI record modal for the clicked hit,
+            // unless the click landed on a flanking primer (those are handled
+            // by the mousedown→mouseup drag/click logic and should zoom, not
+            // open a modal).
+            const mouseX = x - labelWidth;
+            const col = Math.floor((scrollLeft + mouseX) / cellW);
+            const inFwd = flankingPrimersA?.fwd && col >= flankingPrimersA.fwd.start && col < flankingPrimersA.fwd.end;
+            const inRev = flankingPrimersA?.rev && col >= flankingPrimersA.rev.start && col < flankingPrimersA.rev.end;
+            if (!inFwd && !inRev) {
+                const accession = sequences[row].accession;
+                if (accession) setNcbiModalAccession(accession);
+            }
+        }
     };
 
     if (!alignment || sequences.length === 0) return null;
@@ -1876,27 +1892,13 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
                             <ClipboardIcon /> {startCol + 1}–{endCol + 1}
                         </button>
                     </div>
-                    <button
-                        onClick={() => setShowOverview((v) => !v)}
-                        className={`btn-secondary ${showOverview ? 'icon-btn-active' : ''}`}
-                        title={showOverview ? 'Hide overview bar' : 'Show overview bar'}
-                    >
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
-                            {showOverview
-                                ? <path d="M10 12a2 2 0 100-4 2 2 0 000 4z" />
-                                : <path fillRule="evenodd" d="M3.707 2.293a1 1 0 00-1.414 1.414l14 14a1 1 0 001.414-1.414l-1.473-1.473A10.014 10.014 0 0019.542 10C18.268 5.943 14.478 3 10 3a9.958 9.958 0 00-4.512 1.074l-1.78-1.781zm4.261 4.26l1.514 1.515a2.003 2.003 0 012.45 2.45l1.514 1.514a4 4 0 00-5.478-5.478z" clipRule="evenodd" />
-                            }
-                            <path d="M10 18a8 8 0 100-16 8 8 0 000 16zM10 4a6 6 0 100 12 6 6 0 000-12z" opacity={showOverview ? 0 : 0.3} />
-                        </svg>
-                        {showOverview ? 'Hide overview' : 'Show overview'}
-                    </button>
                     {showAutofindUI && (
                         <button
                             onClick={() => setAutofindActive((v) => !v)}
                             className={`btn-secondary ${autofindActive ? 'icon-btn-active' : ''}`}
-                            title={autofindActive ? 'Hide autofind proposals' : 'Find zero-mismatch regions'}
+                            title={autofindActive ? 'Analysis mode on — click a hit to set the autofind boundary' : 'Analysis mode off — click a hit to open its NCBI record'}
                         >
-                            autofind
+                            {autofindActive ? 'Analysis!' : 'Kowalski'}
                         </button>
                     )}
                     {Object.keys(hitRanges).length > 0 && (
@@ -2034,17 +2036,15 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
             )}
 
             {/* ── minimap navigator ── */}
-            {showOverview && (
-                <div className="border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950">
-                    <canvas
-                        ref={minimapRef}
-                        style={{ display: 'block', cursor: 'crosshair' }}
-                        onMouseDown={handleMinimapMouseDown}
-                        onMouseMove={handleMinimapMouseMove}
-                        onMouseLeave={handleMinimapMouseLeave}
-                    />
-                </div>
-            )}
+            <div className="border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950">
+                <canvas
+                    ref={minimapRef}
+                    style={{ display: 'block', cursor: 'crosshair' }}
+                    onMouseDown={handleMinimapMouseDown}
+                    onMouseMove={handleMinimapMouseMove}
+                    onMouseLeave={handleMinimapMouseLeave}
+                />
+            </div>
 
             {/* ── legend ── */}
             <div className="px-5 py-1.5 border-b border-zinc-100 dark:border-zinc-800 bg-white dark:bg-zinc-900 flex items-center gap-4 text-xs text-zinc-500 dark:text-zinc-400">
