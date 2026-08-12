@@ -555,7 +555,7 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                 title="Kliknutím zobrazíte novinky a návod k použití"
                 className="btn-secondary whitespace-nowrap"
               >
-                v0.9.8 beta
+                v0.9.9 beta
               </button>
               {sessionMsg && (
                 <span
@@ -1172,135 +1172,108 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
           <div className="modal-overlay" onClick={() => setShowWhatsNew(false)}>
             <div className="card shadow-xl max-w-lg w-full max-h-[80vh] overflow-y-auto p-6" onClick={e => e.stopPropagation()}>
               <div className="flex items-center justify-between mb-4">
-                <h2 className="text-lg font-semibold text-zinc-800 dark:text-zinc-200">Co je nového</h2>
+                <div className="flex items-center gap-2">
+                  <span className="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-teal-600/10 dark:bg-teal-300/10 text-teal-700 dark:text-teal-300 text-xs font-bold">v0.9.9</span>
+                  <h2 className="text-lg font-semibold text-zinc-800 dark:text-zinc-200">Co je nového</h2>
+                </div>
                 <button onClick={() => setShowWhatsNew(false)} className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 text-xl leading-none">&times;</button>
               </div>
               <div className="space-y-4 text-sm text-zinc-700 dark:text-zinc-300">
-                <section>
-                  <h3 className="font-semibold text-teal-700 dark:text-teal-300 mb-1">Samostatné instalátory</h3>
-                  <p>
-                    Oligool se nově šíří jako samostatný instalátor pro Windows a macOS a jako
-                    balíček pro Linux. Instalace obsahuje vše potřebné – Python, backend, MAFFT
-                    i sestavené rozhraní – takže na počítači nemusí být nic nainstalované.
-                    Na Windows stačí spustit průvodce instalací, na macOS otevřít balíček .pkg.
-                    Instalátory najdete na stránce Releases v repozitáři na GitHubu.
-                  </p>
+                <section className="flex gap-3">
+                  <svg className="h-5 w-5 flex-shrink-0 mt-0.5 text-teal-600 dark:text-teal-400" viewBox="0 0 20 20" fill="currentColor"><path d="M9 12l2 2 4-4M10 18a8 8 0 100-16 8 8 0 000 16z" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                  <div>
+                    <h3 className="font-semibold text-teal-700 dark:text-teal-300 mb-1">Souřadnicový tooltip v MSA přehledu</h3>
+                    <p>
+                      Při najetí kurzorem na BLAST hit v horním MSA přehledu se vedle kurzoru
+                      objeví box se třemi čísly: pozice v MSA sloupci, pozice v celém genomu
+                      a pozice v kódující oblasti (CDS). U inzercí a delecí se box rozšíří o
+                      informaci o jejich délce a sekvenci. Box se chytrě přepíná na levou
+                      stranu kurzoru, když jste v pravé polovině přehledu, takže nikdy nezmizí
+                      z obrazovky. Zapíná a vypíná se tlačítkem <b>Coordinates</b>.
+                    </p>
+                  </div>
                 </section>
-                <section>
-                  <h3 className="font-semibold text-teal-700 dark:text-teal-300 mb-1">Nový MSA přehled na kotvové mřížce</h3>
-                  <p>
-                    MSA prohlížeč je přepracovaný na kotvovou mřížku: query sekvence tvoří
-                    souvislý řádek a ostatní řádky se na ni kotví. Inzerce v hit sekvencích
-                    označuje modrá svislá čára; u delších inzercí ji doprovází vodorovné čárky
-                    pouze vpravo, tedy tam, kde by vložená sekvence ležela. Značky mismatchů,
-                    delecí a inzercí v horní liště i v minimapě mají nově výšku přesně jednoho
-                    řádku, takže nikdy nepřesahují mimo pruh své sekvence.
-                  </p>
+                <section className="flex gap-3">
+                  <svg className="h-5 w-5 flex-shrink-0 mt-0.5 text-teal-600 dark:text-teal-400" viewBox="0 0 20 20" fill="currentColor"><path d="M11 3a1 1 0 100 2h2.586l-6.293 6.293a1 1 0 101.414 1.414L15 6.414V9a1 1 0 102 0V4a1 1 0 00-1-1h-5z" /><path d="M5 5a2 2 0 00-2 2v8a2 2 0 002 2h8a2 2 0 002-2v-3a1 1 0 10-2 0v3H5V7h3a1 1 0 000-2H5z" /></svg>
+                  <div>
+                    <h3 className="font-semibold text-teal-700 dark:text-teal-300 mb-1">Režim Kowalski / Analýza!</h3>
+                    <p>
+                      Tlačítko <b>autofind</b> bylo přejmenováno na <b>Kowalski</b>. V klidovém
+                      režimu (Kowalski) kliknutí na hit v MSA přehledu rovnou otevře NCBI modal
+                      s genomem a CDS — nemusíte klikat na levý okraj. Po zapnutí analýzy
+                      (tlačítko se změní na <b>Analysis!</b>) kliknutí vybírá hity pro autofind,
+                      tedy hledání oblastí bez mismatchů, jako dříve.
+                    </p>
+                  </div>
                 </section>
-                <section>
-                  <h3 className="font-semibold text-teal-700 dark:text-teal-300 mb-1">Barva pruhů Sequence / Match</h3>
-                  <p>
-                    Kliknutím na barevný čtvereček vedle popisku „Sequence / Match“ v legendě
-                    MSA přehledu přepnete pruhy sekvencí mezi šedou a bílou. Přepnutí se projeví
-                    v horní liště, v minimapě i v hlavním zobrazení pruhů.
-                  </p>
+                <section className="flex gap-3">
+                  <svg className="h-5 w-5 flex-shrink-0 mt-0.5 text-teal-600 dark:text-teal-400" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M3 5a2 2 0 012-2h10a2 2 0 012 2v10a2 2 0 01-2 2H5a2 2 0 01-2-2V5zm3.293 1.293a1 1 0 011.414 0L10 8.586l2.293-2.293a1 1 0 111.414 1.414L11.414 10l2.293 2.293a1 1 0 01-1.414 1.414L10 11.414l-2.293 2.293a1 1 0 01-1.414-1.414L8.586 10 6.293 7.707a1 1 0 010-1.414z" clipRule="evenodd" /></svg>
+                  <div>
+                    <h3 className="font-semibold text-teal-700 dark:text-teal-300 mb-1">Oprava IDT prokvenance u flanking primerů</h3>
+                    <p>
+                      V panelu flanking primerů se nyní IDT ΔG a Tm zobrazují správně pro
+                      hairpiny — dříve chyběly, protože IDT vrací hodnoty pod různými názvy
+                      klíčů._backend nyní všechny varianty normalizuje. Řádky s chybějícími
+                      hodnotami se čistě skrývají místo zobrazení „N/A“. ΔG i Tm hodnoty
+                      (IDT i Strider) jsou zarovnané vpravo, stejně jako v MOLigo panelu.
+                    </p>
+                  </div>
                 </section>
-                <section>
-                  <h3 className="font-semibold text-teal-700 dark:text-teal-300 mb-1">Nový vzhled aplikace</h3>
-                  <p>
-                    Aplikace přešla na jednotný design systém: typografie IBM Plex (Sans pro
-                    text, Mono pro sekvence), barevná paleta zinc a sdílené tokeny pro tlačítka,
-                    panely a modální okna ve všech částech aplikace. Specifikace je v souboru
-                    frontend/DESIGN.md.
-                  </p>
+                <section className="flex gap-3">
+                  <svg className="h-5 w-5 flex-shrink-0 mt-0.5 text-teal-600 dark:text-teal-400" viewBox="0 0 20 20" fill="currentColor"><path d="M2 10a8 8 0 1116 0 8 8 0 01-16 0zm6.5-3a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0zM10 12a3 3 0 00-2.83 2h5.66A3 3 0 0010 12z" /></svg>
+                  <div>
+                    <h3 className="font-semibold text-teal-700 dark:text-teal-300 mb-1">Top-2 hairpiny a top-5 self-dimery</h3>
+                    <p>
+                      V panelu flanking primerů se u každého primeru zobrazuje top-5 hairpinů
+                      a top-5 self-dimerů s individuální prokvenancí (IDT ΔG, Strider ΔG,
+                      IDT Tm, Strider Tm) a vizualizací struktury u každého z nich. Při výběru
+                      levého a pravého primeru se automaticky spočítá i heterodimer.
+                    </p>
+                  </div>
                 </section>
-                <section>
-                  <h3 className="font-semibold text-teal-700 dark:text-teal-300 mb-1">Opravy struktur a dimerů</h3>
-                  <p>
-                    Pokud IDT nevrátí strukturu, použije se lokální dot-bracket ze Strider.
-                    Dimery jsou v reportu vykreslené jako ASCII se svislými vazbami, stejně jako
-                    v panelu oligo, a dimer SVG má opravené prohozené popisky 3′/5′ konců.
-                    IDT analýzy uchovávají strukturální pole a kandidáty s IDT daty se řadí před
-                    strider-only výsledky. Strider dimer ΔG je přepočtené na 25 °C, aby bylo
-                    srovnatelné s ostatními enginy.
-                  </p>
+                <section className="flex gap-3">
+                  <svg className="h-5 w-5 flex-shrink-0 mt-0.5 text-teal-600 dark:text-teal-400" viewBox="0 0 20 20" fill="currentColor"><path d="M4 4a2 2 0 012-2h8a2 2 0 012 2v12a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm3 2a1 1 0 000 2h6a1 1 0 100-2H7zm0 4a1 1 0 100 2h6a1 1 0 100-2H7zm0 4a1 1 0 100 2h3a1 1 0 100-2H7z" /></svg>
+                  <div>
+                    <h3 className="font-semibold text-teal-700 dark:text-teal-300 mb-1">Loga Kowalski v reportu a patičce</h3>
+                    <p>
+                      Do patičky aplikace i do reportového dialogu byla přidána loga Kowalski
+                      (králík a sýkora). Report má nově také vlastní záhlaví s datem a názvem
+                      úlohy.
+                    </p>
+                  </div>
                 </section>
-                <section>
-                  <h3 className="font-semibold text-teal-700 dark:text-teal-300 mb-1">Viditelnost indelů v MSA přehledu</h3>
-                  <p>
-                    V horní MSA liště a v minimapě jsou nyní indely (inzerce/delece) viditelné
-                    jako fialové pruhy vedle červených mismatchů. Indely se vykreslují ve třech
-                    průchodech (základní pruhy → mismatchy → indely nahoře), takže nejsou překryty
-                    dalšími sekvencemi. Každý indel má minimální výšku 3 px, aby zůstal viditelný
-                    i při stovkách sekvencí, a zároveň respektuje Y pozici řádku (indel v řádcích
-                    80–90 označí pouze tento úsek, ne celou lištu).
-                  </p>
+                <section className="flex gap-3">
+                  <svg className="h-5 w-5 flex-shrink-0 mt-0.5 text-teal-600 dark:text-teal-400" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M3 4a1 1 0 011-1h12a1 1 0 011 1v2a1 1 0 01-.293.707L12 11.414V15a1 1 0 01-.293.707l-2 2A1 1 0 018 17v-5.586L3.293 6.707A1 1 0 013 6V4z" clipRule="evenodd" /></svg>
+                  <div>
+                    <h3 className="font-semibold text-teal-700 dark:text-teal-300 mb-1">Minimap vždy viditelná</h3>
+                    <p>
+                      Přehledová lišta (minimapa) v MSA přehledu je nyní trvale zapnutá —
+                      tlačítko pro její skrytí bylo odstraněno. Minimapa je klíčová pro
+                      orientaci v dlouhých alignementech a neměla by být skrytelná.
+                    </p>
+                  </div>
                 </section>
-                <section>
-                  <h3 className="font-semibold text-teal-700 dark:text-teal-300 mb-1">Tm hodnoty v reportu</h3>
-                  <p>
-                    MOLigo 1 a 2 v reportu nyní zobrazují Tm řádek se všemi třemi hodnotami
-                    (Primer3, Strider, IDT) vedle sebe, stejně jako flanking primery. Opraveno
-                    čtení IDT Tm — funkce nyní kontroluje 7 variant názvu klíče v IDT odpovědi
-                    (IDT_Tm, Tm, MeltingTemperature, …), takže IDT Tm již nezobrazuje N/A.
-                    V panelu flanking primerů je IDT Tm nyní běžná buňka v gridu vedle P3 a
-                    Strider, místo odlišného fialového badge.
-                  </p>
+                <section className="flex gap-3">
+                  <svg className="h-5 w-5 flex-shrink-0 mt-0.5 text-teal-600 dark:text-teal-400" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M4.083 9h1.754c.319-1.824.853-3.247 1.5-4.246A8.001 8.001 0 002 9c.083.386.197.755.339 1.108.572-.386 1.213-.69 1.744-.108zM10 2a8 8 0 100 16 8 8 0 000-16zm0 4c.99 0 1.683.763 2.072 1.5a8.46 8.46 0 01.43 1H7.498c.12-.34.265-.67.43-1C8.317 6.763 9.01 6 10 6zm-2.5 5a8.46 8.46 0 00.43 1c.389.737 1.082 1.5 2.07 1.5.988 0 1.681-.763 2.07-1.5a8.46 8.46 0 00.43-1h-5z" clipRule="evenodd" /></svg>
+                  <div>
+                    <h3 className="font-semibold text-teal-700 dark:text-teal-300 mb-1">Oprava NCBI odkazů</h3>
+                    <p>
+                      Odkazy z NCBI modalu (Whole genome / Coding region) už nekončí chybou 500
+                      při načtení uložené relace. Parametry <code>RID</code> a <code>blast_rank</code>
+                      se přidávají pouze tehdy, když je k dispozici platné (neexpirované) BLAST RID.
+                      Při obnově relace se odkazy otevírají čistě bez BLAST kontextu.
+                    </p>
+                  </div>
                 </section>
-                <section>
-                  <h3 className="font-semibold text-teal-700 dark:text-teal-300 mb-1">Čistší layout reportu</h3>
-                  <p>
-                    Z reportu jsme odstranili duplicitní pairwise sekci („Moligo 1 with Moligo 2
-                    pairwise“) — ponechali jsme pouze tu v „Secondary structure predictions“.
-                    Sekce „Universal primers“ (fwd/rev) byla odstraněna. Flanking primery jsou
-                    nyní rozděleny na tři podsekce: Forward, Reverse a třetí s názvem
-                    „FwdName × RevName“ s heterodimerem a amplicon length. Názvy primerů
-                    se používají místo generických „Primer1/Primer2“. TAG sekvence v reportu
-                    zachovává původní velikost písmen (nepřevádí na malá).
-                  </p>
-                </section>
-                <section>
-                  <h3 className="font-semibold text-teal-700 dark:text-teal-300 mb-1">Tlačítko Save dole</h3>
-                  <p>
-                    Vedle tlačítka „Create a report“ v pravém dolním rohu je nyní k dispozici
-                    tlačítko Save, takže relaci uložíte bez nutnosti scrollovat nahoru.
-                  </p>
-                </section>
-                <section>
-                  <h3 className="font-semibold text-teal-700 dark:text-teal-300 mb-1">Přepracovaný design reportu (PDF/TXT)</h3>
-                  <p>
-                    Report má nově horní záhlaví s menším názvem, datem a vlastním GenBank headerem vloženým
-                    přímo na vstupní stránce. Sekce MOLigo 1 a 2 jsou kompaktnější a jsou chráněny proti
-                    rozdělení stránkou. Primery se zobrazují vedle sebe, ΔG hodnoty jsou tučně a v tabulátorovém
-                    rozložení. Heterodimer M1×M2 je přejmenován na „Moligo 1 with Moligo 2 pairwise“ včetně
-                    SVG struktury. TAG ukazuje číslo z role (např. A018) místo délky.
-                  </p>
-                </section>
-                <section>
-                  <h3 className="font-semibold text-teal-700 dark:text-teal-300 mb-1">MOLigo schéma a kopírovatelné sekvence</h3>
-                  <p>
-                    Z MOLigo provenance schématu jsme odstranili režim tvarů — nyní se vždy zobrazuje
-                    pouze sekvencí režim s jednotlivými bázemi. Přímo nad tlačítkem „Proceed with the Design“
-                    najdete dva boxy s finálními sekvencemi oligonukleotidů: levý oligo (reverse primer + Oligo 2)
-                    a pravý oligo (Oligo 1 + TAG + forward primer). Každý box má tlačítko pro jednoduché zkopírování.
-                    TAG sekvence je v pravém oligu zvýrazněna malými písmeny.
-                  </p>
-                </section>
-                <section>
-                  <h3 className="font-semibold text-teal-700 dark:text-teal-300 mb-1">Sekundární struktury a ASCII stabilita</h3>
-                  <p>
-                    Sekce IDT analýzy se přejmenovala na „Secondary structures“ a tlačítka pro analýzu
-                    nyní nesou název „Structural analysis“ / „Re-run Structural analysis“. ASCII schéma
-                    sekundárních struktur se už nemění okamžitě při úpravě délky oligos — zobrazuje
-                    původní analyzovanou sekvenci, dokud uživatel neklikne na „Re-run Structural analysis“.
-                  </p>
-                </section>
-                <section>
-                  <h3 className="font-semibold text-teal-700 dark:text-teal-300 mb-1">Drobná vylepšení</h3>
-                  <p>
-                    Opravili jsme označení koncentrace Mg²⁺ na správné jednotky (mM) a doladili
-                    uživatelské rozhraní pro konzistentnější pojmenování funkcí.
-                  </p>
+                <section className="flex gap-3">
+                  <svg className="h-5 w-5 flex-shrink-0 mt-0.5 text-teal-600 dark:text-teal-400" viewBox="0 0 20 20" fill="currentColor"><path d="M5 2a1 1 0 011 1v1h1a1 1 0 010 2H6v1a1 1 0 01-2 0V6H3a1 1 0 010-2h1V3a1 1 0 011-1zm0 10a1 1 0 011 1v1h1a1 1 0 110 2H6v1a1 1 0 11-2 0v-1H3a1 1 0 110-2h1v-1a1 1 0 011-1zM12 2a1 1 0 01.967.744L14.146 7.2A1 1 0 0114 8a1 1 0 01-2 0l-.073-.257H10.073L10 8a1 1 0 11-2 0l1.033-5.256A1 1 0 0110 2h2z" /></svg>
+                  <div>
+                    <h3 className="font-semibold text-teal-700 dark:text-teal-300 mb-1">Velká písmena ve flanking primerech</h3>
+                    <p>
+                      Sekvence flanking primerů zůstávají při přesunu nebo změně velikosti
+                      vždy velkými písmeny, místo aby se náhodně přepnuly na malá.
+                    </p>
+                  </div>
                 </section>
               </div>
               <div className="mt-6 flex justify-end">
