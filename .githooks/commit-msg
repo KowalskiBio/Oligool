@@ -1,0 +1,6 @@
+#!/bin/sh
+# Strips Co-authored-by trailers that AI tools inject into commit messages
+# (Claude Code appends "Co-Authored-By: Claude <...>", Sisyphus appends
+# "Sisyphus <clio-agent@...>", etc.). Authorship stays solely with the human.
+# Counterpart setting for Claude Code: "attribution": {"commit": "", "pr": ""}.
+sed -i -E '/^[[:space:]]*[Cc][Oo]-?[Aa][Uu][Tt][Hh][Oo][Rr][Ee][Dd]-[Bb][Yy][[:space:]]*:/d' "$1"
