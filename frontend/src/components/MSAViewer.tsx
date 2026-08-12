@@ -371,7 +371,7 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
             const gappedStart = anchorCols[start];
             const gappedEnd = anchorCols[end];
             const slice = query.seq.slice(gappedStart, gappedEnd + 1);
-            const fullSeq = query.seq.replace(/-/g, '');
+            const fullSeq = query.seq.replace(/-/g, '').toUpperCase();
             onVisibleQueryChange({
                 id: query.id,
                 seq: slice,

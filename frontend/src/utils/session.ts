@@ -292,7 +292,7 @@ function normalizeFlankingPrimer(primer: unknown): FlankingDesignedPrimer | null
     const q = primer as Partial<FlankingDesignedPrimer>;
     if (typeof q.sequence !== 'string' || !q.sequence) return null;
     return {
-        sequence: q.sequence,
+        sequence: q.sequence.toUpperCase(),
         length: typeof q.length === 'number' ? q.length : q.sequence.length,
         gc_percent: typeof q.gc_percent === 'number' ? q.gc_percent : 0,
         tm: typeof q.tm === 'number' ? q.tm : null,

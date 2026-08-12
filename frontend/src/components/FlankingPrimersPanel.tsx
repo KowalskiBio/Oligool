@@ -227,7 +227,7 @@ export default function FlankingPrimersPanel({
         let revPrimerObj: DesignedPrimer | null = null;
 
         if (manualLeftStart !== null && manualLeftEnd !== null) {
-            fwdSeq = rawSeq.substring(manualLeftStart, manualLeftEnd);
+            fwdSeq = rawSeq.substring(manualLeftStart, manualLeftEnd).toUpperCase();
             const gc = calcGC(fwdSeq);
             fwdPrimerObj = {
                 sequence: fwdSeq,
@@ -243,7 +243,7 @@ export default function FlankingPrimersPanel({
         }
 
         if (manualRightStart !== null && manualRightEnd !== null) {
-            const fwdStrandSeq = rawSeq.substring(manualRightStart, manualRightEnd);
+            const fwdStrandSeq = rawSeq.substring(manualRightStart, manualRightEnd).toUpperCase();
             revSeq = revComp(fwdStrandSeq);
             const gc = calcGC(revSeq);
             revPrimerObj = {
@@ -739,7 +739,7 @@ export default function FlankingPrimersPanel({
                 newEnd = Math.min(rawSeq.length, newEnd);
 
                 const newInterval: [number, number] = [newStart, newEnd];
-                const fwdStrandSeq = rawSeq.substring(newStart, newEnd);
+                const fwdStrandSeq = rawSeq.substring(newStart, newEnd).toUpperCase();
                 const seq = id === 'fwd' ? fwdStrandSeq : revComp(fwdStrandSeq);
                 const gc = calcGCLocal(seq);
                 const existingName = id === 'fwd' ? latestRef.current.selFwd?.name : latestRef.current.selRev?.name;
