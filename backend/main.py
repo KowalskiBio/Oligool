@@ -12,6 +12,9 @@ from typing import List, Optional
 from backend.alignment import run_msa
 from backend.blast import run_blast
 import json
+import threading as _threading
+from collections import OrderedDict
+from functools import lru_cache
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, StreamingResponse
 import asyncio
@@ -280,11 +283,21 @@ async def align_sequences(request: AlignmentRequest):
 from typing import Dict
 
 # Strider duplex Tm alongside primer3 calc_tm; None means "not available" (UI shows —).
+# Since the native-tm branch of the strider fork, melting_temperature itself is
+# Rust-accelerated (strider._native), so no extra fast path is needed here.
 try:
     from strider import melting_temperature as _strider_melting_temperature
 except Exception as _exc:
     logging.warning("Strider duplex Tm unavailable (need strider-dna >= 1.2.0 in %s): %s — tm_strider will be null", sys.executable, _exc)
     _strider_melting_temperature = None
+
+
+@lru_cache(maxsize=16)
+def _thermo_engine_cached(material: str, celsius: float, sodium_m: float, magnesium_m: float):
+    """LRU ThermoEngine per salt/temperature — building the parameter tables per
+    request is pure overhead; engines are stateless across mfe/subopt calls."""
+    from strider import ThermoEngine
+    return ThermoEngine(material=material, celsius=celsius, sodium=sodium_m, magnesium=magnesium_m)
 
 
 def strider_duplex_tm(seq, *, mv_conc, dv_conc, dntp_conc, dna_conc):
@@ -756,7 +769,7 @@ async def analyze_idt_oligos(request: IdtAnalyzeRequest):
         effective_mg = max(0.0, request.mg_conc - request.dntp_conc) / 1000.0
         oligo_conc_m = getattr(request, "oligo_conc", 0.25) / 1e6
 
-        eng = ThermoEngine(material='dna', celsius=base_temp, sodium=mv_m, magnesium=effective_mg)
+        eng = _thermo_engine_cached('dna', base_temp, mv_m, effective_mg)
 
         # Hairpin Tm uses strider.thermo.hairpin.hairpin_thermo (>= 0.3.2), the
         # UNImolecular two-state model (Tm = ΔH/ΔS, concentration-independent)
@@ -917,7 +930,10 @@ async def analyze_idt_oligos(request: IdtAnalyzeRequest):
                 seen = {raw_mfe}
                 if viz_struct_raw:
                     seen.add(viz_struct_raw)
-                subs = eng.subopt(fold_seq, gap=5.0, max_structures=500)
+                # We render at most 4 suboptimal structures (added >= 4 breaks),
+                # after dedup/positive-energy filters; enumerating 500 wastes
+                # backtrace work — 32 leaves comfortable headroom.
+                subs = eng.subopt(fold_seq, gap=5.0, max_structures=32)
                 added = 0
                 for sub_struct, sub_energy, _ in subs:
                     if added >= 4: break
@@ -1062,12 +1078,28 @@ class FlankingPrimerParams(BaseModel):
     manual_right_end: Optional[int] = None
 
 
+# Dragging a MOLigo re-fires this endpoint for every intermediate position, so
+# identical payloads are served from a small thread-safe cache.  The endpoint
+# itself is a sync def: FastAPI runs it in a threadpool, keeping the event loop
+# (all other endpoints) responsive while primer3 crunches.
+_primer_design_cache: "OrderedDict[str, dict]" = OrderedDict()
+_primer_design_cache_lock = _threading.Lock()
+_PRIMER_DESIGN_CACHE_MAX = 32
+
+
 @app.post("/flanking_primers/design")
-async def design_flanking_primers(req: FlankingPrimerParams):
+def design_flanking_primers(req: FlankingPrimerParams):
     try:
         import primer3
     except ImportError:
         raise HTTPException(status_code=500, detail="primer3-py not installed")
+
+    _cache_key = json.dumps(req.model_dump(), sort_keys=True)
+    with _primer_design_cache_lock:
+        _hit = _primer_design_cache.get(_cache_key)
+        if _hit is not None:
+            _primer_design_cache.move_to_end(_cache_key)
+            return _hit
 
     seq = req.full_seq.upper().replace(" ", "").replace("\n", "")
     n   = len(seq)
@@ -1275,6 +1307,11 @@ async def design_flanking_primers(req: FlankingPrimerParams):
             }
         }
 
+    with _primer_design_cache_lock:
+        _primer_design_cache[_cache_key] = results
+        _primer_design_cache.move_to_end(_cache_key)
+        while len(_primer_design_cache) > _PRIMER_DESIGN_CACHE_MAX:
+            _primer_design_cache.popitem(last=False)
     return results
 
 

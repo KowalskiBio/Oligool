@@ -159,12 +159,13 @@ export default function FlankingPrimersPanel({
         }
     };
 
-    const design = async () => {
+    const design = async (signal?: AbortSignal) => {
         setLoading(true); setError(''); setResult(null); setSelFwd(null); setSelRev(null);
         try {
             const res = await fetch(API + '/flanking_primers/design', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
+                signal,
                 body: JSON.stringify({
                     full_seq: rawSeq, oligo_start: oligoStart, oligo_end: oligoEnd,
                     flank_window: flankWindow,
@@ -178,22 +179,39 @@ export default function FlankingPrimersPanel({
             });
             if (!res.ok) { const e = await res.json(); throw new Error(e.detail || 'Design failed'); }
             setResult(await res.json());
-        } catch (e: any) { setError(e.message); }
-        finally { setLoading(false); }
+        } catch (e: any) {
+            if (e?.name === 'AbortError') return;
+            setError(e.message);
+        } finally { if (!signal?.aborted) setLoading(false); }
     };
 
-    // Auto-design when the MOLigo bounds change from user dragging it in the upper viewer
+    // Auto-design when the MOLigo bounds change from user dragging it in the upper viewer.
+    // A drag fires one effect run per intermediate position, so debounce until the
+    // pointer settles and abort any in-flight request before issuing a new one.
     const prevOligoRef = useRef({ start: oligoStart, end: oligoEnd });
+    const designAbortRef = useRef<AbortController | null>(null);
+    const designDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     useEffect(() => {
-        if (prevOligoRef.current.start !== oligoStart || prevOligoRef.current.end !== oligoEnd) {
-            prevOligoRef.current = { start: oligoStart, end: oligoEnd };
-            // Automatically redesign if the user hasn't set manual flanking region overrides
-            if (manualLeftStart === null && manualRightStart === null) {
-                design();
-            }
-        }
+        if (prevOligoRef.current.start === oligoStart && prevOligoRef.current.end === oligoEnd) return;
+        prevOligoRef.current = { start: oligoStart, end: oligoEnd };
+        // Automatically redesign if the user hasn't set manual flanking region overrides
+        if (manualLeftStart !== null || manualRightStart !== null) return;
+        if (designDebounceRef.current !== null) clearTimeout(designDebounceRef.current);
+        designDebounceRef.current = setTimeout(() => {
+            designDebounceRef.current = null;
+            designAbortRef.current?.abort();
+            const ac = new AbortController();
+            designAbortRef.current = ac;
+            design(ac.signal);
+        }, 300);
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [oligoStart, oligoEnd]);
+
+    // Tear down pending auto-design work on unmount
+    useEffect(() => () => {
+        if (designDebounceRef.current !== null) clearTimeout(designDebounceRef.current);
+        designAbortRef.current?.abort();
+    }, []);
 
     const designManual = async () => {
         if (manualLeftStart === null && manualRightStart === null) {
@@ -1317,7 +1335,7 @@ export default function FlankingPrimersPanel({
                             </div>
                         )}
                         <div className="flex gap-2">
-                            <button onClick={design} disabled={loading}
+                            <button onClick={() => design()} disabled={loading}
                                 className={`flex-1 rounded-md font-bold text-sm transition-all ${loading ? 'py-2.5 bg-zinc-100 dark:bg-zinc-900 text-zinc-400 cursor-not-allowed' : 'btn-primary justify-center py-2.5 active:scale-95'}`}>
                                 {loading ? (
                                     <span className="flex items-center justify-center gap-2">
