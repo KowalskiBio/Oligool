@@ -11,4 +11,7 @@ requests>=2.25.0
 # The v0.7.0 ThermoEngine.subopt() salt bug is fixed in upstream v1.1.0.
 # strider.duplex_tm (primer3-style duplex Tm with Na/Mg/dNTP/oligo-conc params)
 # was added upstream in v1.2.0.
-strider-dna @ git+https://github.com/EmilioVenegas/strider.git@v1.2.0
+# native-tm branch: Rust/PyO3 accelerator (strider._native) for melting_temperature,
+# duplex_tm, duplex_dg, duplex_dh_ds + salt.py scalars. 15.4× vs pure Python.
+# PR pending: https://github.com/EmilioVenegas/strider/pull/11
+strider-dna @ git+https://github.com/KowalskiBio/strider.git@native-tm
