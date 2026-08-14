@@ -7,7 +7,8 @@
  *
  * Backbone is drawn as one continuous polyline through every base in sequence
  * order, so connectivity is correct regardless of bulges. Base pairs are drawn
- * as rungs. Multiloops / pseudoknots fall back to showing the dot-bracket text.
+ * as rungs. Multiloops (multiple sibling stems) are split into individual
+ * stem-loop domains and rendered side by side. Pseudoknots fall back to text.
  */
 import React from 'react';
 
@@ -51,6 +52,60 @@ function parsePairs(db: string): Array<[number, number]> | null {
     return pairs;
 }
 
+/**
+ * Split a multiloop dot-bracket into individual single-stem domains.
+ *
+ * Each domain is a maximal run of properly-nested pairs. When a pair's right
+ * index is NOT less than the previous pair's right index, a new stem group
+ * begins. Returns null if the structure is a single stem (not a multiloop),
+ * unbalanced, or contains unsupported characters.
+ */
+function splitStemGroups(
+    seq: string, db: string,
+): Array<{ seq: string; dotBracket: string }> | null {
+    const stack: number[] = [];
+    const pairs: Array<[number, number]> = [];
+    for (let i = 0; i < db.length; i++) {
+        const c = db[i];
+        if (c === '(') stack.push(i);
+        else if (c === ')') {
+            const j = stack.pop();
+            if (j === undefined) return null;
+            pairs.push([j, i]);
+        } else if (c !== '.') return null;
+    }
+    if (stack.length || pairs.length === 0) return null;
+
+    pairs.sort((a, b) => a[0] - b[0]);
+
+    const groups: Array<Array<[number, number]>> = [];
+    let cur: Array<[number, number]> = [pairs[0]];
+    let prevRight = pairs[0][1];
+
+    for (let k = 1; k < pairs.length; k++) {
+        if (pairs[k][1] < prevRight) {
+            cur.push(pairs[k]);
+            prevRight = pairs[k][1];
+        } else {
+            groups.push(cur);
+            cur = [pairs[k]];
+            prevRight = pairs[k][1];
+        }
+    }
+    groups.push(cur);
+
+    if (groups.length <= 1) return null;
+
+    return groups.map(g => {
+        const start = g[0][0];
+        const end = g[g.length - 1][1];
+        return {
+            seq: seq.slice(start, end + 1),
+            dotBracket: db.slice(start, end + 1),
+        };
+    });
+}
+
 function basePairSymbol(a: string, b: string): 'wc' | 'wobble' | 'none' {
     const pair = (a + b).toUpperCase();
     const watson = ['AT', 'TA', 'AU', 'UA', 'GC', 'CG'];
@@ -84,13 +139,25 @@ export default function HairpinSVG({ seq, dotBracket, light = false }: HairpinSV
                 </div>
             );
         }
-        // Multiloop / pseudoknot / unparseable – show dot-bracket
+        // Multiloop: try splitting into individual stem-loop domains and render
+        // each as a separate HairpinSVG side by side.
+        const stemGroups = valid ? splitStemGroups(seq, dotBracket) : null;
+        if (stemGroups && stemGroups.length > 1) {
+            return (
+                <div className="flex gap-1 items-end justify-center overflow-x-auto">
+                    {stemGroups.map((g, i) => (
+                        <HairpinSVG key={i} seq={g.seq} dotBracket={g.dotBracket} light={light} />
+                    ))}
+                </div>
+            );
+        }
+        // Pseudoknot / unparseable – show dot-bracket
         const blockPairs: string[] = [];
-        for (let start = 0; start < Math.max(seq.length, dotBracket.length); start += 60) {
-            blockPairs.push(`${seq.slice(start, start + 60)}\n${dotBracket.slice(start, start + 60)}`);
+        for (let start = 0; start < Math.max(seq.length, dotBracket.length); start += 50) {
+            blockPairs.push(`${seq.slice(start, start + 50)}\n${dotBracket.slice(start, start + 50)}`);
         }
         return (
-            <pre className={`font-mono text-[10px] text-zinc-500 ${dk('dark:text-zinc-400')} whitespace-pre`}>
+            <pre className={`font-mono text-[10px] text-zinc-500 ${dk('dark:text-zinc-400')} whitespace-pre-wrap break-all overflow-x-auto`}>
                 {blockPairs.join('\n\n')}
             </pre>
         );
