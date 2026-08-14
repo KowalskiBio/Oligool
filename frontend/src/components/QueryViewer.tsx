@@ -105,6 +105,11 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
     const [idtAnalyzedSeqs, setIdtAnalyzedSeqs] = useState<{ p1: string; p2: string } | null>(null);
     const [idtError, setIdtError] = useState<string | null>(null);
 
+    // Strider Analysis State (local, no credentials needed)
+    const [isStriderLoading, setIsStriderLoading] = useState(false);
+    const [striderResults, setStriderResults] = useState<IdtData | null>(null);
+    const [striderAnalyzedSeqs, setStriderAnalyzedSeqs] = useState<{ p1: string; p2: string } | null>(null);
+
     // Controls - Shift Logic
     const [moligo1Shift, setMoligo1Shift] = useState(() => Number(localStorage.getItem('moligo1_shift')) || 0);
     const [moligo2Shift, setMoligo2Shift] = useState(() => Number(localStorage.getItem('moligo2_shift')) || 0);
@@ -1440,6 +1445,40 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
         );
     };
 
+    const runStriderAnalysis = async () => {
+        if (!primers) return;
+
+        const p1 = primers.p1.seq.trim();
+        const p2 = primers.p2.seq.trim();
+
+        if (!p1 || p1.length < 10) return;
+        if (!p2 || p2.length < 10) return;
+
+        setIsStriderLoading(true);
+        try {
+            const aRes = await fetch(((import.meta.env.VITE_API_BASE as string) || "") + '/strider/analyze', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    p1_seq: p1,
+                    p2_seq: p2,
+                    mg_conc: Number(idtAdvancedParams.mg_conc),
+                    mv_conc: Number(idtAdvancedParams.mv_conc),
+                    dntp_conc: Number(idtAdvancedParams.dntp_conc),
+                    oligo_conc: Number(idtAdvancedParams.oligo_conc),
+                })
+            });
+            if (!aRes.ok) throw new Error("Strider Analysis Failed");
+            const results = await aRes.json();
+            setStriderResults(results);
+            setStriderAnalyzedSeqs({ p1, p2 });
+        } catch (err: any) {
+            console.error(err);
+        } finally {
+            setIsStriderLoading(false);
+        }
+    };
+
     const runIdtAnalysis = async () => {
         if (!idtCredentials || !primers) return;
 
@@ -2513,7 +2552,7 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                          </div>
                      )}
 
-                    {primers && idtCredentials && (
+                    {primers && (
                         <div className="mt-4 border-t border-zinc-100 dark:border-zinc-700 pt-4">
                             <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
                                 <h4 className="text-sm font-bold text-zinc-400 uppercase tracking-widest">Secondary structures</h4>
@@ -2536,36 +2575,47 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                                             className="input w-16 p-1 text-xs font-mono text-center tabular-nums"
                                         />
                                     </div>
-                                    {!isIdtLoading && (
-                                        <button onClick={() => { setIdtResults(null); setIdtAnalyzedSeqs(null); setIdtError(null); setTimeout(runIdtAnalysis, 0); }} className={`btn-secondary ${idtResults ? 'icon-btn-active' : ''}`}>
-                                            {idtResults ? '↻ Re-run Structural analysis' : 'Run Structural analysis'}
+                                    {!isStriderLoading && (
+                                        <button onClick={() => { setStriderResults(null); setStriderAnalyzedSeqs(null); setTimeout(runStriderAnalysis, 0); }} className={`btn-secondary ${striderResults ? 'icon-btn-active' : ''}`}>
+                                            {striderResults ? '↻ Re-run Structural analysis' : 'Run Structural analysis'}
                                         </button>
                                     )}
-                                    {isIdtLoading && <div className="animate-pulse text-xs text-teal-700 font-medium">Analyzing with IDT API...</div>}
+                                    {isStriderLoading && <div className="animate-pulse text-xs text-emerald-700 dark:text-emerald-400 font-medium">Analyzing via Strider...</div>}
+                                    {idtCredentials && !isIdtLoading && (
+                                        <button onClick={() => { setIdtResults(null); setIdtAnalyzedSeqs(null); setIdtError(null); setTimeout(runIdtAnalysis, 0); }} className={`text-[10px] px-2 py-1 rounded-md border font-bold transition-all ${idtResults ? 'bg-blue-600 border-blue-600 text-white' : 'border-blue-600/40 text-blue-700 dark:text-blue-300 hover:bg-blue-700/10 dark:hover:bg-blue-300/10'}`}>
+                                            {idtResults ? '↻ IDT' : 'IDT'}
+                                        </button>
+                                    )}
+                                    {isIdtLoading && <div className="animate-pulse text-xs text-blue-700 dark:text-blue-400 font-medium">Analyzing with IDT API...</div>}
                                 </div>
                             </div>
                             {idtError && <div className="text-xs text-red-500 bg-red-50 dark:bg-red-900/20 p-2 rounded mb-3 border border-red-100 dark:border-red-900/30">Error: {idtError}</div>}
-                            {idtResults && (
-                                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                                    <div className="bg-zinc-50 dark:bg-zinc-900/40 p-3 rounded border border-zinc-100 dark:border-zinc-800">
-                                        <div className="text-xs font-bold text-zinc-500 uppercase mb-1">Oligo 2 Stability</div>
-                                        {renderIdtCard("Hairpin ΔG", idtResults.m2.hairpin, idtAnalyzedSeqs?.p2 ?? primers.p2.seq)}
-                                        {renderIdtCard("Self-Dimer ΔG", idtResults.m2.self_dimer, idtAnalyzedSeqs?.p2 ?? primers.p2.seq)}
-                                        <div className="text-[10px] text-zinc-400 mt-1 italic">kcal/mol</div>
+                            {(() => {
+                                const activeResults = idtResults || striderResults;
+                                const activeSeqs = idtAnalyzedSeqs || striderAnalyzedSeqs;
+                                if (!activeResults) return null;
+                                return (
+                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                        <div className="bg-zinc-50 dark:bg-zinc-900/40 p-3 rounded border border-zinc-100 dark:border-zinc-800">
+                                            <div className="text-xs font-bold text-zinc-500 uppercase mb-1">Oligo 2 Stability</div>
+                                            {renderIdtCard("Hairpin ΔG", activeResults.m2.hairpin, activeSeqs?.p2 ?? primers.p2.seq)}
+                                            {renderIdtCard("Self-Dimer ΔG", activeResults.m2.self_dimer, activeSeqs?.p2 ?? primers.p2.seq)}
+                                            <div className="text-[10px] text-zinc-400 mt-1 italic">kcal/mol</div>
+                                        </div>
+                                        <div className="bg-zinc-50 dark:bg-zinc-900/40 p-3 rounded border border-zinc-100 dark:border-zinc-800">
+                                            <div className="text-xs font-bold text-zinc-500 uppercase mb-1">Oligo 1 Stability</div>
+                                            {renderIdtCard("Hairpin ΔG", activeResults.m1.hairpin, activeSeqs?.p1 ?? primers.p1.seq)}
+                                            {renderIdtCard("Self-Dimer ΔG", activeResults.m1.self_dimer, activeSeqs?.p1 ?? primers.p1.seq)}
+                                            <div className="text-[10px] text-zinc-400 mt-1 italic">kcal/mol</div>
+                                        </div>
+                                        <div className="bg-teal-700/5 dark:bg-teal-300/5 p-3 rounded border border-teal-700/15 dark:border-teal-300/15">
+                                            <div className="text-xs font-bold text-teal-800 dark:text-teal-300 uppercase mb-1">Cross-Dimer Pairwise</div>
+                                            {renderIdtCard("Hetero-Dimer ΔG", activeResults.pairwise, activeSeqs?.p1 ?? primers.p1.seq, activeSeqs?.p2 ?? primers.p2.seq)}
+                                            <div className="text-[10px] text-zinc-400 mt-1 italic">kcal/mol</div>
+                                        </div>
                                     </div>
-                                    <div className="bg-zinc-50 dark:bg-zinc-900/40 p-3 rounded border border-zinc-100 dark:border-zinc-800">
-                                        <div className="text-xs font-bold text-zinc-500 uppercase mb-1">Oligo 1 Stability</div>
-                                        {renderIdtCard("Hairpin ΔG", idtResults.m1.hairpin, idtAnalyzedSeqs?.p1 ?? primers.p1.seq)}
-                                        {renderIdtCard("Self-Dimer ΔG", idtResults.m1.self_dimer, idtAnalyzedSeqs?.p1 ?? primers.p1.seq)}
-                                        <div className="text-[10px] text-zinc-400 mt-1 italic">kcal/mol</div>
-                                    </div>
-                                    <div className="bg-teal-700/5 dark:bg-teal-300/5 p-3 rounded border border-teal-700/15 dark:border-teal-300/15">
-                                        <div className="text-xs font-bold text-teal-800 dark:text-teal-300 uppercase mb-1">Cross-Dimer Pairwise</div>
-                                        {renderIdtCard("Hetero-Dimer ΔG", idtResults.pairwise, idtAnalyzedSeqs?.p1 ?? primers.p1.seq, idtAnalyzedSeqs?.p2 ?? primers.p2.seq)}
-                                        <div className="text-[10px] text-zinc-400 mt-1 italic">kcal/mol</div>
-                                    </div>
-                                </div>
-                            )}
+                                );
+                            })()}
                         </div>
                     )}
                 </div>
@@ -2626,7 +2676,7 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                                     document.getElementById('flanking-primers-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
                                 }, 100);
                             }}
-                            moligoIdtResults={idtResults ? { m1: idtResults.m1, m2: idtResults.m2, pairwise: idtResults.pairwise } : undefined}
+                            moligoIdtResults={(idtResults || striderResults) ? { m1: (idtResults || striderResults)!.m1, m2: (idtResults || striderResults)!.m2, pairwise: (idtResults || striderResults)!.pairwise } : undefined}
                             idtCredentials={idtCredentials}
                             idtAdvancedParams={idtAdvancedParams}
                         />
