@@ -139,6 +139,10 @@ export interface FlankingPanelState {
     idtResultsIndiv?: Record<string, unknown>;
     /** IDT pair (heterodimer/product) analysis for the selected fwd+rev pair. */
     pairIdtResults?: unknown;
+    /** Cached per-primer Strider structural analysis (local, no credentials). */
+    striderResultsIndiv?: Record<string, unknown>;
+    /** Strider pair (heterodimer) analysis for the selected fwd+rev pair. */
+    pairStriderResults?: unknown;
 }
 
 /** Snapshot of the visible query sequence window shown in the MSA viewer. */
@@ -285,6 +289,8 @@ export const FLANKING_PANEL_DEFAULTS: FlankingPanelState = {
     revName: '',
     idtResultsIndiv: {},
     pairIdtResults: null,
+    striderResultsIndiv: {},
+    pairStriderResults: null,
 };
 
 function normalizeFlankingPrimer(primer: unknown): FlankingDesignedPrimer | null {
@@ -348,6 +354,10 @@ function normalizeFlankingPanel(panel: unknown): FlankingPanelState | null {
             ? p.idtResultsIndiv as Record<string, unknown>
             : {},
         pairIdtResults: p.pairIdtResults ?? null,
+        striderResultsIndiv: p.striderResultsIndiv && typeof p.striderResultsIndiv === 'object'
+            ? p.striderResultsIndiv as Record<string, unknown>
+            : {},
+        pairStriderResults: p.pairStriderResults ?? null,
     };
 }
 

@@ -64,7 +64,7 @@ export default function FlankingPrimersPanel({
     rawSeq, oligoStart, oligoEnd,
     p1Start, p1End, p2Start, p2End,
     alignment, oligoPrimers, navigateTarget, isDarkMode,
-    idtCredentials, idtAdvancedParams, gappedData, onFlankingPrimersUpdate,
+    idtCredentials, gappedData, onFlankingPrimersUpdate,
     restoredState, onPanelStateChange
 }: Props) {
     // Primer3 params — initialized from a restored session when present
@@ -281,14 +281,16 @@ export default function FlankingPrimersPanel({
 
         if (fwdPrimerObj) {
             setSelFwd(fwdPrimerObj);
-            analyzeIndividual(fwdPrimerObj.sequence);
+            setAnalyzingStriderIndiv(prev => ({ ...prev, [fwdPrimerObj.sequence]: true }));
+            analyzeStriderIndividual(fwdPrimerObj.sequence);
         } else {
             setSelFwd(null);
         }
 
         if (revPrimerObj) {
             setSelRev(revPrimerObj);
-            analyzeIndividual(revPrimerObj.sequence);
+            setAnalyzingStriderIndiv(prev => ({ ...prev, [revPrimerObj.sequence]: true }));
+            analyzeStriderIndividual(revPrimerObj.sequence);
         } else {
             setSelRev(null);
         }
@@ -407,8 +409,13 @@ export default function FlankingPrimersPanel({
     const [analysisError, setAnalysisError] = useState<string | null>(null);
     const [isAnalysisExpanded, setIsAnalysisExpanded] = useState(true);
 
+    // Strider pair results (local-only, no IDT API call). Auto-fires on selection.
+    const [striderPairResults, setStriderPairResults] = useState<any>(restoredState?.pairStriderResults ?? null);
+    const [isAnalyzingStriderPair, setIsAnalyzingStriderPair] = useState(false);
+
     // Stale-run guard: only the latest invocation may mutate analysis state.
     const pairRunRef = useRef(0);
+    const striderPairRunRef = useRef(0);
     const runProductAnalysis = useCallback(async (p1Seq: string, p2Seq: string) => {
         const runId = ++pairRunRef.current;
         setIsAnalyzing(true);
@@ -435,10 +442,10 @@ export default function FlankingPrimersPanel({
                     p1_seq: p1Seq,
                     p2_seq: p2Seq,
                     token: access_token,
-                    mg_conc: idtAdvancedParams?.mg_conc ?? 10.0,
-                    mv_conc: idtAdvancedParams?.mv_conc ?? 50.0,
-                    dntp_conc: idtAdvancedParams?.dntp_conc ?? 0.8,
-                    oligo_conc: idtAdvancedParams?.oligo_conc ?? 0.25,
+                    mg_conc: dvConc,
+                    mv_conc: mvConc,
+                    dntp_conc: dntpConc,
+                    oligo_conc: dnaConc / 1000,
                     idt_region: idtCredentials.region || 'eu'
                 })
             });
@@ -453,13 +460,46 @@ export default function FlankingPrimersPanel({
         } finally {
             if (runId === pairRunRef.current) setIsAnalyzing(false);
         }
-    }, [idtCredentials, idtAdvancedParams]);
+    }, [idtCredentials, dvConc, mvConc, dntpConc, dnaConc]);
+
+    const runStriderPairAnalysis = useCallback(async (p1Seq: string, p2Seq: string) => {
+        const runId = ++striderPairRunRef.current;
+        setIsAnalyzingStriderPair(true);
+        try {
+            const aRes = await fetch(((import.meta.env.VITE_API_BASE as string) || "") + '/strider/analyze', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    p1_seq: p1Seq,
+                    p2_seq: p2Seq,
+                    mg_conc: dvConc,
+                    mv_conc: mvConc,
+                    dntp_conc: dntpConc,
+                    oligo_conc: dnaConc / 1000,
+                })
+            });
+            if (!aRes.ok) throw new Error("Strider Analysis Failed");
+            const results = await aRes.json();
+            if (runId === striderPairRunRef.current) {
+                setStriderPairResults(results);
+                setIsAnalysisExpanded(true);
+            }
+        } catch (err: any) {
+            if (runId === striderPairRunRef.current) console.error(err);
+        } finally {
+            if (runId === striderPairRunRef.current) setIsAnalyzingStriderPair(false);
+        }
+    }, [dvConc, mvConc, dntpConc, dnaConc]);
 
     const [idtResultsIndiv, setIdtResultsIndiv] = useState<Record<string, any>>(restoredState?.idtResultsIndiv ?? {});
     const [analyzingIndiv, setAnalyzingIndiv] = useState<Record<string, boolean>>({});
 
+    // Strider individual results (local-only, no IDT API call). Fires on "Use".
+    const [striderResultsIndiv, setStriderResultsIndiv] = useState<Record<string, any>>(restoredState?.striderResultsIndiv ?? {});
+    const [analyzingStriderIndiv, setAnalyzingStriderIndiv] = useState<Record<string, boolean>>({});
+
     const analyzeIndividual = async (seq: string) => {
-        if (!idtCredentials || idtResultsIndiv[seq]) return;
+        if (!idtCredentials) return;
         try {
             const tRes = await fetch(((import.meta.env.VITE_API_BASE as string) || "") + '/idt/token', {
                 method: 'POST',
@@ -482,10 +522,10 @@ export default function FlankingPrimersPanel({
                     p1_seq: seq,
                     p2_seq: "A", // dummy to satisfy backend
                     token: access_token,
-                    mg_conc: idtAdvancedParams?.mg_conc ?? 10.0,
-                    mv_conc: idtAdvancedParams?.mv_conc ?? 50.0,
-                    dntp_conc: idtAdvancedParams?.dntp_conc ?? 0.8,
-                    oligo_conc: idtAdvancedParams?.oligo_conc ?? 0.25,
+                    mg_conc: dvConc,
+                    mv_conc: mvConc,
+                    dntp_conc: dntpConc,
+                    oligo_conc: dnaConc / 1000,
                     idt_region: idtCredentials.region || 'eu'
                 })
             });
@@ -496,6 +536,30 @@ export default function FlankingPrimersPanel({
             console.error(err);
         } finally {
             setAnalyzingIndiv(prev => ({ ...prev, [seq]: false }));
+        }
+    };
+
+    const analyzeStriderIndividual = async (seq: string) => {
+        if (striderResultsIndiv[seq]) return;
+        try {
+            const aRes = await fetch(((import.meta.env.VITE_API_BASE as string) || "") + '/strider/analyze', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    p1_seq: seq,
+                    mg_conc: dvConc,
+                    mv_conc: mvConc,
+                    dntp_conc: dntpConc,
+                    oligo_conc: dnaConc / 1000,
+                })
+            });
+            if (!aRes.ok) throw new Error("Strider Analysis Failed");
+            const res = await aRes.json();
+            setStriderResultsIndiv(prev => ({ ...prev, [seq]: res.m1 }));
+        } catch (err) {
+            console.error(err);
+        } finally {
+            setAnalyzingStriderIndiv(prev => ({ ...prev, [seq]: false }));
         }
     };
 
@@ -520,39 +584,32 @@ export default function FlankingPrimersPanel({
 
     // Stable ref for values read inside the drag effect's mouseup closure.
     // The closure must not be recreated on every render while dragging.
-    const latestRef = useRef({ idtCredentials, selFwd, selRev, analyzeIndividual, runProductAnalysis, analyzePrimerP3 });
+    const latestRef = useRef({ idtCredentials, selFwd, selRev, analyzeIndividual, analyzeStriderIndividual, runProductAnalysis, runStriderPairAnalysis, analyzePrimerP3 });
     useEffect(() => {
-        latestRef.current = { idtCredentials, selFwd, selRev, analyzeIndividual, runProductAnalysis, analyzePrimerP3 };
+        latestRef.current = { idtCredentials, selFwd, selRev, analyzeIndividual, analyzeStriderIndividual, runProductAnalysis, runStriderPairAnalysis, analyzePrimerP3 };
     });
 
-    // Primitive keys: idtCredentials/idtAdvancedParams arrive as inline object literals
-    // (new identity every upstream render) — depending on them re-fired the pair
-    // analysis in an endless loop.
+    // Primitive keys: primer3 salt params (mvConc, dvConc, dntpConc, dnaConc)
+    // are panel-local state — concKey re-fires the pair effect when they change.
     const selFwdSeq = selFwd?.sequence;
     const selRevSeq = selRev?.sequence;
-    const credsKey = idtCredentials
-        ? `${idtCredentials.clientId}:${idtCredentials.clientSecret}:${idtCredentials.username}:${idtCredentials.region ?? ''}`
-        : '';
-    const concKey = [
-        idtAdvancedParams?.mg_conc,
-        idtAdvancedParams?.mv_conc,
-        idtAdvancedParams?.dntp_conc,
-        idtAdvancedParams?.oligo_conc,
-    ].join(':');
+    const concKey = [mvConc, dvConc, dntpConc, dnaConc].join(':');
     useEffect(() => {
         if (skipNextPairEffectRef.current) {
             // Reset flag and skip this invocation (debounced handler will run analysis)
             skipNextPairEffectRef.current = false;
             return;
         }
-        if (selFwdSeq && selRevSeq && idtCredentials) {
-            runProductAnalysis(selFwdSeq, selRevSeq);
+        if (selFwdSeq && selRevSeq) {
+            // Strider pair analysis fires automatically (local, no credentials needed).
+            runStriderPairAnalysis(selFwdSeq, selRevSeq);
         } else {
+            setStriderPairResults(null);
             setIdtResults(null);
             setAnalysisError(null);
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [selFwdSeq, selRevSeq, credsKey, concKey]);
+    }, [selFwdSeq, selRevSeq, concKey]);
 
     // Cleanup debounced timers on component unmount
     useEffect(() => {
@@ -595,7 +652,7 @@ export default function FlankingPrimersPanel({
         const items = (Array.isArray(data.raw) ? data.raw : [data.raw]).filter((item: unknown) => !!item && typeof item === 'object');
         const displayItems = items.slice(itemOffset, itemOffset + maxItems);
         if (displayItems.length === 0) return null;
-        const topDg = displayItems[0]?.DeltaG ?? data.DeltaG;
+        const topDg = displayItems[0]?.DeltaG ?? displayItems[0]?.Local_DeltaG ?? data.DeltaG;
 
         return (
             <div className="card p-3 flex flex-col gap-2">
@@ -620,19 +677,19 @@ export default function FlankingPrimersPanel({
                                         <div className="flex justify-between items-center">
                                             {maxItems > 1 && <span className="font-semibold text-[10px]">{title} {i + 1}</span>}
                                             <div className="flex gap-3 ml-auto">
-                                                {itemDg != null && <span>IDT ΔG: <b className={getIdtStatusColor(itemDg ?? undefined)}>{itemDg > 0 ? '+' : ''}{itemDg.toFixed(2)}</b></span>}
-                                                {itemLocalDg != null && <span>Strider ΔG: <b className={itemLocalDg <= 0 ? "text-amber-500" : "text-zinc-400"}>{itemLocalDg > 0 ? '+' : ''}{itemLocalDg.toFixed(2)}</b></span>}
+                                                <span>IDT ΔG: <b className={getIdtStatusColor(itemDg ?? undefined)}>{itemDg != null ? `${itemDg > 0 ? '+' : ''}${itemDg.toFixed(2)}` : '—'}</b></span>
+                                                <span>Strider ΔG: <b className={itemLocalDg != null ? (itemLocalDg <= 0 ? "text-amber-500" : "text-zinc-400") : "text-zinc-400"}>{itemLocalDg != null ? `${itemLocalDg > 0 ? '+' : ''}${itemLocalDg.toFixed(2)}` : '—'}</b></span>
                                             </div>
                                         </div>
                                         <div className="flex gap-3 justify-end opacity-80">
-                                            {itemIdtTm != null && <span>IDT Tm: <b className="text-zinc-500">{Number(itemIdtTm).toFixed(1)}°C</b></span>}
-                                            {itemLocalTm != null && <span>Strider Tm: <b className="text-zinc-500">{itemLocalTm.toFixed(1)}°C</b></span>}
+                                            <span>IDT Tm: <b className="text-zinc-500">{itemIdtTm != null ? `${Number(itemIdtTm).toFixed(1)}°C` : '—'}</b></span>
+                                            <span>Strider Tm: <b className="text-zinc-500">{itemLocalTm != null ? `${itemLocalTm.toFixed(1)}°C` : '—'}</b></span>
                                         </div>
                                     </div>
                                 )}
                                 {/* Structure below provenance. */}
                                 {hasStructure && (
-                                    <div className="bg-zinc-50 dark:bg-zinc-900/50 rounded p-2">
+                                    <div className="bg-zinc-50 dark:bg-zinc-900/50 rounded p-2 overflow-x-auto">
                                         {item.Sequence && item.Sequence.includes('&') ? (
                                             <DimerAscii seq={item.Sequence} dotBracket={item.DotBracket || item.Local_DotBracket} raw={item} />
                                         ) : (
@@ -781,7 +838,7 @@ export default function FlankingPrimersPanel({
                 };
 
                 // Set loading states immediately so the debounce window shows "Analyzing...".
-                const { idtCredentials: creds, selFwd: sf, selRev: sr, analyzeIndividual: analyzeInd, runProductAnalysis: runProd, analyzePrimerP3: p3Analyze } = latestRef.current;
+                const { selFwd: sf, selRev: sr, analyzeStriderIndividual: analyzeStriderInd, runStriderPairAnalysis: runStriderPair, analyzePrimerP3: p3Analyze } = latestRef.current;
 
                 (async () => {
                     try {
@@ -805,15 +862,15 @@ export default function FlankingPrimersPanel({
                     }
                 })();
 
-                if (creds && updated.sequence) {
+                if (updated.sequence) {
                     // Prevent immediate pair-effect from running
                     skipNextPairEffectRef.current = true;
 
-                    // Debounced individual analysis
+                    // Debounced individual Strider analysis (local, no credentials needed)
                     if (idtDebounceRef.current) clearTimeout(idtDebounceRef.current);
-                    setAnalyzingIndiv(prev => ({ ...prev, [updated.sequence]: true }));
+                    setAnalyzingStriderIndiv(prev => ({ ...prev, [updated.sequence]: true }));
                     idtDebounceRef.current = setTimeout(() => {
-                        analyzeInd(updated.sequence);
+                        analyzeStriderInd(updated.sequence);
                     }, 1500);
 
                     // Determine other primer sequence for pair analysis
@@ -822,9 +879,9 @@ export default function FlankingPrimersPanel({
                     const p2Seq = id === 'rev' ? updated.sequence : otherSeq;
                     if (p1Seq && p2Seq) {
                         if (idtPairDebounceRef.current) clearTimeout(idtPairDebounceRef.current);
-                        setIsAnalyzing(true);
+                        setIsAnalyzingStriderPair(true);
                         idtPairDebounceRef.current = setTimeout(() => {
-                            runProd(p1Seq, p2Seq);
+                            runStriderPair(p1Seq, p2Seq);
                         }, 1500);
                     }
                 }
@@ -957,9 +1014,11 @@ export default function FlankingPrimersPanel({
             revName,
             idtResultsIndiv,
             pairIdtResults: idtResults,
+            striderResultsIndiv,
+            pairStriderResults: striderPairResults,
         });
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [onPanelStateChange, rawSeq, flankWindow, optSize, minSize, maxSize, optTm, minTm, maxTm, minGc, maxGc, numReturn, showAdv, mvConc, dvConc, dntpConc, dnaConc, manualLeftStart, manualLeftEnd, manualRightStart, manualRightEnd, result, selFwd, selRev, fwdName, revName, idtResultsIndiv, idtResults]);
+    }, [onPanelStateChange, rawSeq, flankWindow, optSize, minSize, maxSize, optTm, minTm, maxTm, minGc, maxGc, numReturn, showAdv, mvConc, dvConc, dntpConc, dnaConc, manualLeftStart, manualLeftEnd, manualRightStart, manualRightEnd, result, selFwd, selRev, fwdName, revName, idtResultsIndiv, idtResults, striderResultsIndiv, striderPairResults]);
 
     const gappedOligoPrimers = oligoPrimers ? {
         p1: { start: mapToGapped(oligoPrimers.p1.start), end: mapToGapped(oligoPrimers.p1.end) },
@@ -1125,8 +1184,11 @@ export default function FlankingPrimersPanel({
         const copyKey = `${side}-${idx}`;
         const relPos = relativeMOLigoPos(p, side);
 
-        const indivResult = idtResultsIndiv[p.sequence];
-        const isAnal = analyzingIndiv[p.sequence];
+        const striderResult = striderResultsIndiv[p.sequence];
+        const idtResult = idtResultsIndiv[p.sequence];
+        const indivResult = idtResult || striderResult;
+        const isAnalStrider = analyzingStriderIndiv[p.sequence];
+        const isAnalIdt = analyzingIndiv[p.sequence];
 
         return (
             <div key={idx} className={`rounded-lg border p-3 text-xs transition-all ${isSelected ? 'border-teal-600/60 dark:border-teal-300/40 bg-teal-700/5 dark:bg-teal-300/10' : 'border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900'}`}>
@@ -1142,6 +1204,16 @@ export default function FlankingPrimersPanel({
                         )}
                     </div>
                     <div className="flex gap-1 flex-shrink-0">
+                        <button onClick={() => {
+                            if (!idtCredentials || isAnalIdt) return;
+                            setAnalyzingIndiv(prev => ({ ...prev, [p.sequence]: true }));
+                            analyzeIndividual(p.sequence);
+                        }}
+                            disabled={!idtCredentials || isAnalIdt}
+                            title={!idtCredentials ? 'Configure IDT credentials in settings' : 'Run IDT OligoAnalyzer (re-calculates with current params)'}
+                            className={`text-[10px] px-2 py-0.5 rounded-md border font-bold transition-all ${idtResult ? 'bg-blue-600 border-blue-600 text-white' : 'border-blue-600/40 text-blue-700 dark:text-blue-300 hover:bg-blue-700/10 dark:hover:bg-blue-300/10 disabled:opacity-40 disabled:cursor-not-allowed'}`}>
+                            {isAnalIdt ? '...' : idtResult ? 'IDT ↻' : 'IDT'}
+                        </button>
                         <button onClick={() => doCopy(p.sequence, copyKey)}
                             className="btn-secondary text-[10px] px-2 py-0.5">
                             {copyFb === copyKey ? 'Copied' : 'Copy'}
@@ -1154,10 +1226,10 @@ export default function FlankingPrimersPanel({
                             if (!isSelected) {
                                 if (side === 'fwd') { setSelFwd(p); setFwdName(p.name || ''); }
                                 else { setSelRev(p); setRevName(p.name || ''); }
-                                if (!idtResultsIndiv[p.sequence]) {
-                                    setAnalyzingIndiv(prev => ({ ...prev, [p.sequence]: true }));
+                                if (!striderResultsIndiv[p.sequence]) {
+                                    setAnalyzingStriderIndiv(prev => ({ ...prev, [p.sequence]: true }));
                                 }
-                                analyzeIndividual(p.sequence);
+                                analyzeStriderIndividual(p.sequence);
                             } else {
                                 if (side === 'fwd') { setSelFwd(null); setFwdName(''); }
                                 else { setSelRev(null); setRevName(''); }
@@ -1171,7 +1243,7 @@ export default function FlankingPrimersPanel({
                 <div className="grid grid-cols-7 gap-2 text-[10px] text-zinc-500 dark:text-zinc-400">
                     <div><span className="font-bold text-zinc-600 dark:text-zinc-300">Len</span><br />{p.length} bp</div>
                     <div><span className="font-bold text-zinc-600 dark:text-zinc-300">P3 Tm</span><br />{p.tm ?? p.primer3?.tm ?? '—'}°C</div>
-                    <div><span className="font-bold text-zinc-600 dark:text-zinc-300" title="IDT Tm">IDT Tm</span><br />{indivResult?.analyze ? (extractTm(indivResult.analyze)?.toFixed(1) || 'N/A') + '°C' : '—'}</div>
+                    <div><span className="font-bold text-zinc-600 dark:text-zinc-300" title="IDT Tm">IDT Tm</span><br />{idtResult?.analyze ? (extractTm(idtResult.analyze)?.toFixed(1) || 'N/A') + '°C' : '—'}</div>
                     <div><span className="font-bold text-zinc-600 dark:text-zinc-300" title="Strider duplex Tm">Strider Tm</span><br />{p.tm_strider != null ? `${p.tm_strider.toFixed(1)}°C` : '—'}</div>
                     <div><span className="font-bold text-zinc-600 dark:text-zinc-300">GC</span><br />{p.gc_percent ?? p.primer3?.gc_percent ?? '—'}%</div>
                     <div><span className="font-bold text-zinc-600 dark:text-zinc-300">Hairpin Tm</span><br /><span className={p.hairpin.structure_found ? 'text-amber-500' : 'text-emerald-500'}>{p.hairpin.structure_found ? `${p.primer3?.hairpin_th ?? '—'}°C` : 'None'}</span></div>
@@ -1182,11 +1254,9 @@ export default function FlankingPrimersPanel({
                     <div className="mt-3 pt-3 border-t border-emerald-200 dark:border-emerald-800/30">
                         <div className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-widest mb-2 flex items-center gap-2">
                             <span>Structural Analysis (IDT + Strider)</span>
-                            {isAnal && <div className="w-3 h-3 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />}
+                            {(isAnalStrider || isAnalIdt) && <div className="w-3 h-3 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />}
                         </div>
-                        {!idtCredentials ? (
-                            <div className="text-[10px] text-zinc-400 italic">Configure IDT credentials in settings to view detailed structures.</div>
-                        ) : indivResult ? (
+                        {indivResult ? (
                             <div className="flex flex-col gap-4">
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                     {renderResultCard("Hairpin 1", indivResult.hairpin, 1, 0)}
@@ -1194,10 +1264,12 @@ export default function FlankingPrimersPanel({
                                 </div>
                                 {renderResultCard("Self-Dimer", indivResult.self_dimer, 5)}
                             </div>
-                        ) : isAnal ? (
-                            <div className="text-[10px] text-emerald-500/70">Analyzing via IDT...</div>
+                        ) : isAnalStrider ? (
+                            <div className="text-[10px] text-emerald-500/70">Analyzing via Strider...</div>
+                        ) : isAnalIdt ? (
+                            <div className="text-[10px] text-blue-500/70">Analyzing via IDT...</div>
                         ) : (
-                            <div className="text-[10px] text-red-400">Analysis failed.</div>
+                            <div className="text-[10px] text-zinc-400 italic">Click "Use" to run structural analysis.</div>
                         )}
                     </div>
                 )}
@@ -1401,7 +1473,7 @@ export default function FlankingPrimersPanel({
                                         </span>
                                     </div>
                                     <div className="flex items-center gap-3 text-zinc-400">
-                                        {isAnalyzing && <div className="w-4 h-4 border-2 border-zinc-300 dark:border-zinc-700 border-t-zinc-700 dark:border-t-zinc-300 rounded-full animate-spin" />}
+                                        {(isAnalyzing || isAnalyzingStriderPair) && <div className="w-4 h-4 border-2 border-zinc-300 dark:border-zinc-700 border-t-zinc-700 dark:border-t-zinc-300 rounded-full animate-spin" />}
                                         <svg className={`w-4 h-4 transform transition-transform ${isAnalysisExpanded ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                                         </svg>
@@ -1410,16 +1482,26 @@ export default function FlankingPrimersPanel({
 
                                 {isAnalysisExpanded && (
                                     <div className="p-5 border-t border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
-                                        {!idtCredentials ? (
-                                            <div className="text-sm text-zinc-500 italic">IDT Credentials required for advanced secondary structure analysis. Configure them in settings.</div>
-                                        ) : analysisError ? (
+                                        {analysisError ? (
                                             <div className="text-sm text-red-500 font-bold">Analysis Error: {analysisError}</div>
-                                        ) : idtResults ? (
-                                            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 ">
-                                                {renderResultCard("Left Primer Stability (Hairpin/Self)", idtResults.m1.hairpin)}
-                                                {renderResultCard("Right Primer Stability (Hairpin/Self)", idtResults.m2.hairpin)}
-                                                {renderResultCard("HeteroDimer Pairwise", idtResults.pairwise)}
+                                        ) : (idtResults || striderPairResults) ? (
+                                            <div>
+                                                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                                    {renderResultCard("Left Primer Stability (Hairpin/Self)", (idtResults || striderPairResults).m1.hairpin)}
+                                                    {renderResultCard("Right Primer Stability (Hairpin/Self)", (idtResults || striderPairResults).m2.hairpin)}
+                                                    {renderResultCard("HeteroDimer Pairwise", (idtResults || striderPairResults).pairwise)}
+                                                </div>
+                                                {idtCredentials && !idtResults && !isAnalyzing && (
+                                                    <div className="mt-4 flex justify-center">
+                                                        <button onClick={() => runProductAnalysis(selFwdSeq!, selRevSeq!)}
+                                                            className="text-xs px-3 py-1.5 rounded-md border border-blue-600/40 text-blue-700 dark:text-blue-300 hover:bg-blue-700/10 dark:hover:bg-blue-300/10 font-bold transition-all">
+                                                            Run IDT Pair Analysis
+                                                        </button>
+                                                    </div>
+                                                )}
                                             </div>
+                                        ) : isAnalyzingStriderPair ? (
+                                            <div className="text-sm text-zinc-400">Analyzing via Strider...</div>
                                         ) : (
                                             <div className="text-sm text-zinc-400">Waiting for analysis...</div>
                                         )}
