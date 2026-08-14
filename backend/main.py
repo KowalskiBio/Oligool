@@ -604,7 +604,7 @@ class IdtAnalyzeRequest(BaseModel):
     mg_conc: float = 10.0
     mv_conc: float = 50.0
     dntp_conc: float = 0.8
-    oligo_conc: float = 0.2
+    oligo_conc: float = 0.25
     idt_region: str = "eu"
 
 
@@ -621,142 +621,79 @@ def _idt_host(region: str) -> str:
     return "www.idtdna.com" if region.lower() == "us" else "eu.idtdna.com"
 
 
-@app.post("/idt/token")
-async def get_idt_token(request: IdtAuthRequest):
-    import requests
-    import base64
-    import logging
-
-    logger = logging.getLogger(__name__)
-
-    host = _idt_host(request.idt_region)
-    url = f"https://{host}/IdentityServer/connect/token"
-
-    try:
-        auth_bytes = f"{request.client_id}:{request.client_secret}".encode("utf-8")
-        auth_string = base64.b64encode(auth_bytes).decode("ascii")
-
-        headers = {
-            "Content-Type": "application/x-www-form-urlencoded",
-            "Authorization": "Basic " + auth_string,
-            "Accept": "application/json"
-        }
-
-        payload = {
-            "grant_type": "password",
-            "scope": "test",
-            "username": request.username,
-            "password": request.password,
-        }
-
-        logger.info("Requesting IDT token for user %s on region %s", request.username, request.idt_region)
-        response = requests.post(url, data=payload, headers=headers, timeout=15)
-
-        if not response.ok:
-            logger.warning("IDT token request failed for %s on %s: %s %s", request.username, request.idt_region, response.status_code, response.text[:500])
-            try:
-                err_data = response.json()
-                detail = err_data.get("error_description") or err_data.get("error") or response.text
-            except Exception:
-                detail = response.text
-            raise HTTPException(status_code=response.status_code, detail=f"IDT Auth Error: {detail}")
-
-        return response.json()
-
-    except Exception as e:
-        if isinstance(e, HTTPException):
-            raise e
-        logger.exception("IDT token request raised exception for %s on %s", request.username, request.idt_region)
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.post("/idt/analyze")
-async def analyze_idt_oligos(request: IdtAnalyzeRequest):
-    import requests
-    session = requests.Session()
-    session.headers.update({
-        "Authorization": f"Bearer {request.token}",
-        "Content-Type": "application/json",
-        "Accept": "application/json"
-    })
-    host = _idt_host(request.idt_region)
-    base_url = f"https://{host}/restapi/v1/OligoAnalyzer"
-
-    # Limit concurrency to avoid being flagged/throttled by IDT
-    semaphore = asyncio.Semaphore(3)
-
-    def hit_idt(endpoint, seq1, seq2=None):
-        url = f"{base_url}/{endpoint}"
-        params = {}
-        # Default payload with salt parameters for all structure types
-        payload = {
-            "NaConc": request.mv_conc,
-            "MgConc": request.mg_conc,
-            "dNTPsConc": request.dntp_conc,
-            "OligoConc": request.oligo_conc,
-            "NucleotideType": "DNA"
-        }
-
-        if endpoint == "Hairpin":
-            payload["Sequence"] = seq1
-            # IDT's web OligoAnalyzer defaults the hairpin folding temperature to
-            # 25 °C. Match it so our ΔG/Tm correspond to the website's values.
-            payload["FoldingTemp"] = request.temp if hasattr(request, "temp") and request.temp is not None else 25.0
-        elif endpoint == "SelfDimer" or endpoint == "HeteroDimer":
-            # Pass sequences precisely as 'primary' and 'secondary' query params for proper IDT binding
-            params = {"primary": seq1}
-            if seq2: params["secondary"] = seq2
-            # Note: Dimers often also expect salt params in the body for ΔG calculation
-        elif endpoint == "Analyze":
-            payload["Sequence"] = seq1
-            
-        try:
-            # All IDT endpoints typically require POST
-            response = session.post(url, json=payload, params=params, timeout=30)
-            
-            if not response.ok:
-                return {"error": f"IDT {endpoint} Error: {response.status_code} - {response.text}"}
-            return response.json()
-        except Exception as e:
-            return {"error": str(e)}
-
-    # Use SPECIFIC endpoints for each analysis type in PARALLEL to prevent extreme timeouts.
-    async def hit_idt_async(endpoint, seq1, seq2=None):
-        async with semaphore:
-            return await asyncio.to_thread(hit_idt, endpoint, seq1, seq2)
-
-    try:
-        results = await asyncio.gather(
-            hit_idt_async("Hairpin", request.p1_seq),
-            hit_idt_async("SelfDimer", request.p1_seq),
-            hit_idt_async("Analyze", request.p1_seq),
-            hit_idt_async("Hairpin", request.p2_seq),
-            hit_idt_async("SelfDimer", request.p2_seq),
-            hit_idt_async("Analyze", request.p2_seq),
-            hit_idt_async("HeteroDimer", request.p1_seq, request.p2_seq)
-        )
-        m1_hairpin, m1_selfdimer, m1_analyze, m2_hairpin, m2_selfdimer, m2_analyze, hetero = results
-    except Exception as e:
-        return {"error": f"Parallel execution failed: {str(e)}"}
-
-    def _extract_idt_delta_g(obj):
-        """Extract IDT DeltaG from a dict (ignoring ViennaRNA_DeltaG), dropping
-        IDT's placeholder values for unfoldable sequences (e.g. +997.97 kcal/mol)."""
-        if not isinstance(obj, dict):
-            return None
-        for k in ["DeltaG", "deltaG", "deltag", "delta_g", "dG", "Energy", "energy"]:
-            if k in obj:
-                try:
-                    val = obj[k]
-                    if val is not None:
-                        fval = float(val)
-                        # Real oligo hairpin/dimer ΔG sits well inside (-200, +50);
-                        # anything outside is a sentinel, not a measurement.
-                        return fval if -200.0 < fval < 50.0 else None
-                except (ValueError, TypeError):
-                    pass
+def _extract_idt_delta_g(obj):
+    """Extract IDT DeltaG from a dict (ignoring ViennaRNA_DeltaG), dropping
+    IDT's placeholder values for unfoldable sequences (e.g. +997.97 kcal/mol)."""
+    if not isinstance(obj, dict):
         return None
+    for k in ["DeltaG", "deltaG", "deltag", "delta_g", "dG", "Energy", "energy"]:
+        if k in obj:
+            try:
+                val = obj[k]
+                if val is not None:
+                    fval = float(val)
+                    # Real oligo hairpin/dimer ΔG sits well inside (-200, +50);
+                    # anything outside is a sentinel, not a measurement.
+                    return fval if -200.0 < fval < 50.0 else None
+            except (ValueError, TypeError):
+                pass
+    return None
 
+
+def _is_single_stem(structure: str) -> bool:
+    """Check that a dot-bracket structure is a single unbranched stem (no multiloop).
+
+    All base pairs must be properly nested with strictly increasing left indices
+    and strictly decreasing right indices.  Multiloops (multiple sibling stems)
+    and pseudoknots are rejected — the frontend's HairpinSVG can only draw
+    single-stem hairpins.
+    """
+    if not structure or '(' not in structure:
+        return False
+    stack: list[int] = []
+    pairs: list[tuple[int, int]] = []
+    for i, c in enumerate(structure):
+        if c == '(':
+            stack.append(i)
+        elif c == ')':
+            if not stack:
+                return False
+            pairs.append((stack.pop(), i))
+        elif c != '.' and c != '&':
+            return False
+    if stack:
+        return False
+    if not pairs:
+        return False
+    for k in range(1, len(pairs)):
+        if not (pairs[k][0] > pairs[k - 1][0] and pairs[k][1] < pairs[k - 1][1]):
+            return False
+    return True
+
+
+def _run_strider_analysis(
+    p1_seq: str,
+    p2_seq: str,
+    mv_conc: float,
+    mg_conc: float,
+    dntp_conc: float,
+    oligo_conc: float,
+    base_temp: float = 25.0,
+    idt_m1_hairpin=None,
+    idt_m1_selfdimer=None,
+    idt_m1_analyze=None,
+    idt_m2_hairpin=None,
+    idt_m2_selfdimer=None,
+    idt_m2_analyze=None,
+    idt_hetero=None,
+):
+    """Run strider-dna folding analysis on one or two primer sequences.
+
+    When idt_* kwargs are None, only Strider fields are populated (Local_DeltaG,
+    Local_Tm, Local_DotBracket).  When real IDT data is passed, both IDT and
+    Strider fields are enriched.  Returns the {m1, m2, pairwise} response shape
+    used by both /idt/analyze and /strider/analyze.
+    """
     # Use strider-dna for Mg2+-aware dot-bracket structure, local ΔG, and Tm
     try:
         from strider import ThermoEngine
@@ -764,10 +701,9 @@ async def analyze_idt_oligos(request: IdtAnalyzeRequest):
         from strider.thermo.dimer_thermo import dimer_thermo  # strider >= 0.3.5
         from strider.thermo.dimer_thermo import dimer_thermo_subopt  # strider >= 0.6.0
 
-        base_temp = request.temp if hasattr(request, "temp") and request.temp is not None else 25.0
-        mv_m = request.mv_conc / 1000.0
-        effective_mg = max(0.0, request.mg_conc - request.dntp_conc) / 1000.0
-        oligo_conc_m = getattr(request, "oligo_conc", 0.25) / 1e6
+        mv_m = mv_conc / 1000.0
+        effective_mg = max(0.0, mg_conc - dntp_conc) / 1000.0
+        oligo_conc_m = oligo_conc / 1e6
 
         eng = _thermo_engine_cached('dna', base_temp, mv_m, effective_mg)
 
@@ -914,6 +850,15 @@ async def analyze_idt_oligos(request: IdtAnalyzeRequest):
                         "asciiStructure", "visualPrint", "Bonds",
                     )):
                         item["DotBracket"] = viz_struct
+                else:
+                    # Strider MFE was flat (no stable structure found locally).
+                    # IDT may still have returned a structure under a different
+                    # key — normalize it to DotBracket so the frontend can draw it.
+                    for k in ("AsciiStructure", "VisualPrint", "asciiStructure", "visualPrint"):
+                        val = item.get(k)
+                        if val and isinstance(val, str) and '(' in val:
+                            item["DotBracket"] = val
+                            break
                 idt_dg = _extract_idt_delta_g(item)
                 # Normalize IDT ΔG to the "DeltaG" key so the frontend can read
                 # item.DeltaG regardless of which key IDT used (dG, deltaG, etc.)
@@ -969,13 +914,19 @@ async def analyze_idt_oligos(request: IdtAnalyzeRequest):
 
             return final_results if is_list else final_results[0]
 
-        m1_hairpin = add_strider_analysis(request.p1_seq, m1_hairpin)
-        m1_selfdimer = add_strider_analysis(request.p1_seq, m1_selfdimer, seq2=request.p1_seq)
-        m2_hairpin = add_strider_analysis(request.p2_seq, m2_hairpin)
-        m2_selfdimer = add_strider_analysis(request.p2_seq, m2_selfdimer, seq2=request.p2_seq)
-        hetero = add_strider_analysis(request.p1_seq, hetero, seq2=request.p2_seq)
+        m1_hairpin = add_strider_analysis(p1_seq, idt_m1_hairpin if idt_m1_hairpin is not None else [{}])
+        m1_selfdimer = add_strider_analysis(p1_seq, idt_m1_selfdimer if idt_m1_selfdimer is not None else [{}], seq2=p1_seq)
+        m2_hairpin = add_strider_analysis(p2_seq, idt_m2_hairpin if idt_m2_hairpin is not None else [{}])
+        m2_selfdimer = add_strider_analysis(p2_seq, idt_m2_selfdimer if idt_m2_selfdimer is not None else [{}], seq2=p2_seq)
+        hetero = add_strider_analysis(p1_seq, idt_hetero if idt_hetero is not None else [{}], seq2=p2_seq)
     except Exception:
         logging.exception("strider-dna optimization error")
+        # Fall back to raw IDT data (or empty) if Strider fails entirely.
+        m1_hairpin = idt_m1_hairpin if idt_m1_hairpin is not None else [{}]
+        m1_selfdimer = idt_m1_selfdimer if idt_m1_selfdimer is not None else [{}]
+        m2_hairpin = idt_m2_hairpin if idt_m2_hairpin is not None else [{}]
+        m2_selfdimer = idt_m2_selfdimer if idt_m2_selfdimer is not None else [{}]
+        hetero = idt_hetero if idt_hetero is not None else [{}]
 
     # Each specific endpoint (Hairpin, SelfDimer, HeteroDimer) should return
     # DeltaG directly in its response. We use find_dg to robustly extract it
@@ -988,12 +939,12 @@ async def analyze_idt_oligos(request: IdtAnalyzeRequest):
             return {"DeltaG": None, "raw": None}
         if isinstance(data, dict) and "error" in data:
             return data
-        
+
         # If response is an array (multiple structures found), return TOP 5 with best DeltaG as summary
         if isinstance(data, list):
             if len(data) == 0:
                 return {"DeltaG": None, "raw": data}
-            
+
             # IDT-bearing items first (by IDT ΔG), then strider-only candidates
             # (by Local ΔG). Mixing both engines on one ΔG scale can rank a
             # strider-only fold above IDT's best and leave the summary empty.
@@ -1021,27 +972,204 @@ async def analyze_idt_oligos(request: IdtAnalyzeRequest):
                 "all_Local_Tm": top_local_tms,
                 "raw": top_items
             }
-        
+
         # If response is a dict, DeltaG and Tm should be at top level
         if isinstance(data, dict):
             dg = _extract_idt_delta_g(data)
             return {"DeltaG": dg, "raw": data}
-        
+
         return {"DeltaG": None, "raw": None}
 
     return {
         "m1": {
             "hairpin": find_dg_and_raw(m1_hairpin),
             "self_dimer": find_dg_and_raw(m1_selfdimer),
-            "analyze": m1_analyze
+            "analyze": idt_m1_analyze
         },
         "m2": {
             "hairpin": find_dg_and_raw(m2_hairpin),
             "self_dimer": find_dg_and_raw(m2_selfdimer),
-            "analyze": m2_analyze
+            "analyze": idt_m2_analyze
         },
         "pairwise": find_dg_and_raw(hetero)
     }
+
+
+@app.post("/idt/token")
+async def get_idt_token(request: IdtAuthRequest):
+    import requests
+    import base64
+    import logging
+
+    logger = logging.getLogger(__name__)
+
+    host = _idt_host(request.idt_region)
+    url = f"https://{host}/IdentityServer/connect/token"
+
+    try:
+        auth_bytes = f"{request.client_id}:{request.client_secret}".encode("utf-8")
+        auth_string = base64.b64encode(auth_bytes).decode("ascii")
+
+        headers = {
+            "Content-Type": "application/x-www-form-urlencoded",
+            "Authorization": "Basic " + auth_string,
+            "Accept": "application/json"
+        }
+
+        payload = {
+            "grant_type": "password",
+            "scope": "test",
+            "username": request.username,
+            "password": request.password,
+        }
+
+        logger.info("Requesting IDT token for user %s on region %s", request.username, request.idt_region)
+        response = requests.post(url, data=payload, headers=headers, timeout=15)
+
+        if not response.ok:
+            logger.warning("IDT token request failed for %s on %s: %s %s", request.username, request.idt_region, response.status_code, response.text[:500])
+            try:
+                err_data = response.json()
+                detail = err_data.get("error_description") or err_data.get("error") or response.text
+            except Exception:
+                detail = response.text
+            raise HTTPException(status_code=response.status_code, detail=f"IDT Auth Error: {detail}")
+
+        return response.json()
+
+    except Exception as e:
+        if isinstance(e, HTTPException):
+            raise e
+        logger.exception("IDT token request raised exception for %s on %s", request.username, request.idt_region)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/idt/analyze")
+async def analyze_idt_oligos(request: IdtAnalyzeRequest):
+    import requests
+    session = requests.Session()
+    session.headers.update({
+        "Authorization": f"Bearer {request.token}",
+        "Content-Type": "application/json",
+        "Accept": "application/json"
+    })
+    host = _idt_host(request.idt_region)
+    base_url = f"https://{host}/restapi/v1/OligoAnalyzer"
+
+    # Limit concurrency to avoid being flagged/throttled by IDT
+    semaphore = asyncio.Semaphore(3)
+
+    def hit_idt(endpoint, seq1, seq2=None):
+        url = f"{base_url}/{endpoint}"
+        params = {}
+        # Default payload with salt parameters for all structure types
+        payload = {
+            "NaConc": request.mv_conc,
+            "MgConc": request.mg_conc,
+            "dNTPsConc": request.dntp_conc,
+            "OligoConc": request.oligo_conc,
+            "NucleotideType": "DNA"
+        }
+
+        if endpoint == "Hairpin":
+            payload["Sequence"] = seq1
+            # IDT's web OligoAnalyzer defaults the hairpin folding temperature to
+            # 25 °C. Match it so our ΔG/Tm correspond to the website's values.
+            payload["FoldingTemp"] = request.temp if hasattr(request, "temp") and request.temp is not None else 25.0
+        elif endpoint == "SelfDimer" or endpoint == "HeteroDimer":
+            # Pass sequences precisely as 'primary' and 'secondary' query params for proper IDT binding
+            params = {"primary": seq1}
+            if seq2: params["secondary"] = seq2
+            # Note: Dimers often also expect salt params in the body for ΔG calculation
+        elif endpoint == "Analyze":
+            payload["Sequence"] = seq1
+
+        # Log the exact request for the Hairpin endpoint so users can compare
+        # with the IDT website's OligoAnalyzer settings.
+        if endpoint == "Hairpin":
+            logging.info(
+                "IDT Hairpin request — seq=%s NaConc=%s MgConc=%s dNTPsConc=%s OligoConc=%s FoldingTemp=%s",
+                seq1, request.mv_conc, request.mg_conc, request.dntp_conc, request.oligo_conc,
+                payload.get("FoldingTemp"),
+            )
+
+        try:
+            # All IDT endpoints typically require POST
+            response = session.post(url, json=payload, params=params, timeout=30)
+
+            if not response.ok:
+                return {"error": f"IDT {endpoint} Error: {response.status_code} - {response.text}"}
+            result = response.json()
+            if endpoint == "Hairpin":
+                logging.info("IDT Hairpin response — %s", json.dumps(result)[:500])
+            return result
+        except Exception as e:
+            return {"error": str(e)}
+
+    # Use SPECIFIC endpoints for each analysis type in PARALLEL to prevent extreme timeouts.
+    async def hit_idt_async(endpoint, seq1, seq2=None):
+        async with semaphore:
+            return await asyncio.to_thread(hit_idt, endpoint, seq1, seq2)
+
+    try:
+        results = await asyncio.gather(
+            hit_idt_async("Hairpin", request.p1_seq),
+            hit_idt_async("SelfDimer", request.p1_seq),
+            hit_idt_async("Analyze", request.p1_seq),
+            hit_idt_async("Hairpin", request.p2_seq),
+            hit_idt_async("SelfDimer", request.p2_seq),
+            hit_idt_async("Analyze", request.p2_seq),
+            hit_idt_async("HeteroDimer", request.p1_seq, request.p2_seq)
+        )
+        m1_hairpin, m1_selfdimer, m1_analyze, m2_hairpin, m2_selfdimer, m2_analyze, hetero = results
+    except Exception as e:
+        return {"error": f"Parallel execution failed: {str(e)}"}
+
+    return _run_strider_analysis(
+        p1_seq=request.p1_seq,
+        p2_seq=request.p2_seq,
+        mv_conc=request.mv_conc,
+        mg_conc=request.mg_conc,
+        dntp_conc=request.dntp_conc,
+        oligo_conc=getattr(request, "oligo_conc", 0.25),
+        base_temp=request.temp if hasattr(request, "temp") and request.temp is not None else 25.0,
+        idt_m1_hairpin=m1_hairpin,
+        idt_m1_selfdimer=m1_selfdimer,
+        idt_m1_analyze=m1_analyze,
+        idt_m2_hairpin=m2_hairpin,
+        idt_m2_selfdimer=m2_selfdimer,
+        idt_m2_analyze=m2_analyze,
+        idt_hetero=hetero,
+    )
+
+
+class StriderAnalyzeRequest(BaseModel):
+    p1_seq: str
+    p2_seq: Optional[str] = None
+    mg_conc: float = 10.0
+    mv_conc: float = 50.0
+    dntp_conc: float = 0.8
+    oligo_conc: float = 0.25
+
+
+@app.post("/strider/analyze")
+async def analyze_strider_oligos(request: StriderAnalyzeRequest):
+    """Local-only strider-dna folding analysis (hairpin, self-dimer, hetero-dimer).
+
+    No IDT API call, no credentials needed.  Returns the same {m1, m2, pairwise}
+    shape as /idt/analyze, but with IDT-specific fields (DeltaG, IDT_Tm) null
+    and only Strider fields (Local_DeltaG, Local_Tm, Local_DotBracket) populated.
+    When p2_seq is omitted, only m1 (hairpin + self-dimer) is computed.
+    """
+    p2 = request.p2_seq or request.p1_seq  # self-pair fallback so m2 is always valid
+    return _run_strider_analysis(
+        p1_seq=request.p1_seq,
+        p2_seq=p2,
+        mv_conc=request.mv_conc,
+        mg_conc=request.mg_conc,
+        dntp_conc=request.dntp_conc,
+        oligo_conc=request.oligo_conc,
+    )
 
 
 # ────────────────────────────────────────────────────────────────
