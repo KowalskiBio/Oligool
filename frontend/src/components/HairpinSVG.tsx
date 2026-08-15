@@ -3,7 +3,7 @@
  * as a clean 2D SVG diagram.
  *
  * Supports a single (unbranched) hairpin including bulges and internal loops,
- * e.g. ..((.((((.....)))).))  — the gap between stems is bowed out to the side.
+ * e.g. ..((.((((.....)))).))  the gap between stems is bowed out to the side.
  *
  * Backbone is drawn as one continuous polyline through every base in sequence
  * order, so connectivity is correct regardless of bulges. Base pairs are drawn

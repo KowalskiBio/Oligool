@@ -2,7 +2,7 @@
 //
 // A session captures everything needed to resume work without re-running the
 // (slow) BLAST + MAFFT pipeline: the search inputs, the BLAST hits, the MSA
-// alignment, and — most importantly — the designed oligos, their pinned
+// alignment, and most importantly, the designed oligos, their pinned
 // positions, and the flanking-primer work: the MSA highlight selection plus the
 // full FlankingPrimersPanel state (designed candidates, the primers the user
 // clicked "Use" on, their names, design parameters, manual regions, and any
@@ -451,7 +451,7 @@ export function migrateSession(data: unknown): OligoolSession {
     };
 
     if (!session.results.alignment) {
-        throw new Error('Session file is missing its alignment — nothing to restore.');
+        throw new Error('Session file is missing its alignment. Nothing to restore.');
     }
 
     return session;

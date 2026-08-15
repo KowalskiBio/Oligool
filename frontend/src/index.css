@@ -86,7 +86,7 @@
 }
 
 @media print {
-  /* Keep body bg white — otherwise it propagates to the PDF page canvas (gray band on last page) */
+  /* Keep body bg white; otherwise it propagates to the PDF page canvas (gray band on last page) */
   html, body {
     background: white !important;
   }

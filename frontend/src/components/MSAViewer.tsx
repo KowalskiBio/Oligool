@@ -33,16 +33,16 @@ interface MSAViewerProps {
     onVisibleQueryChange?: (data: { id: string; seq: string; start: number; end: number; fullSeq: string; ungappedOffset: number }) => void;
     jobName?: string;
     primers?: { p1: { start: number, end: number }, p2: { start: number, end: number } } | null;
-    /** Flanking primers designed in the lower panel — drawn as distinct bars in the minimap */
+    /** Flanking primers designed in the lower panel, drawn as distinct bars in the minimap */
     flankingPrimers?: { fwd: { start: number; end: number } | null; rev: { start: number; end: number } | null } | null;
     isDarkMode?: boolean;
     /** When set, MSA will zoom/pan to show these global gapped column indices */
     navigateTarget?: { colStart: number; colEnd: number; ts: number } | null;
     /** Called when user drag-selects a region in the GC%/MSA header for oligo placement */
     onOligoRegionSelect?: (startCol: number, endCol: number) => void;
-    /** Called when user clicks a clean region proposed by autofind — zoom to that region */
+    /** Called when user clicks a clean region proposed by autofind: zoom to that region */
     onAutofindRegionSelect?: (startCol: number, endCol: number) => void;
-    /** Called when user clicks on a flanking primer bar in the minimap — zoom to that primer */
+    /** Called when user clicks on a flanking primer bar in the minimap: zoom to that primer */
     onFlankingPrimerClick?: (colStart: number, colEnd: number) => void;
     selectedAccessions?: Set<string>;
     onSelectionChange?: (accessions: Set<string>) => void;
@@ -733,7 +733,7 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
             ctx.fillRect(p2x, mmRulerY + mmRulerH - 4, p2w, 4);
         }
 
-        // Flanking primers (designed in lower panel) — drawn above the oligo bars
+        // Flanking primers (designed in lower panel), drawn above the oligo bars
         if (flankingPrimersA) {
             const mmRulerY = MINIMAP_GC_H;
             if (flankingPrimersA.fwd) {
@@ -881,7 +881,7 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
         };
     }, []);
 
-    // ── Minimap: original zoom-only behaviour — no changes here ──────────────
+    // Minimap: original zoom-only behaviour, no changes here
     const handleMinimapMouseDown = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
         const canvas = minimapRef.current;
         if (!canvas) return;
@@ -1090,7 +1090,7 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
                     ctx.fillText(ch, x + cellW / 2, y + ROW_HEIGHT / 2);
                 }
 
-                // Inserted hit bases don't occupy anchor columns — mark the insertion point
+                // Inserted hit bases don't occupy anchor columns; mark the insertion point
                 // with a blue vertical bar; longer inserts get horizontal extent lines above
                 // and below, extending only to the right of the bar (where the inserted
                 // sequence would sit) so the rows are never prolonged.
@@ -1428,7 +1428,7 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
         ctx.fillStyle = isDark ? '#334155' : '#e2e8f0';
         ctx.fillRect(labelWidth - 1, scrollTop, 1, canvasH);
 
-        // GC track label (sticky) — right-aligned so they sit immediately left of the bars
+        // GC track label (sticky), right-aligned so they sit immediately left of the bars
         ctx.fillStyle = isDark ? '#94a3b8' : '#64748b';
         ctx.font = '10px ui-monospace, SFMono-Regular, monospace';
         ctx.textAlign = 'right';
@@ -1847,10 +1847,10 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
 
         // Field-click on a sequence row
         if (autofindActive) {
-            // Analysis! mode — set the autofind boundary
+            // Analysis! mode: set the autofind boundary
             setAutofindBoundaryRow(row);
         } else if (row > 0) {
-            // Kowalski mode — open the NCBI record modal for the clicked hit,
+            // Kowalski mode: open the NCBI record modal for the clicked hit,
             // unless the click landed on a flanking primer (those are handled
             // by the mousedown→mouseup drag/click logic and should zoom, not
             // open a modal).
@@ -1896,7 +1896,7 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
                         <button
                             onClick={() => setAutofindActive((v) => !v)}
                             className={`btn-secondary ${autofindActive ? 'icon-btn-active' : ''}`}
-                            title={autofindActive ? 'Analysis mode on — click a hit to set the autofind boundary' : 'Analysis mode off — click a hit to open its NCBI record'}
+                            title={autofindActive ? 'Analysis mode on: click a hit to set the autofind boundary' : 'Analysis mode off: click a hit to open its NCBI record'}
                         >
                             {autofindActive ? 'Analysis!' : 'Kowalski'}
                         </button>
@@ -2268,7 +2268,7 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
                                             parts.push('log$=nuclalign', `blast_rank=${range.rank}`, `RID=${blastRid}`);
                                         }
                                         // sstart/send come straight from BLAST and are reported in subject-strand
-                                        // order (sstart > send for minus-strand hits) — NCBI's from/to params
+                                        // order (sstart > send for minus-strand hits); NCBI's from/to params
                                         // always need the lower coordinate first, regardless of strand.
                                         const from = Math.min(range.sstart, range.send);
                                         const to = Math.max(range.sstart, range.send);

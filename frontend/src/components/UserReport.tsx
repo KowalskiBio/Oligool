@@ -50,7 +50,7 @@ function buildReportHtml(opts: {
     const imgTags = images
         .map(
             (img, i) =>
-                `<figure><img src="${img.dataUrl}" alt="${escapeHtml(img.name)}" /><figcaption>Image ${i + 1} — ${escapeHtml(img.name)}</figcaption></figure>`
+                `<figure><img src="${img.dataUrl}" alt="${escapeHtml(img.name)}" /><figcaption>Image ${i + 1}: ${escapeHtml(img.name)}</figcaption></figure>`
         )
         .join('\n');
 
@@ -72,7 +72,7 @@ function buildReportHtml(opts: {
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>${safeJob} — Oligool Report</title>
+<title>${safeJob}: Oligool Report</title>
 <style>
   :root { color-scheme: light dark; }
   body {
@@ -228,7 +228,7 @@ export default function UserReport({ open, onClose, defaultSequence, jobName }: 
 
     const handleSave = useCallback(() => {
         if (!sequence.trim() && !notes.trim() && images.length === 0) {
-            setStatus({ kind: 'err', text: 'Nothing to save — add a sequence, notes, or images first.' });
+            setStatus({ kind: 'err', text: 'Nothing to save. Add a sequence, notes, or images first.' });
             return;
         }
         try {
@@ -246,7 +246,7 @@ export default function UserReport({ open, onClose, defaultSequence, jobName }: 
 
     const handleSendToMe = useCallback(async () => {
         if (!sequence.trim() && !notes.trim() && images.length === 0) {
-            setStatus({ kind: 'err', text: 'Nothing to send — add a sequence, notes, or images first.' });
+            setStatus({ kind: 'err', text: 'Nothing to send. Add a sequence, notes, or images first.' });
             return;
         }
         setSending(true);
@@ -382,7 +382,7 @@ export default function UserReport({ open, onClose, defaultSequence, jobName }: 
                         <div className="rounded-lg border-2 border-dashed border-zinc-300 dark:border-zinc-600 bg-zinc-50 dark:bg-zinc-900/30 px-4 py-3 text-center">
                             <p className="text-xs text-zinc-500 dark:text-zinc-400">
                                 Paste an image here with <kbd className="px-1.5 py-0.5 rounded bg-zinc-200 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300 font-mono text-[10px]">Ctrl/⌘ + V</kbd>
-                                {images.length === 0 && ' — or use “Add file” above.'}
+                                {images.length === 0 && ' or use "Add file" above.'}
                             </p>
                         </div>
                         {/* Thumbnails */}

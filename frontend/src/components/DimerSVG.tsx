@@ -33,7 +33,7 @@ export default function DimerSVG({ seq, dotBracket }: DimerSVGProps) {
     const [seq1, seq2] = seq.split('&');
     let [db1, db2] = dotBracket.split('&');
 
-    // ViennaRNA sometimes omits '&' from cofold structure output — recover by splitting at seq1.length
+    // ViennaRNA sometimes omits '&' from cofold structure output; recover by splitting at seq1.length
     if (!db2 && dotBracket.length === seq1.length + seq2.length) {
         db1 = dotBracket.slice(0, seq1.length);
         db2 = dotBracket.slice(seq1.length);
