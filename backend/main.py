@@ -8,7 +8,7 @@ if root_dir not in sys.path:
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import List, Literal, Optional
 from backend.alignment import run_msa
 from backend.blast import run_blast
 import json
@@ -355,6 +355,7 @@ class MoligizeRequest(BaseModel):
     scan_full_region: bool = False # If true, disables center bias so the whole sequence is scanned equally
     # Search params
     search_params: Optional[Dict] = None
+    engine: Literal["primer3", "strider"] = "primer3"
 
 @app.post("/moligize")
 async def moligize_sequence(request: MoligizeRequest):
@@ -373,6 +374,15 @@ async def moligize_sequence(request: MoligizeRequest):
         'tm_method': 'santalucia',
         'salt_corrections_method': 'santalucia',
     }
+
+    if request.engine == "strider" and _strider_melting_temperature is None:
+        raise HTTPException(status_code=503, detail="Strider engine requested but strider-dna is unavailable")
+
+    def tm_for_search(s):
+        if request.engine == "strider":
+            return strider_duplex_tm(s, mv_conc=TM_PARAMS['mv_conc'], dv_conc=TM_PARAMS['dv_conc'],
+                                    dntp_conc=TM_PARAMS['dntp_conc'], dna_conc=TM_PARAMS['dna_conc'])
+        return primer3.calc_tm(s, **TM_PARAMS)
 
     seq = request.sequence.upper().replace(" ", "").replace("\n", "").replace("-", "")
     if not seq:
@@ -432,7 +442,8 @@ async def moligize_sequence(request: MoligizeRequest):
                     test_seq = window_seq[m2_start:m2_end]
                 
                 if not test_seq: continue
-                tm = primer3.calc_tm(test_seq, **TM_PARAMS)
+                tm = tm_for_search(test_seq)
+                if tm is None: continue
                 
                 # Scoring: 
                 # 0 if in Tm range, otherwise abs distance from range
@@ -517,7 +528,8 @@ async def moligize_sequence(request: MoligizeRequest):
             for start in range(0, len(window_seq) - length + 1):
                 end = start + length
                 s = window_seq[start:end]
-                tm = primer3.calc_tm(s, **TM_PARAMS)
+                tm = tm_for_search(s)
+                if tm is None: continue
                 if tm_min <= tm <= tm_max:
                     left_by_end.setdefault(end, []).append((s, start, end, tm, length))
                     right_by_start.setdefault(start, []).append((s, start, end, tm, length))
@@ -574,31 +586,53 @@ async def moligize_sequence(request: MoligizeRequest):
         # Diffs
         tm_diff_actual = abs(stats_p1['tm'] - stats_p2['tm'])
         tm_diff_ok = tm_diff_actual <= tm_diff
+
+        if request.engine == "strider":
+            _t1 = stats_p1.get('tm_strider')
+            _t2 = stats_p2.get('tm_strider')
+            stats_p1['tm_ok'] = _t1 is not None and tm_min <= _t1 <= tm_max
+            stats_p2['tm_ok'] = _t2 is not None and tm_min <= _t2 <= tm_max
+            if _t1 is not None and _t2 is not None:
+                tm_diff_actual = abs(_t1 - _t2)
+                tm_diff_ok = tm_diff_actual <= tm_diff
+            else:
+                tm_diff_actual = None
+                tm_diff_ok = False
+
+        _p1_tm = stats_p1['tm_strider'] if request.engine == "strider" else stats_p1['tm']
+        _p2_tm = stats_p2['tm_strider'] if request.engine == "strider" else stats_p2['tm']
         
         if not (stats_p1['len_ok'] and stats_p1['tm_ok'] and stats_p1['gc_ok'] and 
                 stats_p2['len_ok'] and stats_p2['tm_ok'] and stats_p2['gc_ok'] and tm_diff_ok):
             params_not_met = True
             if not stats_p1['len_ok']: param_warnings.append(f"Oligo 1 length ({stats_p1['len']}) outside range")
-            if not stats_p1['tm_ok']: param_warnings.append(f"Oligo 1 Tm ({stats_p1['tm']}°C) outside range")
+            if not stats_p1['tm_ok']: param_warnings.append(f"Oligo 1 Tm ({_p1_tm}°C) outside range")
             if not stats_p1['gc_ok']: param_warnings.append(f"Oligo 1 GC ({stats_p1['gc']}%) outside range")
             if not stats_p2['len_ok']: param_warnings.append(f"Oligo 2 length ({stats_p2['len']}) outside range")
-            if not stats_p2['tm_ok']: param_warnings.append(f"Oligo 2 Tm ({stats_p2['tm']}°C) outside range")
+            if not stats_p2['tm_ok']: param_warnings.append(f"Oligo 2 Tm ({_p2_tm}°C) outside range")
             if not stats_p2['gc_ok']: param_warnings.append(f"Oligo 2 GC ({stats_p2['gc']}%) outside range")
-            if not tm_diff_ok: param_warnings.append(f"Tm difference ({tm_diff_actual:.1f}°C) exceeds max")
+            if not tm_diff_ok:
+                if tm_diff_actual is not None:
+                    param_warnings.append(f"Tm difference ({tm_diff_actual:.1f}°C) exceeds max")
+                else:
+                    param_warnings.append("Tm difference (unavailable) exceeds max")
     else:
         # Default All OK if no params
         for s in [stats_p1, stats_p2]:
             s['len_ok'] = s['tm_ok'] = s['gc_ok'] = True
         tm_diff_ok = True
 
-    return {
+    result = {
         "p1": stats_p1,
         "p2": stats_p2,
         "tm_diff_ok": tm_diff_ok,
         "split_idx": absolute_split,
         "params_not_met": params_not_met,
-        "param_warnings": param_warnings
+        "param_warnings": param_warnings,
     }
+    if request.engine == "strider":
+        result["engine"] = "strider"
+    return result
 
 
 class IdtAuthRequest(BaseModel):
