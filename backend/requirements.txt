@@ -5,13 +5,15 @@ pydantic
 primer3-py
 pywebview>=4.0.0
 requests>=2.25.0
-# Hairpin Tm uses strider.thermo.hairpin.hairpin_thermo (bulge-aware, added in
-# 0.3.2). Tan-Chen TBI salt correction for stems ≥6 bp is available upstream.
-# Dimer Tm and suboptimal dimer enumeration are available upstream from v0.7.0.
-# The v0.7.0 ThermoEngine.subopt() salt bug is fixed in upstream v1.1.0.
-# strider.duplex_tm (primer3-style duplex Tm with Na/Mg/dNTP/oligo-conc params)
-# was added upstream in v1.2.0.
-# native-tm branch: Rust/PyO3 accelerator (strider._native) for melting_temperature,
-# duplex_tm, duplex_dg, duplex_dh_ds + salt.py scalars. 15.4× vs pure Python.
-# PR pending: https://github.com/EmilioVenegas/strider/pull/11
-strider-dna @ git+https://github.com/KowalskiBio/strider.git@native-tm
+# Stacked feature branch on the KowalskiBio fork, containing in order:
+#   1. native-tm  — Rust/PyO3 accelerator (strider._native) for Tm/salt kernels   [PR #11]
+#   2. native-dp  — native Rust port of the dimer MFE candidate DP                [PR #12]
+#   3. mathews2004-dangles — corrected Mathews 2004 paramset (stack/bulge/interior
+#      key conventions verified vs ViennaRNA eval), paramset threading on
+#      hairpin/dimer APIs, name resolution, dangles=2 exterior stacks           [PR #13]
+# main.py uses all three: dimer ΔG no-init reporting needs DUPLEX_INIT_ from the
+# dimer module; parameter_set threading needs the corrected paramset + plumbing;
+# hairpins need dangles=2 for IDT-consistent reports.  NOTE: pip will NOT
+# reinstall a git-VCS dep whose version is unchanged — update_vm.sh force-
+# reinstalls this package exactly because of that.
+strider-dna @ git+https://github.com/KowalskiBio/strider.git@mathews2004-dangles

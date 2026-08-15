@@ -9,6 +9,11 @@ git pull --ff-only
 
 if [ -d backend/venv ]; then
   backend/venv/bin/pip install -r backend/requirements.txt
+  # pip skips git-VCS dependencies whose resolved version is unchanged
+  # ("Requirement already satisfied"), silently leaving stale strider builds
+  # in place when only the branch content moved.  Force-reinstall just it.
+  backend/venv/bin/pip install --force-reinstall --no-deps \
+    "strider-dna @ git+https://github.com/KowalskiBio/strider.git@mathews2004-dangles"
 fi
 
 if command -v npm >/dev/null 2>&1; then
