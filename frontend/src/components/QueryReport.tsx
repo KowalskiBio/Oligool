@@ -235,7 +235,7 @@ export default function QueryReport({ data }: QueryReportProps) {
                             <span><span className="text-zinc-500">GC{'\t'}</span><V>{fmtNum(calcGC(data.moligo1Seq))}%</V></span>
                         </div>
                         <div className="text-xs text-zinc-600 mt-0.5 whitespace-pre-wrap">
-                            <span><span className="text-zinc-500">Tm — P3{'\t'}</span><V>{fmtNum(data.moligo1TmP3)} °C</V> | <span className="text-zinc-500">Strider{'\t'}</span><V>{fmtNum(data.moligo1TmStrider)} °C</V> | <span className="text-zinc-500">IDT{'\t'}</span><V>{fmtNum(data.idtM1Tm)} °C</V></span>
+                            <span><span className="text-zinc-500">Tm{'\t'}P3{'\t'}</span><V>{fmtNum(data.moligo1TmP3)} °C</V>{'\t'}<span className="text-zinc-500">Strider{'\t'}</span><V>{fmtNum(data.moligo1TmStrider)} °C</V>{'\t'}<span className="text-zinc-500">IDT{'\t'}</span><V>{fmtNum(data.idtM1Tm)} °C</V></span>
                         </div>
                         <div className="text-xs text-zinc-600 mt-0.5 grid grid-cols-2 gap-x-6 gap-y-0.5 whitespace-pre-wrap">
                             <span><span className="text-zinc-500">Hairpin IDT ΔG{'\t'}</span><V>{fmtDG(data.idtM1Hairpin?.DeltaG)}</V></span>
@@ -254,7 +254,7 @@ export default function QueryReport({ data }: QueryReportProps) {
                             <span><span className="text-zinc-500">GC{'\t'}</span><V>{fmtNum(calcGC(data.moligo2Seq))}%</V></span>
                         </div>
                         <div className="text-xs text-zinc-600 mt-0.5 whitespace-pre-wrap">
-                            <span><span className="text-zinc-500">Tm — P3{'\t'}</span><V>{fmtNum(data.moligo2TmP3)} °C</V> | <span className="text-zinc-500">Strider{'\t'}</span><V>{fmtNum(data.moligo2TmStrider)} °C</V> | <span className="text-zinc-500">IDT{'\t'}</span><V>{fmtNum(data.idtM2Tm)} °C</V></span>
+                            <span><span className="text-zinc-500">Tm{'\t'}P3{'\t'}</span><V>{fmtNum(data.moligo2TmP3)} °C</V>{'\t'}<span className="text-zinc-500">Strider{'\t'}</span><V>{fmtNum(data.moligo2TmStrider)} °C</V>{'\t'}<span className="text-zinc-500">IDT{'\t'}</span><V>{fmtNum(data.idtM2Tm)} °C</V></span>
                         </div>
                         <div className="text-xs text-zinc-600 mt-0.5 grid grid-cols-2 gap-x-6 gap-y-0.5 whitespace-pre-wrap">
                             <span><span className="text-zinc-500">Hairpin IDT ΔG{'\t'}</span><V>{fmtDG(data.idtM2Hairpin?.DeltaG)}</V></span>
@@ -295,7 +295,7 @@ export default function QueryReport({ data }: QueryReportProps) {
                             <h3 className="text-sm font-bold text-zinc-700">{data.flankingFwdName || 'Flanking Fwd'}</h3>
                             <p className="font-mono text-sm break-all bg-zinc-50 p-2 rounded border border-zinc-200">{data.flankingFwdSeq}</p>
                             <p className="text-sm text-zinc-600 whitespace-pre-wrap">Length{'\t'}<V>{data.flankingFwdLen ?? data.flankingFwdSeq.length} nt</V> | GC{'\t'}<V>{fmtNum(data.flankingFwdGc)}%</V></p>
-                            <p className="text-sm text-zinc-600 whitespace-pre-wrap">Tm — P3{'\t'}<V>{fmtNum(data.flankingFwdTmP3)} °C</V> | Strider{'\t'}<V>{fmtNum(data.flankingFwdTmStrider)} °C</V> | IDT{'\t'}<V>{fmtNum(data.flankingFwdIDTTm)} °C</V></p>
+                            <p className="text-sm text-zinc-600 whitespace-pre-wrap">Tm{'\t'}P3{'\t'}<V>{fmtNum(data.flankingFwdTmP3)} °C</V>{'\t'}Strider{'\t'}<V>{fmtNum(data.flankingFwdTmStrider)} °C</V>{'\t'}IDT{'\t'}<V>{fmtNum(data.flankingFwdIDTTm)} °C</V></p>
                             <p className="text-sm text-zinc-600 whitespace-pre-wrap">P3 Hairpin ΔG{'\t'}<V>{fmtDG(data.flankingFwdHairpinDg)}</V> (Tm{'\t'}<V>{fmtNum(data.flankingFwdHairpinTm)} °C</V>)</p>
                             <p className="text-sm text-zinc-600 whitespace-pre-wrap">P3 Homodimer ΔG{'\t'}<V>{fmtDG(data.flankingFwdHomodimerDg)}</V> (Tm{'\t'}<V>{fmtNum(data.flankingFwdHomodimerTm)} °C</V>)</p>
                         </div>
@@ -307,7 +307,7 @@ export default function QueryReport({ data }: QueryReportProps) {
                             <h3 className="text-sm font-bold text-zinc-700">{data.flankingRevName || 'Flanking Rev'}</h3>
                             <p className="font-mono text-sm break-all bg-zinc-50 p-2 rounded border border-zinc-200">{data.flankingRevSeq}</p>
                             <p className="text-sm text-zinc-600 whitespace-pre-wrap">Length{'\t'}<V>{data.flankingRevLen ?? data.flankingRevSeq.length} nt</V> | GC{'\t'}<V>{fmtNum(data.flankingRevGc)}%</V></p>
-                            <p className="text-sm text-zinc-600 whitespace-pre-wrap">Tm — P3{'\t'}<V>{fmtNum(data.flankingRevTmP3)} °C</V> | Strider{'\t'}<V>{fmtNum(data.flankingRevTmStrider)} °C</V> | IDT{'\t'}<V>{fmtNum(data.flankingRevIDTTm)} °C</V></p>
+                            <p className="text-sm text-zinc-600 whitespace-pre-wrap">Tm{'\t'}P3{'\t'}<V>{fmtNum(data.flankingRevTmP3)} °C</V>{'\t'}Strider{'\t'}<V>{fmtNum(data.flankingRevTmStrider)} °C</V>{'\t'}IDT{'\t'}<V>{fmtNum(data.flankingRevIDTTm)} °C</V></p>
                             <p className="text-sm text-zinc-600 whitespace-pre-wrap">P3 Hairpin ΔG{'\t'}<V>{fmtDG(data.flankingRevHairpinDg)}</V> (Tm{'\t'}<V>{fmtNum(data.flankingRevHairpinTm)} °C</V>)</p>
                             <p className="text-sm text-zinc-600 whitespace-pre-wrap">P3 Homodimer ΔG{'\t'}<V>{fmtDG(data.flankingRevHomodimerDg)}</V> (Tm{'\t'}<V>{fmtNum(data.flankingRevHomodimerTm)} °C</V>)</p>
                         </div>

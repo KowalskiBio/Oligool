@@ -1186,6 +1186,22 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
               </div>
               <div className="space-y-4 text-sm text-zinc-700 dark:text-zinc-300">
                 <section className="flex gap-3">
+                  <svg className="h-5 w-5 flex-shrink-0 mt-0.5 text-teal-600 dark:text-teal-400" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M11.3 1.046A1 1 0 0112 2v5h4a1 1 0 01.82 1.573l-7 10A1 1 0 018 18v-5H4a1 1 0 01-.82-1.573l7-10a1 1 0 011.12-.38z" clipRule="evenodd" /></svg>
+                  <div>
+                    <h3 className="font-semibold text-teal-700 dark:text-teal-300 mb-1">Přepínač Mathews / SantaLucia a přesnější sekundární struktury</h3>
+                    <p>
+                      Nalevo od tlačítka <b>Structural analysis</b> je nový přepínač <b>Mathews / SantaLucia</b>,
+                      který vybírá parametry nejbližších sousedů pro lokální výpočet. Současně byly opraveny
+                      tabulky Mathews 2004 (orientace stack klíčů, bulge a interior smyčky) a přidán __dangling__
+                      stacking na koncích stemů — hairpiny, self-dimery i jejich Tm nyní sledují IDT na
+                      desetiny kcal/mol, bez uměle stabilních bulgovaných struktur, které aplikace dříve
+                      ukazovala. Self-dimer ΔG se nově reportuje bez duplexní iniciace, stejně jako u IDT.
+                      Mg²⁺ je nadále v pokročilých parametrech. V PDF reportu jsou oddělovače nyní
+                      tabulátor, bez pomlček.
+                    </p>
+                  </div>
+                </section>
+                <section className="flex gap-3">
                   <svg className="h-5 w-5 flex-shrink-0 mt-0.5 text-teal-600 dark:text-teal-400" viewBox="0 0 20 20" fill="currentColor"><path d="M9 12l2 2 4-4M10 18a8 8 0 100-16 8 8 0 000 16z" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round" /></svg>
                   <div>
                     <h3 className="font-semibold text-teal-700 dark:text-teal-300 mb-1">Souřadnicový tooltip v MSA přehledu</h3>
