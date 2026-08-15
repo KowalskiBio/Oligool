@@ -270,9 +270,13 @@ def cmd_perf(base_url: str, output: str, iterations: int) -> None:
         if engine == "strider":
             sanity_errors = _strider_sanity(warm["body"])
         times = []
-        for _ in range(iterations):
+        for i in range(iterations):
+            # Vary oligo_start by 1 each call to defeat the 32-entry response
+            # cache, so each timing reflects actual computation, not a cache hit.
+            body_i = dict(body)
+            body_i["oligo_start"] = body["oligo_start"] + i
             t0 = time.perf_counter()
-            res = _post_or_die(base_url, flanking["url"], body, f"perf/{engine}")
+            res = _post_or_die(base_url, flanking["url"], body_i, f"perf/{engine}")
             t1 = time.perf_counter()
             if res["status"] != 200:
                 raise SystemExit(f"perf {engine}: HTTP {res['status']}")
