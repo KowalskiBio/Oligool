@@ -292,12 +292,24 @@ except Exception as _exc:
     _strider_melting_temperature = None
 
 
-@lru_cache(maxsize=16)
-def _thermo_engine_cached(material: str, celsius: float, sodium_m: float, magnesium_m: float):
-    """LRU ThermoEngine per salt/temperature — building the parameter tables per
-    request is pure overhead; engines are stateless across mfe/subopt calls."""
+@lru_cache(maxsize=32)
+def _thermo_engine_cached(material: str, celsius: float, sodium_m: float, magnesium_m: float,
+                         parameter_set_name: str = "native", dangles: int = 2):
+    """LRU ThermoEngine per salt/temperature/params — building the parameter tables per
+    request is pure overhead; engines are stateless across mfe/subopt calls.
+
+    ``parameter_set_name`` selects the thermodynamic parameter set:
+      "native"        — SantaLucia 2004 DNA parameters (strider's default)
+      "mathews2004-dna" — Mathews 2004 DNA parameters (matches IDT/ViennaRNA)
+    """
     from strider import ThermoEngine
-    return ThermoEngine(material=material, celsius=celsius, sodium=sodium_m, magnesium=magnesium_m)
+    if parameter_set_name == "native":
+        return ThermoEngine(material=material, celsius=celsius, sodium=sodium_m,
+                            magnesium=magnesium_m, dangles=dangles)
+    from strider.thermo.parameters import load_parameters
+    ps = load_parameters(parameter_set_name)
+    return ThermoEngine(material=material, celsius=celsius, sodium=sodium_m,
+                        magnesium=magnesium_m, parameter_set=ps, dangles=dangles)
 
 
 def strider_duplex_tm(seq, *, mv_conc, dv_conc, dntp_conc, dna_conc):
@@ -606,6 +618,7 @@ class IdtAnalyzeRequest(BaseModel):
     dntp_conc: float = 0.8
     oligo_conc: float = 0.25
     idt_region: str = "eu"
+    parameter_set: str = "mathews2004-dna"  # "mathews2004-dna" (matches IDT) or "native" (SantaLucia 2004)
 
 
 def _dg_rescale(dh_kcal: float, ds_cal_per_k: float, celsius: float = 25.0) -> float:
@@ -615,6 +628,32 @@ def _dg_rescale(dh_kcal: float, ds_cal_per_k: float, celsius: float = 25.0) -> f
     app's hairpin path report at 25 °C, so dimer values are rescaled to match.
     """
     return round(dh_kcal - (273.15 + celsius) * ds_cal_per_k / 1000.0, 2)
+
+
+try:
+    from strider.thermo.dimer_thermo import (
+        DUPLEX_INIT_DG37 as _DUPLEX_INIT_DG37,
+        DUPLEX_INIT_DH as _DUPLEX_INIT_DH,
+        T_REF as _DIMER_T_REF,
+    )
+except Exception:  # strider absent — fall back to reporting dH/dS as-is
+    _DUPLEX_INIT_DG37 = None
+
+
+def _dg_rescale_dimer(dh_kcal: float, ds_cal_per_k: float, celsius: float = 25.0) -> float:
+    """Dimer ΔG(T) with the bimolecular *initiation* contribution removed.
+
+    Strider folds the duplex-nucleation term (DUPLEX_INIT_DG37/ΔH) into the
+    reported dH/dS so its two-state Tm is correct.  IDT OligoAnalyzer reports
+    dimer ΔG WITHOUT it (structure-only energy); subtracting the initiation
+    contribution ΔG_init(T) = ΔH_init − T·ΔS_init, with
+    ΔS_init = (ΔH_init − ΔG37_init)/T_ref, puts strider on IDT's convention
+    (e.g. -3.54 vs IDT -3.61 for GCACTACAACCGCTACCGTG instead of -1.64).
+    """
+    if _DUPLEX_INIT_DG37 is None:
+        return _dg_rescale(dh_kcal, ds_cal_per_k, celsius)
+    init_ds_cal = (_DUPLEX_INIT_DH - _DUPLEX_INIT_DG37) / _DIMER_T_REF * 1000.0
+    return _dg_rescale(dh_kcal - _DUPLEX_INIT_DH, ds_cal_per_k - init_ds_cal, celsius)
 
 
 def _idt_host(region: str) -> str:
@@ -679,6 +718,7 @@ def _run_strider_analysis(
     dntp_conc: float,
     oligo_conc: float,
     base_temp: float = 25.0,
+    parameter_set: str = "mathews2004-dna",
     idt_m1_hairpin=None,
     idt_m1_selfdimer=None,
     idt_m1_analyze=None,
@@ -705,7 +745,13 @@ def _run_strider_analysis(
         effective_mg = max(0.0, mg_conc - dntp_conc) / 1000.0
         oligo_conc_m = oligo_conc / 1e6
 
-        eng = _thermo_engine_cached('dna', base_temp, mv_m, effective_mg)
+        eng = _thermo_engine_cached('dna', base_temp, mv_m, effective_mg, parameter_set)
+
+        # Load the ParameterSet object for hairpin_thermo (Tm) if non-default
+        _paramset_obj = None
+        if parameter_set != "native":
+            from strider.thermo.parameters import load_parameters
+            _paramset_obj = load_parameters(parameter_set)
 
         # Hairpin Tm uses strider.thermo.hairpin.hairpin_thermo (>= 0.3.2), the
         # UNImolecular two-state model (Tm = ΔH/ΔS, concentration-independent)
@@ -737,6 +783,14 @@ def _run_strider_analysis(
                 # Use strider's dedicated bimolecular dimer MFE (not the pseudo-
                 # hairpin cofold), which finds real inter-strand helices including
                 # small interior loops and bulges.
+                #
+                # Dimers always use the NATIVE (SantaLucia 2004) parameter set,
+                # NOT the `parameter_set` toggle that steers hairpins: verified on
+                # GCACTACAACCGCTACCGTG the native self-dimer ΔG(25 °C) = -3.54 vs
+                # IDT -3.61, whereas mathews2004-dna over-ranks a terminal 2-bp
+                # G·C clamp (-4.72) above the same 3-bp helix IDT features.
+                # (strider's dimer API now accepts paramset= for callers who
+                # deliberately want Mathews dimers.)
                 fold_seq = seq1 + seq2
                 display_seq = seq1 + '&' + seq2
                 def _with_div(s):
@@ -757,7 +811,7 @@ def _run_strider_analysis(
                     raw_mfe = res.structure
                     if _valid_paired(raw_mfe):
                         viz_struct_raw = raw_mfe
-                        viz_dg = _dg_rescale(res.dH, res.dS)
+                        viz_dg = _dg_rescale_dimer(res.dH, res.dS)
                         mfe_tm = round(res.tm_celsius, 1) if res.tm_celsius and res.tm_celsius > 1.0 else None
                     else:
                         viz_struct_raw = None
@@ -784,7 +838,7 @@ def _run_strider_analysis(
                             subopt_dimers.append({
                                 "Sequence": display_seq,
                                 "DotBracket": _with_div(r.structure),
-                                "DeltaG": _dg_rescale(r.dH, r.dS),
+                                "DeltaG": _dg_rescale_dimer(r.dH, r.dS),
                                 "Tm": round(r.tm_celsius, 1) if r.tm_celsius and r.tm_celsius > 1.0 else None,
                                 "BasePairs": r.n_pairs,
                             })
@@ -812,7 +866,8 @@ def _run_strider_analysis(
                 def _struct_tm(structure, energy):
                     try:
                         res = hairpin_thermo(fold_seq, sodium_M=mv_m,
-                                             magnesium_M=effective_mg, structure=structure)
+                                             magnesium_M=effective_mg, structure=structure,
+                                             paramset=_paramset_obj, dangles=2)
                         t = res.tm_celsius
                     except Exception:
                         t = None
@@ -1133,6 +1188,7 @@ async def analyze_idt_oligos(request: IdtAnalyzeRequest):
         dntp_conc=request.dntp_conc,
         oligo_conc=getattr(request, "oligo_conc", 0.25),
         base_temp=request.temp if hasattr(request, "temp") and request.temp is not None else 25.0,
+        parameter_set=getattr(request, "parameter_set", "mathews2004-dna"),
         idt_m1_hairpin=m1_hairpin,
         idt_m1_selfdimer=m1_selfdimer,
         idt_m1_analyze=m1_analyze,
@@ -1150,6 +1206,7 @@ class StriderAnalyzeRequest(BaseModel):
     mv_conc: float = 50.0
     dntp_conc: float = 0.8
     oligo_conc: float = 0.25
+    parameter_set: str = "mathews2004-dna"  # "mathews2004-dna" (matches IDT) or "native" (SantaLucia 2004)
 
 
 @app.post("/strider/analyze")
@@ -1169,6 +1226,7 @@ async def analyze_strider_oligos(request: StriderAnalyzeRequest):
         mg_conc=request.mg_conc,
         dntp_conc=request.dntp_conc,
         oligo_conc=request.oligo_conc,
+        parameter_set=getattr(request, "parameter_set", "mathews2004-dna"),
     )
 
 
