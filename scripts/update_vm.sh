@@ -3,6 +3,13 @@
 # git-pinned strider-dna version, which `git pull` alone does NOT reinstall),
 # rebuild the frontend, and restart the systemd service.
 set -euo pipefail
+# The strider native extension builds via setuptools-rust, which needs cargo on
+# PATH.  cargo lives in ~/.cargo/bin (rustup), present in *login* shells but NOT
+# in non-login/non-interactive invocations (ssh exec, systemd, cron).  strider's
+# ext-modules are optional=true, so a missing cargo doesn't fail the build —
+# it silently ships a pure-Python wheel.  Export it here so the extension is
+# always built, regardless of how this script was invoked.
+export PATH="$HOME/.cargo/bin:$PATH"
 cd "$(dirname "$0")/.."
 
 git pull --ff-only
