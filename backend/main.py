@@ -1296,6 +1296,7 @@ class FlankingPrimerParams(BaseModel):
     manual_left_end: Optional[int] = None
     manual_right_start: Optional[int] = None
     manual_right_end: Optional[int] = None
+    engine: Literal["primer3", "strider"] = "primer3"
 
 
 # Dragging a MOLigo re-fires this endpoint for every intermediate position, so
@@ -1307,12 +1308,83 @@ _primer_design_cache_lock = _threading.Lock()
 _PRIMER_DESIGN_CACHE_MAX = 32
 
 
+def _design_single_side_strider(flank_seq, *, is_left, min_size, max_size, min_gc, max_gc,
+                                opt_size, min_tm, opt_tm, max_tm, therm_kwargs, num_candidates=25):
+    from Bio.Seq import Seq
+    from strider.thermo.dimer_thermo import dimer_thermo
+
+    mv = therm_kwargs["mv_conc"]
+    dv = therm_kwargs["dv_conc"]
+    dntp = therm_kwargs["dntp_conc"]
+    dna = therm_kwargs["dna_conc"]
+    sodium_m = mv / 1000.0
+    magnesium_m = max(0.0, dv - dntp) / 1000.0
+
+    considered = 0
+    ok_tm = 0
+    survivors = []
+    n = len(flank_seq)
+    for length in range(min_size, max_size + 1):
+        for start in range(0, n - length + 1):
+            sub = flank_seq[start:start + length]
+            considered += 1
+            gc = 100.0 * sum(1 for b in sub if b in "GC") / len(sub)
+            if not (min_gc <= gc <= max_gc):
+                continue
+            tm = strider_duplex_tm(sub, mv_conc=mv, dv_conc=dv, dntp_conc=dntp, dna_conc=dna)
+            if tm is None:
+                continue
+            if not (min_tm <= tm <= max_tm):
+                continue
+            ok_tm += 1
+            score = 10 * abs(tm - opt_tm) + abs(length - opt_size)
+            survivors.append((score, start, length, sub, tm))
+
+    survivors.sort(key=lambda c: c[0])
+    finalists = survivors[:num_candidates]
+
+    eng = _thermo_engine_cached('dna', 25.0, sodium_m, magnesium_m)
+    folded = []
+    for score, start, length, sub, tm in finalists:
+        primer_seq = str(Seq(sub).reverse_complement()) if not is_left else sub
+        hairpin_dg = 0.0
+        try:
+            mfe = eng.mfe(primer_seq)
+            hairpin_dg = round(float(mfe.energy), 2)
+        except Exception:
+            hairpin_dg = 0.0
+        homodimer_dg = 0.0
+        try:
+            res = dimer_thermo(primer_seq, primer_seq, sodium_M=sodium_m, magnesium_M=magnesium_m,
+                               material='dna', structure=None, strand_conc_M=dna / 1e9, salt_model='auto')
+            homodimer_dg = round(_dg_rescale_dimer(res.dH, res.dS), 2)
+        except Exception:
+            homodimer_dg = 0.0
+        penalty = 2 * max(0, 3 + hairpin_dg) + 1 * max(0, 6 + homodimer_dg)
+        folded.append((score + penalty, start, length, primer_seq, tm, hairpin_dg, homodimer_dg))
+
+    folded.sort(key=lambda c: c[0])
+    return {
+        "candidates": [
+            {"start": c[1], "length": c[2], "sequence": c[3], "tm": c[4],
+             "hairpin_dg": c[5], "homodimer_dg": c[6]}
+            for c in folded
+        ],
+        "considered": considered,
+        "ok_tm": ok_tm,
+        "folded": len(folded),
+    }
+
+
 @app.post("/flanking_primers/design")
 def design_flanking_primers(req: FlankingPrimerParams):
     try:
         import primer3
     except ImportError:
         raise HTTPException(status_code=500, detail="primer3-py not installed")
+
+    if req.engine == "strider" and _strider_melting_temperature is None:
+        raise HTTPException(status_code=503, detail="Strider engine requested but strider-dna is unavailable")
 
     _cache_key = json.dumps(req.model_dump(), sort_keys=True)
     with _primer_design_cache_lock:
@@ -1445,7 +1517,27 @@ def design_flanking_primers(req: FlankingPrimerParams):
                "pair_metrics": None}
 
     # ── FORWARD (Left flank → picks LEFT primer from last flank_window bp) ──
-    if upstream and len(upstream) >= req.min_size:
+    if req.engine == "strider" and upstream and len(upstream) >= req.min_size:
+        sres = _design_single_side_strider(upstream, is_left=True, min_size=req.min_size,
+                    max_size=req.max_size, min_gc=req.min_gc, max_gc=req.max_gc,
+                    opt_size=req.opt_size, min_tm=req.min_tm, opt_tm=req.opt_tm, max_tm=req.max_tm,
+                    therm_kwargs=therm, num_candidates=25)
+        results["forward"]["explain"] = f"strider: {sres['considered']} considered, {sres['ok_tm']} ok tm, {sres['folded']} folded"
+        for cand in sres["candidates"][:primers_request_count]:
+            a = _analyze(cand["sequence"])
+            abs_start = up_start + cand["start"]
+            a["interval"] = [abs_start, abs_start + cand["length"]]
+            a["position"] = [cand["start"], cand["length"]]
+            a["primer3"] = {
+                "tm": a["tm"], "gc_percent": a["gc_percent"],
+                "self_any": None, "self_end": None, "hairpin_th": None,
+            }
+            a["strider"] = {"hairpin_dg": cand["hairpin_dg"], "homodimer_dg": cand["homodimer_dg"]}
+            results["forward"]["primers"].append(a)
+        results["forward"]["primers"] = _pick_diverse_primers(
+            results["forward"]["primers"], req.num_return, min_gap=0)
+        results["forward"]["num_returned"] = len(results["forward"]["primers"])
+    elif upstream and len(upstream) >= req.min_size:
         up_args = dict(p3_global)
         up_args.update({"PRIMER_PICK_LEFT_PRIMER": 1, "PRIMER_PICK_RIGHT_PRIMER": 0,
                         "PRIMER_PRODUCT_SIZE_RANGE": [[50, 50000]]})
@@ -1479,7 +1571,27 @@ def design_flanking_primers(req: FlankingPrimerParams):
         results["forward"]["num_returned"] = len(results["forward"]["primers"])
 
     # ── REVERSE (Right flank → picks RIGHT primer from first flank_window bp) ──
-    if downstream and len(downstream) >= req.min_size:
+    if req.engine == "strider" and downstream and len(downstream) >= req.min_size:
+        sres = _design_single_side_strider(downstream, is_left=False, min_size=req.min_size,
+                    max_size=req.max_size, min_gc=req.min_gc, max_gc=req.max_gc,
+                    opt_size=req.opt_size, min_tm=req.min_tm, opt_tm=req.opt_tm, max_tm=req.max_tm,
+                    therm_kwargs=therm, num_candidates=25)
+        results["reverse"]["explain"] = f"strider: {sres['considered']} considered, {sres['ok_tm']} ok tm, {sres['folded']} folded"
+        for cand in sres["candidates"][:primers_request_count]:
+            a = _analyze(cand["sequence"])
+            abs_start = down_start + cand["start"]
+            a["interval"] = [abs_start, abs_start + cand["length"]]
+            a["position"] = [cand["start"], cand["length"]]
+            a["primer3"] = {
+                "tm": a["tm"], "gc_percent": a["gc_percent"],
+                "self_any": None, "self_end": None, "hairpin_th": None,
+            }
+            a["strider"] = {"hairpin_dg": cand["hairpin_dg"], "homodimer_dg": cand["homodimer_dg"]}
+            results["reverse"]["primers"].append(a)
+        results["reverse"]["primers"] = _pick_diverse_primers(
+            results["reverse"]["primers"], req.num_return, min_gap=0)
+        results["reverse"]["num_returned"] = len(results["reverse"]["primers"])
+    elif downstream and len(downstream) >= req.min_size:
         down_args = dict(p3_global)
         down_args.update({"PRIMER_PICK_LEFT_PRIMER": 0, "PRIMER_PICK_RIGHT_PRIMER": 1,
                           "PRIMER_PRODUCT_SIZE_RANGE": [[50, 50000]]})
@@ -1526,6 +1638,22 @@ def design_flanking_primers(req: FlankingPrimerParams):
                 "dg": _round((getattr(het, "dg", None) or 0) / 1000, 2),
             }
         }
+        if req.engine == "strider":
+            from strider.thermo.dimer_thermo import dimer_thermo as _strider_dimer
+            _mv_m = req.mv_conc / 1000.0
+            _mg_m = max(0.0, req.dv_conc - req.dntp_conc) / 1000.0
+            try:
+                _sd = _strider_dimer(f0, r0, sodium_M=_mv_m, magnesium_M=_mg_m,
+                                     material='dna', structure=None,
+                                     strand_conc_M=req.dna_conc / 1e9, salt_model='auto')
+                results["pair_metrics"]["strider_heterodimer"] = {
+                    "dg": round(_dg_rescale_dimer(_sd.dH, _sd.dS), 2),
+                }
+            except Exception:
+                results["pair_metrics"]["strider_heterodimer"] = {"dg": None}
+
+    if req.engine == "strider":
+        results["engine"] = "strider"
 
     with _primer_design_cache_lock:
         _primer_design_cache[_cache_key] = results
