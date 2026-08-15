@@ -60,6 +60,8 @@ interface QueryViewerProps {
     };
     /** Updates the shared thermodynamic parameter set (Mathews 2004 vs SantaLucia 2004). */
     onParameterSetChange?: (value: string) => void;
+    /** Search engine for MOLigo quick search and flanking primer picking. */
+    searchEngine?: 'primer3' | 'strider';
     // MSA Viewer props — forwarded to FlankingPrimersPanel
     alignment?: string;
     navigateTarget?: { colStart: number; colEnd: number; ts: number } | null;
@@ -98,7 +100,7 @@ interface OligizeResponse {
     param_warnings?: string[];
 }
 
-const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function QueryViewer({ data, jobName, genbankHeader, onGenbankHeaderChange, onPrimersUpdate, onFlankingPrimersUpdate, flankingPanelState, onFlankingPanelStateChange, onNavigateTo, oligoRegion, autofindRegion, idtCredentials, onParameterSetChange, alignment, navigateTarget, isDarkMode, importedSession, onSaveSession }, ref) {
+const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function QueryViewer({ data, jobName, genbankHeader, onGenbankHeaderChange, onPrimersUpdate, onFlankingPrimersUpdate, flankingPanelState, onFlankingPanelStateChange, onNavigateTo, oligoRegion, autofindRegion, idtCredentials, onParameterSetChange, searchEngine, alignment, navigateTarget, isDarkMode, importedSession, onSaveSession }, ref) {
     const API_BASE = ((import.meta.env.VITE_API_BASE as string) || '');
     const [copyFeedback, setCopyFeedback] = useState('');
 
@@ -191,6 +193,8 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
     const fixedRebuildRef = useRef<{ data?: typeof data; fixed?: FixedAbsCoords | null; searchParams?: typeof searchParams }>({});
     // When region analysis is active, fetchPrimers uses this subsequence so sliders stay within the region
     const regionSeqContextRef = useRef<{ rawSub: string; ungappedOffset: number } | null>(null);
+    const moligoAbortRef = useRef<AbortController | null>(null);
+    const regionAbortRef = useRef<AbortController | null>(null);
     const handleRegionAnalysisRef = useRef<() => Promise<void>>(async () => {});
     const [regionAnalysisActive, setRegionAnalysisActive] = useState(false);
     // Reset toggle whenever a new region is drawn
@@ -766,10 +770,14 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
 
         setLoading(true);
         setError('');
+        regionAbortRef.current?.abort();
+        const ac = new AbortController();
+        regionAbortRef.current = ac;
         try {
             const res = await fetch(((import.meta.env.VITE_API_BASE as string) || '') + '/moligize', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
+                signal: ac.signal,
                 body: JSON.stringify({
                     sequence: rawSub,
                     moligo1_shift: 0,
@@ -779,6 +787,7 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                     auto_search: true,
                     local_optimize: true,
                     scan_full_region: true,
+                    engine: searchEngine,
                     salt_mono: Number(advancedParams.salt_mono),
                     salt_div: Number(advancedParams.salt_div),
                     dntp_conc: Number(advancedParams.dntp_conc),
@@ -833,9 +842,10 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                 p2: { start: data.start + mapUngappedToGapped(p2Start, data.seq), end: data.start + mapUngappedToGapped(p2End, data.seq) }
             });
         } catch (err: any) {
+            if (err?.name === 'AbortError') return;
             setError(err.message || 'Region analysis failed');
         } finally {
-            setLoading(false);
+            if (!ac.signal.aborted) setLoading(false);
         }
     };
 
@@ -858,6 +868,10 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
 
         const raw = data.seq.replace(/-/g, '');
         if (raw.length < 2) return;
+
+        moligoAbortRef.current?.abort();
+        const ac = new AbortController();
+        moligoAbortRef.current = ac;
 
         const fetchPrimers = async () => {
             if (fixedAbsCoords) {
@@ -910,6 +924,7 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                 const res = await fetch(((import.meta.env.VITE_API_BASE as string) || "") + '/moligize', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
+                    signal: ac.signal,
                     body: JSON.stringify({
                         sequence: seqToSend,
                         moligo1_shift: moligo1Shift,
@@ -918,6 +933,7 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                         moligo2_len: moligo2Len,
                         auto_search: isAutoSearchNeeded,
                         local_optimize: localOptimize,
+                        engine: searchEngine,
                         salt_mono: Number(advancedParams.salt_mono),
                         salt_div: Number(advancedParams.salt_div),
                         dntp_conc: Number(advancedParams.dntp_conc),
@@ -998,15 +1014,16 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                 });
 
             } catch (err: any) {
+                if (err?.name === 'AbortError') return;
                 setError(err.message || 'Failed to generate oligos');
             } finally {
-                setLoading(false);
+                if (!ac.signal.aborted) setLoading(false);
             }
         };
 
         const debounce = setTimeout(fetchPrimers, 200);
-        return () => clearTimeout(debounce);
-    }, [data, moligo1Shift, moligo2Shift, searchParams, moligo1Len, moligo2Len, fixedAbsCoords, isAutoSearchNeeded]);
+        return () => { clearTimeout(debounce); ac.abort(); };
+    }, [data, moligo1Shift, moligo2Shift, searchParams, moligo1Len, moligo2Len, fixedAbsCoords, isAutoSearchNeeded, searchEngine]);
 
     // Persistence
     useEffect(() => { localStorage.setItem('moligo1_shift', String(moligo1Shift)); }, [moligo1Shift]);
@@ -1825,7 +1842,12 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
             <div className="p-0">
                 <div className="bg-zinc-50 dark:bg-zinc-800/40 border-b border-zinc-200 dark:border-zinc-800 p-4 relative">
                     <div className="flex justify-between items-center mb-2">
-                        <h3 className="eyebrow">Oligo Selection Parameters</h3>
+                        <div className="flex items-center gap-2">
+                            <h3 className="eyebrow">Oligo Selection Parameters</h3>
+                            {searchEngine === 'strider' && (
+                                <span className="text-[10px] font-medium uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Engine: Strider</span>
+                            )}
+                        </div>
                         <button
                             onClick={() => setShowAdvanced(!showAdvanced)}
                             className="text-[11px] font-medium text-teal-700 dark:text-teal-300 hover:text-teal-800 dark:hover:text-teal-200 uppercase tracking-wider flex items-center gap-1"
@@ -2753,6 +2775,7 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                     onFlankingPrimersUpdate={handleFlankingPrimersUpdate}
                     restoredState={flankingPanelState ?? null}
                     onPanelStateChange={onFlankingPanelStateChange}
+                    searchEngine={searchEngine}
                 />
             </div>
         )}
