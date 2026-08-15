@@ -1,0 +1,20 @@
+{
+  "id": "f1982367",
+  "phase": "completed",
+  "pageUrl": "/",
+  "sourceFile": null,
+  "expectedVariants": 2,
+  "arrivedVariants": 0,
+  "visibleVariant": 0,
+  "paramValues": {},
+  "pendingEventSeq": null,
+  "pendingEvent": null,
+  "deliveryLease": null,
+  "checkpointRevision": 2,
+  "activeOwner": "12c11723",
+  "sourceMarkers": {},
+  "fallbackMode": null,
+  "annotationArtifacts": [],
+  "diagnostics": [],
+  "updatedAt": "2026-08-15T15:51:23.780Z"
+}
