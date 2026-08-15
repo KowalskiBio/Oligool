@@ -39,6 +39,7 @@ interface Props {
     restoredState?: FlankingPanelState | null;
     /** Publishes durable panel state upward so session saves capture the user's primer work. */
     onPanelStateChange?: (state: FlankingPanelState) => void;
+    searchEngine?: 'primer3' | 'strider';
 }
 
 const API = ((import.meta.env.VITE_API_BASE as string) || '');
@@ -65,7 +66,7 @@ export default function FlankingPrimersPanel({
     p1Start, p1End, p2Start, p2End,
     alignment, oligoPrimers, navigateTarget, isDarkMode,
     idtCredentials, gappedData, onFlankingPrimersUpdate,
-    restoredState, onPanelStateChange
+    restoredState, onPanelStateChange, searchEngine
 }: Props) {
     // Primer3 params — initialized from a restored session when present
     const rp = restoredState?.params ?? FLANKING_PANEL_DEFAULTS.params;
@@ -168,6 +169,7 @@ export default function FlankingPrimersPanel({
                 signal,
                 body: JSON.stringify({
                     full_seq: rawSeq, oligo_start: oligoStart, oligo_end: oligoEnd,
+                    engine: searchEngine,
                     flank_window: flankWindow,
                     opt_size: optSize, min_size: minSize, max_size: maxSize,
                     opt_tm: optTm, min_tm: minTm, max_tm: maxTm,
@@ -189,12 +191,15 @@ export default function FlankingPrimersPanel({
     // A drag fires one effect run per intermediate position, so debounce until the
     // pointer settles and abort any in-flight request before issuing a new one.
     const prevOligoRef = useRef({ start: oligoStart, end: oligoEnd });
+    const prevEngineRef = useRef(searchEngine);
     const designAbortRef = useRef<AbortController | null>(null);
     const designDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     useEffect(() => {
-        if (prevOligoRef.current.start === oligoStart && prevOligoRef.current.end === oligoEnd) return;
+        const oligoChanged = prevOligoRef.current.start !== oligoStart || prevOligoRef.current.end !== oligoEnd;
+        const engineChanged = prevEngineRef.current !== searchEngine;
+        if (!oligoChanged && !engineChanged) return;
         prevOligoRef.current = { start: oligoStart, end: oligoEnd };
-        // Automatically redesign if the user hasn't set manual flanking region overrides
+        prevEngineRef.current = searchEngine;
         if (manualLeftStart !== null || manualRightStart !== null) return;
         if (designDebounceRef.current !== null) clearTimeout(designDebounceRef.current);
         designDebounceRef.current = setTimeout(() => {
@@ -205,7 +210,7 @@ export default function FlankingPrimersPanel({
             design(ac.signal);
         }, 300);
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [oligoStart, oligoEnd]);
+    }, [oligoStart, oligoEnd, searchEngine]);
 
     // Tear down pending auto-design work on unmount
     useEffect(() => () => {
@@ -1377,7 +1382,12 @@ export default function FlankingPrimersPanel({
                 {/* ── Primer3 Parameters ── */}
                 <div className="rounded-lg border border-zinc-200 dark:border-zinc-800 overflow-hidden">
                     <div className="px-4 py-3 border-b border-zinc-100 dark:border-zinc-800 flex items-center justify-between">
-                        <span className="text-xs font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Primer3 Parameters</span>
+                        <div className="flex items-center gap-2">
+                            <span className="text-xs font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Primer3 Parameters</span>
+                            {searchEngine === 'strider' && (
+                                <span className="text-[10px] font-medium uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Engine: Strider</span>
+                            )}
+                        </div>
                         <button onClick={() => setShowAdv(v => !v)}
                             className="text-[10px] font-bold px-2 py-1 rounded border border-zinc-200 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-700 transition-colors text-zinc-500">
                             {showAdv ? '▲ Hide Advanced' : '▼ Advanced'}
