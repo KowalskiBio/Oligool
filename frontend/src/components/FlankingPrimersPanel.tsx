@@ -40,6 +40,7 @@ interface Props {
     /** Publishes durable panel state upward so session saves capture the user's primer work. */
     onPanelStateChange?: (state: FlankingPanelState) => void;
     searchEngine?: 'primer3' | 'strider';
+    onParameterSetChange?: (value: string) => void;
 }
 
 const API = ((import.meta.env.VITE_API_BASE as string) || '');
@@ -48,7 +49,7 @@ type PreviewMSAProps = React.ComponentProps<typeof MSAViewer>;
 
 // Hands the one-shot zoom to the embedded viewer only after it has measured its
 // real width and label column (~200ms). Delivered at mount it would compute the
-// centering with default metrics and, being deliberately one-shot, never retry —
+// centering with default metrics and, being deliberately one-shot, never retry;
 // which is why the preview used to open on the wrong spot. The wrapper remounts
 // with every preview open, so the delivery re-arms each time.
 function DelayedNavMSA(props: PreviewMSAProps) {
@@ -66,9 +67,9 @@ export default function FlankingPrimersPanel({
     p1Start, p1End, p2Start, p2End,
     alignment, oligoPrimers, navigateTarget, isDarkMode,
     idtCredentials, gappedData, onFlankingPrimersUpdate,
-    restoredState, onPanelStateChange, searchEngine
+    restoredState, onPanelStateChange, searchEngine, onParameterSetChange
 }: Props) {
-    // Primer3 params — initialized from a restored session when present
+    // Primer3 params : initialized from a restored session when present
     const rp = restoredState?.params ?? FLANKING_PANEL_DEFAULTS.params;
     const [flankWindow, setFlankWindow] = useState(rp.flankWindow);
     const [optSize, setOptSize] = useState(rp.optSize);
@@ -548,7 +549,6 @@ export default function FlankingPrimersPanel({
     };
 
     const analyzeStriderIndividual = async (seq: string) => {
-        if (striderResultsIndiv[seq]) return;
         try {
             const aRes = await fetch(((import.meta.env.VITE_API_BASE as string) || "") + '/strider/analyze', {
                 method: 'POST',
@@ -598,8 +598,20 @@ export default function FlankingPrimersPanel({
         latestRef.current = { idtCredentials, selFwd, selRev, analyzeIndividual, analyzeStriderIndividual, runProductAnalysis, runStriderPairAnalysis, analyzePrimerP3 };
     });
 
+    const prevParamSetRef = useRef(idtCredentials?.parameterSet);
+    useEffect(() => {
+        if (prevParamSetRef.current !== idtCredentials?.parameterSet) {
+            prevParamSetRef.current = idtCredentials?.parameterSet;
+            const seqs = Object.keys(striderResultsIndiv);
+            seqs.forEach(seq => {
+                setAnalyzingStriderIndiv(prev => ({ ...prev, [seq]: true }));
+                analyzeStriderIndividual(seq);
+            });
+        }
+    }, [idtCredentials?.parameterSet]);
+
     // Primitive keys: primer3 salt params (mvConc, dvConc, dntpConc, dnaConc)
-    // are panel-local state — concKey re-fires the pair effect when they change.
+    // are panel-local state : concKey re-fires the pair effect when they change.
     const selFwdSeq = selFwd?.sequence;
     const selRevSeq = selRev?.sequence;
     const concKey = [mvConc, dvConc, dntpConc, dnaConc].join(':');
@@ -678,7 +690,7 @@ export default function FlankingPrimersPanel({
                         const hasStructure = !!(item.DotBracket || item.Local_DotBracket || item.Bonds);
                         return (
                             <div key={i} className={`flex flex-col gap-2 ${maxItems > 1 && i > 0 ? 'border-t border-zinc-100 dark:border-zinc-800 pt-3' : ''}`}>
-                                {/* Provenance block (dG + Tm together, above the structure — mirrors MOLigo). */}
+                                {/* Provenance block (dG + Tm together, above the structure : mirrors MOLigo). */}
                                 {(!hasStructure && topDg == null && itemLocalDg == null) ? (
                                     <div className="text-[9px] text-zinc-400 italic text-center px-1 py-0.5">No stable structure found</div>
                                 ) : (
@@ -686,13 +698,13 @@ export default function FlankingPrimersPanel({
                                         <div className="flex justify-between items-center">
                                             {maxItems > 1 && <span className="font-semibold text-[10px]">{title} {i + 1}</span>}
                                             <div className="flex gap-3 ml-auto">
-                                                <span>IDT ΔG: <b className={getIdtStatusColor(itemDg ?? undefined)}>{itemDg != null ? `${itemDg > 0 ? '+' : ''}${itemDg.toFixed(2)}` : '—'}</b></span>
-                                                <span>Strider ΔG: <b className={itemLocalDg != null ? (itemLocalDg <= 0 ? "text-amber-500" : "text-zinc-400") : "text-zinc-400"}>{itemLocalDg != null ? `${itemLocalDg > 0 ? '+' : ''}${itemLocalDg.toFixed(2)}` : '—'}</b></span>
+                                                <span>IDT ΔG: <b className={getIdtStatusColor(itemDg ?? undefined)}>{itemDg != null ? `${itemDg > 0 ? '+' : ''}${itemDg.toFixed(2)}` : '–'}</b></span>
+                                                <span>Strider ΔG: <b className={itemLocalDg != null ? (itemLocalDg <= 0 ? "text-amber-500" : "text-zinc-400") : "text-zinc-400"}>{itemLocalDg != null ? `${itemLocalDg > 0 ? '+' : ''}${itemLocalDg.toFixed(2)}` : '–'}</b></span>
                                             </div>
                                         </div>
                                         <div className="flex gap-3 justify-end opacity-80">
-                                            <span>IDT Tm: <b className="text-zinc-500">{itemIdtTm != null ? `${Number(itemIdtTm).toFixed(1)}°C` : '—'}</b></span>
-                                            <span>Strider Tm: <b className="text-zinc-500">{itemLocalTm != null ? `${itemLocalTm.toFixed(1)}°C` : '—'}</b></span>
+                                            <span>IDT Tm: <b className="text-zinc-500">{itemIdtTm != null ? `${Number(itemIdtTm).toFixed(1)}°C` : '–'}</b></span>
+                                            <span>Strider Tm: <b className="text-zinc-500">{itemLocalTm != null ? `${itemLocalTm.toFixed(1)}°C` : '–'}</b></span>
                                         </div>
                                     </div>
                                 )}
@@ -969,7 +981,7 @@ export default function FlankingPrimersPanel({
         return start + seq.length + (targetRelative - count);
     };
 
-    // flankingPrimers for MSAViewer — only show primers the user explicitly selected with "Use".
+    // flankingPrimers for MSAViewer : only show primers the user explicitly selected with "Use".
     // Use mapRawToFullGapped (derived from the full alignment) so coordinates are stable
     // regardless of the current viewport/zoom level. Never use the slice-based mapToGapped here.
     const activeFwd = selFwd;
@@ -1059,7 +1071,7 @@ export default function FlankingPrimersPanel({
         const pIv = partner ? getPrimerInterval(partner, partnerSide) : null;
         const pg: [number, number] | null = pIv ? [mapRawToFullGapped(pIv[0]), mapRawToFullGapped(pIv[1])] : null;
         // Zoom-fit covers the previewed primer, the selected partner (if any),
-        // and both MOLigos — everything the user needs in view at once. MOLigo
+        // and both MOLigos : everything the user needs in view at once. MOLigo
         // columns must come from mapRawToFullGapped (stable, full-alignment),
         // never the viewport-relative mapToGapped used by gappedOligoPrimers.
         const moligoG = oligoPrimers ? {
@@ -1251,17 +1263,17 @@ export default function FlankingPrimersPanel({
                 </div>
                 <div className="grid grid-cols-7 gap-2 text-[10px] text-zinc-500 dark:text-zinc-400">
                     <div><span className="font-bold text-zinc-600 dark:text-zinc-300">Len</span><br />{p.length} bp</div>
-                    <div><span className="font-bold text-zinc-600 dark:text-zinc-300">P3 Tm</span><br />{p.tm ?? p.primer3?.tm ?? '—'}°C</div>
-                    <div><span className="font-bold text-zinc-600 dark:text-zinc-300" title="IDT Tm">IDT Tm</span><br />{idtResult?.analyze ? (extractTm(idtResult.analyze)?.toFixed(1) || 'N/A') + '°C' : '—'}</div>
-                    <div><span className="font-bold text-zinc-600 dark:text-zinc-300" title="Strider duplex Tm">Strider Tm</span><br />{p.tm_strider != null ? `${p.tm_strider.toFixed(1)}°C` : '—'}</div>
-                    <div><span className="font-bold text-zinc-600 dark:text-zinc-300">GC</span><br />{p.gc_percent ?? p.primer3?.gc_percent ?? '—'}%</div>
-                    <div><span className="font-bold text-zinc-600 dark:text-zinc-300">Hairpin Tm</span><br /><span className={p.hairpin.structure_found ? 'text-amber-500' : 'text-emerald-500'}>{p.hairpin.structure_found ? `${p.primer3?.hairpin_th ?? '—'}°C` : 'None'}</span></div>
+                    <div><span className="font-bold text-zinc-600 dark:text-zinc-300">P3 Tm</span><br />{p.tm ?? p.primer3?.tm ?? '–'}°C</div>
+                    <div><span className="font-bold text-zinc-600 dark:text-zinc-300" title="IDT Tm">IDT Tm</span><br />{idtResult?.analyze ? (extractTm(idtResult.analyze)?.toFixed(1) || 'N/A') + '°C' : '–'}</div>
+                    <div><span className="font-bold text-zinc-600 dark:text-zinc-300" title="Strider duplex Tm">Strider Tm</span><br />{p.tm_strider != null ? `${p.tm_strider.toFixed(1)}°C` : '–'}</div>
+                    <div><span className="font-bold text-zinc-600 dark:text-zinc-300">GC</span><br />{p.gc_percent ?? p.primer3?.gc_percent ?? '–'}%</div>
+                    <div><span className="font-bold text-zinc-600 dark:text-zinc-300">Hairpin Tm</span><br /><span className={p.hairpin.structure_found ? 'text-amber-500' : 'text-emerald-500'}>{p.hairpin.structure_found ? `${p.primer3?.hairpin_th ?? '–'}°C` : 'None'}</span></div>
                     <div><span className="font-bold text-zinc-600 dark:text-zinc-300">Self-dimer</span><br /><span className={statusDg(p.homodimer?.dg)}>{p.homodimer?.dg !== null ? `${p.homodimer.dg} kcal` : 'OK'}</span></div>
                 </div>
 
                 {isSelected && (
                     <div className="mt-3 pt-3 border-t border-emerald-200 dark:border-emerald-800/30">
-                        <div className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-widest mb-2 flex items-center gap-2">
+                        <div className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-2 flex items-center gap-2">
                             <span>Structural Analysis (IDT + Strider)</span>
                             {(isAnalStrider || isAnalIdt) && <div className="w-3 h-3 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />}
                         </div>
@@ -1291,7 +1303,7 @@ export default function FlankingPrimersPanel({
             <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">{label}</label>
             <input type="number" value={val} step={step} min={min} max={max}
                 onChange={e => set(parseFloat(e.target.value) || 0)}
-                className="input px-2 py-1 text-xs font-mono tabular-nums" />
+                className="input px-2 py-1 text-xs font-mono tabular-nums appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [&::-moz-appearance:textfield]" />
         </div>
     );
 
@@ -1313,7 +1325,24 @@ export default function FlankingPrimersPanel({
             )}
 
             <div className="p-5 space-y-5">
-                {/* ── Static sequence view ── */}
+                {/* ── Context Viewer ── */}
+                <div>
+                <div className="flex items-center justify-between mb-2">
+                    <span className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Context Viewer</span>
+                    <div className="flex items-center gap-2">
+                        <label className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider whitespace-nowrap">Flank Window (bp)</label>
+                        <input
+                            type="text"
+                            inputMode="numeric"
+                            value={flankWindow}
+                            onChange={e => {
+                                const v = e.target.value.replace(/[^0-9]/g, '');
+                                setFlankWindow(v === '' ? 0 : parseInt(v));
+                            }}
+                            className="input w-20 px-2 py-0.5 text-xs font-mono tabular-nums"
+                        />
+                    </div>
+                </div>
                 <div className="rounded-lg border border-zinc-200 dark:border-zinc-800 overflow-hidden relative">
                     <div className="px-4 py-2 border-b border-zinc-100 dark:border-zinc-800 flex flex-wrap items-center justify-between text-[10px] font-medium gap-2">
                         <div className="flex gap-4 flex-wrap text-zinc-400">
@@ -1342,17 +1371,6 @@ export default function FlankingPrimersPanel({
                                 )}
                             </div>
                         )}
-                        <div className="flex items-center gap-2 flex-shrink-0">
-                            <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider whitespace-nowrap">Flank (bp)</label>
-                            <input
-                                type="number"
-                                value={flankWindow}
-                                min={0}
-                                step={50}
-                                onChange={e => setFlankWindow(Math.max(0, parseInt(e.target.value) || 0))}
-                                className="input w-20 px-2 py-0.5 text-xs font-mono tabular-nums"
-                            />
-                        </div>
                     </div>
                     
                     <div
@@ -1362,6 +1380,7 @@ export default function FlankingPrimersPanel({
                     >
                         {renderStaticSeq()}
                     </div>
+                </div>
                 </div>
 
                 {/* ── Amplicon Length ── */}
@@ -1420,9 +1439,30 @@ export default function FlankingPrimersPanel({
                                 </div>
                             </div>
                         )}
-                        <div className="flex gap-2">
+                        <div className="flex gap-2 items-center">
+                            <div
+                                className="flex items-center rounded-md border border-zinc-300 dark:border-zinc-700 overflow-hidden"
+                                title="NN parameter set for primer design (affects Tm and structure analysis globally)"
+                            >
+                                {([
+                                    ['mathews2004-dna', 'Mathews'],
+                                    ['native', 'SantaLucia'],
+                                ] as const).map(([value, label], idx) => (
+                                    <button
+                                        key={value}
+                                        onClick={() => onParameterSetChange?.(value)}
+                                        className={`px-2.5 py-2 text-xs font-medium transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-teal-700 dark:focus-visible:outline-teal-300 ${idx > 0 ? 'border-l border-zinc-300 dark:border-zinc-700' : ''}${
+                                            (idtCredentials?.parameterSet || 'mathews2004-dna') === value
+                                                ? 'bg-teal-700/10 dark:bg-teal-300/10 text-teal-800 dark:text-teal-200'
+                                                : 'bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700'
+                                        }`}
+                                    >
+                                        {label}
+                                    </button>
+                                ))}
+                            </div>
                             <button onClick={() => design()} disabled={loading}
-                                className={`flex-1 rounded-md font-bold text-sm transition-all ${loading ? 'py-2.5 bg-zinc-100 dark:bg-zinc-900 text-zinc-400 cursor-not-allowed' : 'btn-primary justify-center py-2.5 active:scale-95'}`}>
+                                className={`flex-1 rounded-md font-medium text-sm transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700 dark:focus-visible:outline-teal-300 ${loading ? 'py-2.5 bg-zinc-100 dark:bg-zinc-900 text-zinc-400 cursor-not-allowed' : 'bg-teal-700 text-white hover:bg-teal-800 dark:bg-teal-300 dark:text-zinc-900 dark:hover:bg-teal-200 justify-center py-2.5'}`}>
                                 {loading ? (
                                     <span className="flex items-center justify-center gap-2">
                                         <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
@@ -1431,7 +1471,7 @@ export default function FlankingPrimersPanel({
                                 ) : 'Design Flanking Primers'}
                             </button>
                             <button onClick={designManual} disabled={loading || (manualLeftStart === null && manualRightStart === null)}
-                                className="btn-secondary font-bold text-sm px-4 py-2.5 whitespace-nowrap disabled:cursor-not-allowed">
+                                className="btn-secondary font-medium text-sm px-4 py-2.5 whitespace-nowrap disabled:cursor-not-allowed">
                                 Manual
                             </button>
                         </div>
@@ -1444,7 +1484,7 @@ export default function FlankingPrimersPanel({
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-5 ">
                         <div>
                             <div className="text-xs font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider mb-2 px-1">
-                                Left (Forward) Primers{result ? ` — ${result.forward.num_returned} found` : ''}
+                                Left (Forward) Primers{result ? `: ${result.forward.num_returned} found` : ''}
                             </div>
                             {/* Custom dragged primer card shown above results when it no longer matches any candidate */}
                             {selFwd && !result?.forward.primers.some(p => p.sequence === selFwd.sequence) && (
@@ -1459,7 +1499,7 @@ export default function FlankingPrimersPanel({
                         </div>
                         <div>
                             <div className="text-xs font-bold text-teal-600 dark:text-teal-400 uppercase tracking-wider mb-2 px-1">
-                                Right (Reverse) Primers{result ? ` — ${result.reverse.num_returned} found` : ''}
+                                Right (Reverse) Primers{result ? `: ${result.reverse.num_returned} found` : ''}
                             </div>
                             {/* Custom dragged primer card shown above results when it no longer matches any candidate */}
                             {selRev && !result?.reverse.primers.some(p => p.sequence === selRev.sequence) && (
@@ -1564,7 +1604,7 @@ export default function FlankingPrimersPanel({
                 const iv = getPrimerInterval(previewPrimer.primer, previewPrimer.side);
                 const relPos = relativeMOLigoPos(previewPrimer.primer, previewPrimer.side);
                 const sideLabel = previewPrimer.side === 'fwd' ? 'Forward' : 'Reverse';
-                // The already-selected opposite-side primer, if any — shown in the
+                // The already-selected opposite-side primer, if any : shown in the
                 // context view and used for the live preview amplicon size.
                 const partnerSide = previewPrimer.side === 'fwd' ? 'rev' : 'fwd';
                 const partner = previewPrimer.side === 'fwd' ? selRev : selFwd;

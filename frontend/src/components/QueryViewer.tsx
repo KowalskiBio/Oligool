@@ -62,7 +62,7 @@ interface QueryViewerProps {
     onParameterSetChange?: (value: string) => void;
     /** Search engine for MOLigo quick search and flanking primer picking. */
     searchEngine?: 'primer3' | 'strider';
-    // MSA Viewer props — forwarded to FlankingPrimersPanel
+    // MSA Viewer props, forwarded to FlankingPrimersPanel
     alignment?: string;
     navigateTarget?: { colStart: number; colEnd: number; ts: number } | null;
     isDarkMode?: boolean;
@@ -240,7 +240,7 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
     const [interactiveFlankWindow, setInteractiveFlankWindow] = useState(200);
 
 
-    // Fix Position toggle — when set, fetchPrimers is bypassed and oligos stick to global absolute coordinates
+    // Fix Position toggle: when set, fetchPrimers is bypassed and oligos stick to global absolute coordinates
     const [fixedAbsCoords, setFixedAbsCoords] = useState<FixedAbsCoords | null>(null);
 
     const captureFixedContext = useCallback(() => {
@@ -565,7 +565,7 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
 
     // 1. Clear saved positions only when a totally new BLAST search comes in
     useEffect(() => {
-        if (importPending) return; // an incoming session is being restored — don't wipe it
+        if (importPending) return; // an incoming session is being restored; don't wipe it
         if (data?.id) {
             setSavedPositions([]);
             setEditingLabelId(null);
@@ -576,7 +576,7 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
     // 2. Restart search when the active window changes (pan/zoom), UNLESS we are locked.
     // This allows the engine to find the 'best' oligo anywhere in the new frame instead of sitting in the center.
     useEffect(() => {
-        if (importPending) return; // an incoming session is being restored — don't reset shifts
+        if (importPending) return; // an incoming session is being restored; don't reset shifts
         if (data && !fixedAbsCoords) {
             const prev = prevDataRef.current;
             if (prev && prev.id === data.id && prev.seq !== data.seq && primers) {
@@ -1559,10 +1559,10 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                     const errJson = await aRes.json();
                     // IDT returns { Message: "..." } on 400 errors
                     const msg: string = errJson.Message || errJson.detail || errJson.message || JSON.stringify(errJson);
-                    // Strip the internal stack trace — only keep up to the first newline
+                    // Strip the internal stack trace; only keep up to the first newline
                     detail = `IDT ${aRes.status}: ${msg.split('\r\n')[0].split('\n')[0]}`;
                 } catch { /* response wasn't JSON */ }
-                throw new Error(`${detail}\n\nSent — Oligo 1: ${p1}\nOligo 2: ${p2}`);
+                throw new Error(`${detail}\n\nSent: Oligo 1: ${p1}\nOligo 2: ${p2}`);
             }
 
             const results = await aRes.json();
@@ -1770,7 +1770,7 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                             disabled={loading && !regionAnalysisActive}
                             className={`ml-2 btn-secondary ${regionAnalysisActive ? 'icon-btn-active' : ''}`}
                             title={regionAnalysisActive
-                                ? `Region active (cols ${oligoRegion.startCol + 1}–${oligoRegion.endCol + 1}) — click to deactivate`
+                                ? `Region active (cols ${oligoRegion.startCol + 1}–${oligoRegion.endCol + 1}). Click to deactivate.`
                                 : `Search oligos only within MSA columns ${oligoRegion.startCol + 1}–${oligoRegion.endCol + 1}`}
                         >
                             <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -2066,7 +2066,7 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                         </div>
                     )}
 
-                    {/* Primer3 parameter warning — kept for future use, hidden in UI.
+                    {/* Primer3 parameter warning (kept for future use, hidden in UI).
                         To re-enable: replace this comment block with the JSX below.
                         {paramsNotMet && primers?.param_warnings && primers.param_warnings.length > 0 && (
                             <div className="mb-4 px-3 py-2 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/50 rounded-md text-amber-700 dark:text-amber-400 text-xs flex flex-col gap-1">
@@ -2597,7 +2597,7 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                                 <div className="flex items-center gap-3">
                                     <div
                                         className="flex items-center rounded-md border border-zinc-300 dark:border-zinc-700 overflow-hidden"
-                                        title="NN parameter set for local (Strider) structure analysis — Mg²⁺ lives in the advanced parameters above"
+                                        title="NN parameter set for local (Strider) structure analysis. Mg²⁺ lives in the advanced parameters above."
                                     >
                                         {([
                                             ['mathews2004-dna', 'Mathews'],
@@ -2617,14 +2617,14 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                                         ))}
                                     </div>
                                     {!isStriderLoading && (
-                                        <button onClick={() => { setIdtResults(null); setIdtAnalyzedSeqs(null); setStriderResults(null); setStriderAnalyzedSeqs(null); setTimeout(runStriderAnalysis, 0); }} className={`btn-secondary ${striderResults ? 'icon-btn-active' : ''}`}>
-                                            {striderResults ? '↻ Re-run Structural analysis' : 'Run Structural analysis'}
+                                        <button onClick={() => { setTimeout(runStriderAnalysis, 0); }} className={`btn-secondary transition-colors ${striderResults ? 'border-teal-700 dark:border-teal-300 text-teal-700 dark:text-teal-300 bg-teal-700/10 dark:bg-teal-300/10' : ''}`}>
+                                            {striderResults ? '↻ Re-run Structural Analysis' : 'Run Structural Analysis'}
                                         </button>
                                     )}
                                     {isStriderLoading && <div className="animate-pulse text-xs text-emerald-700 dark:text-emerald-400 font-medium">Analyzing via Strider...</div>}
                                     {idtCredentials && !isIdtLoading && (
-                                        <button onClick={() => { setIdtResults(null); setIdtAnalyzedSeqs(null); setIdtError(null); setTimeout(runIdtAnalysis, 0); }} className={`text-[10px] px-2 py-1 rounded-md border font-bold transition-all ${idtResults ? 'bg-blue-600 border-blue-600 text-white' : 'border-blue-600/40 text-blue-700 dark:text-blue-300 hover:bg-blue-700/10 dark:hover:bg-blue-300/10'}`}>
-                                            {idtResults ? '↻ IDT' : 'IDT'}
+                                        <button onClick={() => { setIdtError(null); setTimeout(runIdtAnalysis, 0); }} className={`btn-secondary transition-colors ${idtResults ? 'border-blue-600 dark:border-blue-400 text-blue-600 dark:text-blue-400 bg-blue-600/10 dark:bg-blue-400/10' : ''}`}>
+                                            {idtResults ? '↻ Re-run IDT' : 'Run IDT'}
                                         </button>
                                     )}
                                     {isIdtLoading && <div className="animate-pulse text-xs text-blue-700 dark:text-blue-400 font-medium">Analyzing with IDT API...</div>}
@@ -2726,7 +2726,7 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
             </div>
         </div>
 
-        {/* ── Flanking Primers Provenance (shown on Proceed) — separate top-level card ── */}
+        {/* Flanking Primers Provenance (shown on Proceed): separate top-level card */}
         {showFlankingPrimers && primers && (
             <div
                 id="flanking-primers-section"
@@ -2776,6 +2776,7 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                     restoredState={flankingPanelState ?? null}
                     onPanelStateChange={onFlankingPanelStateChange}
                     searchEngine={searchEngine}
+                    onParameterSetChange={onParameterSetChange}
                 />
             </div>
         )}

@@ -94,7 +94,8 @@ export default function MOLigoPanel(props: MOLigoProps) {
     return (
         <div className="mt-6 pt-4 max-w-[85rem] mx-auto px-2 md:px-6">
             {/* Header */}
-            <div 
+            <div
+                id="moligo-provenance-toggle"
                 className="flex items-center justify-between mb-3 cursor-pointer group"
                 onClick={() => setIsSchematicOpen(!isSchematicOpen)}
             >
@@ -166,7 +167,7 @@ export default function MOLigoPanel(props: MOLigoProps) {
                                 <option value="">-- Pick Database TAG --</option>
                                 {TAG_DATABASE.map(tag => (
                                     <option key={tag.reg} value={tag.partNumber}>
-                                        {tag.partNumber} ({tag.reg}) — {tag.antiTag}
+                                        {tag.partNumber} ({tag.reg}) / {tag.antiTag}
                                     </option>
                                 ))}
                             </select>
