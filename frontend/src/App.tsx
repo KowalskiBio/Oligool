@@ -522,7 +522,7 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
     <div className="min-h-screen py-8 px-4 sm:px-6 lg:px-8">
       <div className="max-w-7xl mx-auto">
         {/* Header */}
-        <header className="mb-8 flex items-start justify-between">
+        <header className="sticky top-0 z-40 -mt-3 mb-5 flex items-start justify-between bg-zinc-100 py-3 dark:bg-zinc-950">
           <div>
             <h1 className="text-lg font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">
               Oligool
