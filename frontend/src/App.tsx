@@ -41,6 +41,9 @@ function App() {
     return saved === 'us' ? 'us' : 'eu';
   });
   const [idtMgConc, setIdtMgConc] = useState(() => localStorage.getItem('idt_mg_conc') || '0');
+  const [parameterSet, setParameterSet] = useState(
+    () => localStorage.getItem('parameter_set') || 'mathews2004-dna'
+  );
   const [showSettings, setShowSettings] = useState(!localStorage.getItem('ncbi_api_key'));
   const [maxHitsPreset, setMaxHitsPreset] = useState(() => localStorage.getItem('max_hits_preset') || '50');
   const [customHits, setCustomHits] = useState(() => localStorage.getItem('custom_hits') || '');
@@ -110,6 +113,7 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
   useEffect(() => { localStorage.setItem('custom_hits', customHits); }, [customHits]);
   useEffect(() => { localStorage.setItem('job_name', jobName); }, [jobName]);
   useEffect(() => { localStorage.setItem('idt_mg_conc', idtMgConc); }, [idtMgConc]);
+  useEffect(() => { localStorage.setItem('parameter_set', parameterSet); }, [parameterSet]);
   useEffect(() => { localStorage.setItem('idt_region', idtRegion); }, [idtRegion]);
   useEffect(() => {
     localStorage.setItem('autofind_treat_indels_as_mismatches', autofindTreatIndelsAsMismatches.toString());
@@ -1147,8 +1151,10 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                     username: idtUsername,
                     password: idtPassword,
                     mgConc: parseFloat(idtMgConc) || 0,
-                    region: idtRegion
+                    region: idtRegion,
+                    parameterSet
                   }}
+                  onParameterSetChange={setParameterSet}
                   alignment={alignment}
                   navigateTarget={navigateTarget}
                   isDarkMode={isDarkMode}

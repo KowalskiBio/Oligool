@@ -56,7 +56,10 @@ interface QueryViewerProps {
         password?: string;
         mgConc?: number;
         region?: 'us' | 'eu';
+        parameterSet?: string;
     };
+    /** Updates the shared thermodynamic parameter set (Mathews 2004 vs SantaLucia 2004). */
+    onParameterSetChange?: (value: string) => void;
     // MSA Viewer props — forwarded to FlankingPrimersPanel
     alignment?: string;
     navigateTarget?: { colStart: number; colEnd: number; ts: number } | null;
@@ -95,7 +98,7 @@ interface OligizeResponse {
     param_warnings?: string[];
 }
 
-const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function QueryViewer({ data, jobName, genbankHeader, onGenbankHeaderChange, onPrimersUpdate, onFlankingPrimersUpdate, flankingPanelState, onFlankingPanelStateChange, onNavigateTo, oligoRegion, autofindRegion, idtCredentials, alignment, navigateTarget, isDarkMode, importedSession, onSaveSession }, ref) {
+const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function QueryViewer({ data, jobName, genbankHeader, onGenbankHeaderChange, onPrimersUpdate, onFlankingPrimersUpdate, flankingPanelState, onFlankingPanelStateChange, onNavigateTo, oligoRegion, autofindRegion, idtCredentials, onParameterSetChange, alignment, navigateTarget, isDarkMode, importedSession, onSaveSession }, ref) {
     const API_BASE = ((import.meta.env.VITE_API_BASE as string) || '');
     const [copyFeedback, setCopyFeedback] = useState('');
 
@@ -1466,6 +1469,7 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                     mv_conc: Number(idtAdvancedParams.mv_conc),
                     dntp_conc: Number(idtAdvancedParams.dntp_conc),
                     oligo_conc: Number(idtAdvancedParams.oligo_conc),
+                    parameter_set: idtCredentials?.parameterSet || 'mathews2004-dna',
                 })
             });
             if (!aRes.ok) throw new Error("Strider Analysis Failed");
@@ -1522,7 +1526,8 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                 mv_conc: Number(idtAdvancedParams.mv_conc),
                 dntp_conc: Number(idtAdvancedParams.dntp_conc),
                 oligo_conc: Number(idtAdvancedParams.oligo_conc),
-                idt_region: idtCredentials.region || 'eu'
+                idt_region: idtCredentials.region || 'eu',
+                parameter_set: idtCredentials.parameterSet || 'mathews2004-dna',
             };
 
             const aRes = await fetch(((import.meta.env.VITE_API_BASE as string) || "") + '/idt/analyze', {
@@ -1959,6 +1964,17 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                                                 }}
                                                 className="input px-2 py-1 text-xs tabular-nums"
                                             />
+                                        </div>
+                                        <div className="flex flex-col gap-1">
+                                            <label className="text-[10px] font-bold text-zinc-400 uppercase">Thermo Params</label>
+                                            <select
+                                                value={idtCredentials?.parameterSet || 'mathews2004-dna'}
+                                                onChange={e => onParameterSetChange?.(e.target.value)}
+                                                className="input px-2 py-1 text-xs font-mono"
+                                            >
+                                                <option value="mathews2004-dna">Mathews 2004 (matches IDT)</option>
+                                                <option value="native">SantaLucia 2004</option>
+                                            </select>
                                         </div>
                                     </div>
                                 </div>
@@ -2557,26 +2573,29 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                             <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
                                 <h4 className="text-sm font-bold text-zinc-400 uppercase tracking-widest">Secondary structures</h4>
                                 <div className="flex items-center gap-3">
-                                    <div className="flex items-center gap-1.5">
-                                        <label className="text-[10px] font-bold text-zinc-400 uppercase">Mg²⁺ (mM)</label>
-                                        <input
-                                            type="number"
-                                            step="0.1"
-                                            min="0"
-                                            value={idtAdvancedParams.mg_conc}
-                                            onChange={(e) => {
-                                                const val = parseFloat(e.target.value) || 0;
-                                                setIdtAdvancedParams((prev: typeof idtAdvancedParams) => {
-                                                    const next = { ...prev, mg_conc: val };
-                                                    localStorage.setItem('idt_advanced_params', JSON.stringify(next));
-                                                    return next;
-                                                });
-                                            }}
-                                            className="input w-16 p-1 text-xs font-mono text-center tabular-nums"
-                                        />
+                                    <div
+                                        className="flex items-center rounded-md border border-zinc-300 dark:border-zinc-700 overflow-hidden"
+                                        title="NN parameter set for local (Strider) structure analysis — Mg²⁺ lives in the advanced parameters above"
+                                    >
+                                        {([
+                                            ['mathews2004-dna', 'Mathews'],
+                                            ['native', 'SantaLucia'],
+                                        ] as const).map(([value, label]) => (
+                                            <button
+                                                key={value}
+                                                onClick={() => onParameterSetChange?.(value)}
+                                                className={`px-2 py-1 text-[10px] font-bold uppercase transition-all ${
+                                                    (idtCredentials?.parameterSet || 'mathews2004-dna') === value
+                                                        ? 'bg-emerald-600 dark:bg-emerald-500 text-white'
+                                                        : 'bg-white dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-700'
+                                                }`}
+                                            >
+                                                {label}
+                                            </button>
+                                        ))}
                                     </div>
                                     {!isStriderLoading && (
-                                        <button onClick={() => { setStriderResults(null); setStriderAnalyzedSeqs(null); setTimeout(runStriderAnalysis, 0); }} className={`btn-secondary ${striderResults ? 'icon-btn-active' : ''}`}>
+                                        <button onClick={() => { setIdtResults(null); setIdtAnalyzedSeqs(null); setStriderResults(null); setStriderAnalyzedSeqs(null); setTimeout(runStriderAnalysis, 0); }} className={`btn-secondary ${striderResults ? 'icon-btn-active' : ''}`}>
                                             {striderResults ? '↻ Re-run Structural analysis' : 'Run Structural analysis'}
                                         </button>
                                     )}

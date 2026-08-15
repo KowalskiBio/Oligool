@@ -446,7 +446,8 @@ export default function FlankingPrimersPanel({
                     mv_conc: mvConc,
                     dntp_conc: dntpConc,
                     oligo_conc: dnaConc / 1000,
-                    idt_region: idtCredentials.region || 'eu'
+                    idt_region: idtCredentials.region || 'eu',
+                    parameter_set: idtCredentials.parameterSet || 'mathews2004-dna',
                 })
             });
             if (!aRes.ok) throw new Error("Product Analysis Failed");
@@ -476,6 +477,7 @@ export default function FlankingPrimersPanel({
                     mv_conc: mvConc,
                     dntp_conc: dntpConc,
                     oligo_conc: dnaConc / 1000,
+                    parameter_set: idtCredentials?.parameterSet || 'mathews2004-dna',
                 })
             });
             if (!aRes.ok) throw new Error("Strider Analysis Failed");
@@ -526,7 +528,8 @@ export default function FlankingPrimersPanel({
                     mv_conc: mvConc,
                     dntp_conc: dntpConc,
                     oligo_conc: dnaConc / 1000,
-                    idt_region: idtCredentials.region || 'eu'
+                    idt_region: idtCredentials.region || 'eu',
+                    parameter_set: idtCredentials.parameterSet || 'mathews2004-dna',
                 })
             });
             if (!aRes.ok) throw new Error("Product Analysis Failed");
@@ -551,6 +554,7 @@ export default function FlankingPrimersPanel({
                     mv_conc: mvConc,
                     dntp_conc: dntpConc,
                     oligo_conc: dnaConc / 1000,
+                    parameter_set: idtCredentials?.parameterSet || 'mathews2004-dna',
                 })
             });
             if (!aRes.ok) throw new Error("Strider Analysis Failed");
