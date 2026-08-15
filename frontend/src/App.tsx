@@ -47,7 +47,7 @@ function App() {
   const [searchEngine, setSearchEngine] = useState<'primer3' | 'strider'>(
     () => localStorage.getItem('search_engine') === 'strider' ? 'strider' : 'primer3'
   );
-  const [showSettings, setShowSettings] = useState(!localStorage.getItem('ncbi_api_key'));
+  const [showSettings, setShowSettings] = useState(false);
   const [maxHitsPreset, setMaxHitsPreset] = useState(() => localStorage.getItem('max_hits_preset') || '50');
   const [customHits, setCustomHits] = useState(() => localStorage.getItem('custom_hits') || '');
   const [organism, setOrganism] = useState(() => localStorage.getItem('organism') || '');
@@ -82,6 +82,10 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
   );
   const [showWhatsNew, setShowWhatsNew] = useState(false);
   const [showUserReport, setShowUserReport] = useState(false);
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [showUndo, setShowUndo] = useState(false);
+  const undoRef = useRef<(() => void) | null>(null);
+  const undoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const queryViewerRef = useRef<QueryViewerHandle>(null);
   const msaViewerRef = useRef<MSAViewerHandle>(null);
@@ -306,6 +310,47 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
     setImportedSession(null);
   };
 
+  const handleResetWithUndo = () => {
+    const prev = {
+      step, blastHits, filteredHits, showMatches, blastMeta, alignment,
+      selectedSequence, error, input, genbankHeader, selectedFlankingPrimers,
+      flankingPanelState, autofindSelectedAccessions, importedSession,
+    };
+    undoRef.current = () => {
+      setStep(prev.step);
+      setBlastHits(prev.blastHits);
+      setFilteredHits(prev.filteredHits);
+      setShowMatches(prev.showMatches);
+      setBlastMeta(prev.blastMeta);
+      setAlignment(prev.alignment);
+      setSelectedSequence(prev.selectedSequence);
+      setError(prev.error);
+      setInput(prev.input);
+      setGenbankHeader(prev.genbankHeader);
+      setSelectedFlankingPrimers(prev.selectedFlankingPrimers);
+      setFlankingPanelState(prev.flankingPanelState);
+      setAutofindSelectedAccessions(prev.autofindSelectedAccessions);
+      setImportedSession(prev.importedSession);
+    };
+    handleReset();
+    setShowUndo(true);
+    if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
+    undoTimerRef.current = setTimeout(() => {
+      setShowUndo(false);
+      undoRef.current = null;
+    }, 10000);
+  };
+
+  const handleUndo = () => {
+    if (undoRef.current) {
+      undoRef.current();
+      undoRef.current = null;
+    }
+    setShowUndo(false);
+    if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
+    flashSessionMsg('ok', 'Restored');
+  };
+
   const flashSessionMsg = (type: 'ok' | 'err', text: string, ms = 3000) => {
     setSessionMsg({ type, text });
     setTimeout(() => setSessionMsg(null), ms);
@@ -383,7 +428,7 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
   const handleSaveSession = useCallback(() => {
     const session = buildSession();
     if (!session) {
-      flashSessionMsg('err', 'Nothing to save yet — run a search first.');
+      flashSessionMsg('err', 'Nothing to save yet. Run a search first.');
       return;
     }
     try {
@@ -451,6 +496,31 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
       if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'S')) {
         e.preventDefault();
         handleSaveSession();
+      }
+
+      // Ctrl+M: toggle MOLigo provenance schematic
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'm' || e.key === 'M')) {
+        e.preventDefault();
+        const toggle = document.getElementById('moligo-provenance-toggle');
+        if (toggle) {
+          toggle.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          toggle.click();
+        }
+      }
+
+      // Ctrl+E: open/scroll to flanking primer section
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'e' || e.key === 'E')) {
+        e.preventDefault();
+        const section = document.getElementById('flanking-primers-section');
+        if (section) {
+          section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        } else {
+          const proceedBtn = document.getElementById('btn-proceed-design') as HTMLButtonElement | null;
+          if (proceedBtn && !proceedBtn.disabled) {
+            proceedBtn.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            proceedBtn.click();
+          }
+        }
       }
     };
     window.addEventListener('keydown', onKeyDown);
@@ -525,8 +595,8 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
   return (
     <div className="min-h-screen py-8 px-4 sm:px-6 lg:px-8">
       <div className="max-w-7xl mx-auto">
-        {/* Header */}
-        <header className="sticky top-0 z-40 -mt-3 mb-5 flex items-start justify-between bg-zinc-100 py-3 dark:bg-zinc-950">
+        {/* Header: sticky so context stays pinned while data scrolls */}
+        <header className="sticky top-0 z-40 -mt-3 mb-5 flex items-start justify-between bg-zinc-100 py-3 pt-3 dark:bg-zinc-950">
           <div>
             <h1 className="text-lg font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">
               Oligool
@@ -546,55 +616,55 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                 e.target.value = ''; // allow re-loading the same file
               }}
             />
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setShowUserReport(true)}
-                title="Create a standalone report with images and notes"
-                className="btn-secondary"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
-                Report
-              </button>
-              <button
-                onClick={() => setShowWhatsNew(true)}
-                title="Kliknutím zobrazíte novinky a návod k použití"
-                className="btn-secondary whitespace-nowrap"
-              >
-                v0.9.9 beta
-              </button>
-              {sessionMsg && (
-                <span
-                  className={`text-xs font-medium tabular-nums ${sessionMsg.type === 'ok' ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}
-                >
-                  {sessionMsg.text}
-                </span>
-              )}
-              <button
-                onClick={() => fileInputRef.current?.click()}
-                title="Load a saved Oligool session (.oligool.json)"
-                className="btn-secondary"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                </svg>
-                Load
-              </button>
-              {step === 'done' && alignment && (
-                <button
-                  onClick={handleSaveSession}
-                  title="Save this session (oligos, pinned positions, primers & alignment) to a file"
-                  className="btn-secondary"
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 16v1a3 3 0 01-3 3H7a3 3 0 01-3-3v-1m4-4l4 4m0 0l4-4m-4 4V4" />
-                  </svg>
-                  Save
-                </button>
-              )}
-            </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowUserReport(true)}
+                    title="Create a standalone report with images and notes"
+                    className="btn-secondary"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    Report
+                  </button>
+                  <button
+                    onClick={() => setShowWhatsNew(true)}
+                    title="Kliknutím zobrazíte novinky a návod k použití"
+                    className="btn-secondary whitespace-nowrap"
+                  >
+                    v0.9.9 beta
+                  </button>
+                  {sessionMsg && (
+                    <span
+                      className={`text-xs font-medium tabular-nums ${sessionMsg.type === 'ok' ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}
+                    >
+                      {sessionMsg.text}
+                    </span>
+                  )}
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    title="Load a saved Oligool session (.oligool.json)"
+                    className="btn-secondary"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                    </svg>
+                    Load
+                  </button>
+                  {step === 'done' && alignment && (
+                    <button
+                      onClick={handleSaveSession}
+                      title="Save this session (oligos, pinned positions, primers & alignment) to a file"
+                      className="btn-secondary"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 16v1a3 3 0 01-3 3H7a3 3 0 01-3-3v-1m4-4l4 4m0 0l4-4m-4 4V4" />
+                      </svg>
+                      Save
+                    </button>
+                  )}
+                </div>
 
             {/* Theme Toggle Button (Primerool style) */}
             <button
@@ -616,12 +686,13 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
 
             <button
               onClick={() => setShowSettings((v) => !v)}
-              className={`mt-0.5 icon-btn ${showSettings ? 'icon-btn-active' : ''}`}
-              title="NCBI Settings"
+              className={`btn-secondary ${showSettings ? 'border-teal-700 dark:border-teal-300 text-teal-700 dark:text-teal-300' : ''}`}
+              title="Účet a přihlašovací údaje"
             >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                <path fillRule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z" clipRule="evenodd" />
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
               </svg>
+              Účet
             </button>
           </div>
         </header>
@@ -640,7 +711,7 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                     onChange={(e) => setShowSecrets(e.target.checked)}
                     aria-label="Show Secrets"
                   />
-                  <div className={`block w-8 h-4 rounded-full transition-colors ${showSecrets ? 'bg-teal-600' : 'bg-zinc-300 dark:bg-zinc-700'}`}></div>
+                  <div className={`block w-8 h-4 rounded-full transition-colors ${showSecrets ? 'bg-teal-700' : 'bg-zinc-300 dark:bg-zinc-700'}`}></div>
                   <div className={`absolute left-0.5 top-0.5 bg-white w-3 h-3 rounded-full transition-transform ${showSecrets ? 'tranzinc-x-4' : ''}`}></div>
                 </div>
                 <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400 group-hover:text-zinc-700 dark:group-hover:text-zinc-300 transition-colors">
@@ -662,7 +733,7 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                     className="input text-xs p-2 font-mono"
                   />
                 </div>
-                <p className="text-[10px] text-zinc-400 dark:text-zinc-500">
+                <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
                   Increases BLAST rate limit (3 → 10 req/s). Get from <a href="https://www.ncbi.nlm.nih.gov/account/settings/" target="_blank" rel="noopener noreferrer" className="text-teal-700 underline">NCBI Settings</a>.
                 </p>
               </div>
@@ -729,38 +800,38 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                     <option value="us">US (www.idtdna.com)</option>
                   </select>
                 </div>
-                <p className="text-[10px] text-zinc-400 dark:text-zinc-500">
+                <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
                   Required for IDT OligoAnalyzer features. Obtain from <a href="https://www.idtdna.com/pages/scitools/plus-api" target="_blank" rel="noopener noreferrer" className="text-teal-700 underline">IDT SciTools Plus API</a>. US and EU accounts use separate IDT regions.
                 </p>
               </div>
             </div>
-            <div className="border-t border-zinc-100 dark:border-zinc-700 p-4">
+            <div className="border-t border-zinc-200 dark:border-zinc-800 p-4">
               <div className="flex items-center gap-3 flex-wrap">
                 <label className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider w-24">
                   Search engine
                 </label>
                 <div
                   className="flex items-center rounded-md border border-zinc-300 dark:border-zinc-700 overflow-hidden"
-                  title="Engine for MOLigo quick search and flanking primer picking — Tm and picks follow the chosen engine's model; Primer3 is the default"
+                  title="Engine for MOLigo quick search and flanking primer picking. Tm and picks follow the chosen engine's model; Primer3 is the default"
                 >
                   {([
                     ['primer3', 'Primer3'],
                     ['strider', 'Strider'],
-                  ] as const).map(([value, label]) => (
+                  ] as const).map(([value, label], idx) => (
                     <button
                       key={value}
                       onClick={() => setSearchEngine(value)}
-                      className={`px-2 py-1 text-[10px] font-bold uppercase transition-all ${
+                      className={`px-2.5 py-1 text-xs font-medium transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-teal-700 dark:focus-visible:outline-teal-300 ${idx > 0 ? 'border-l border-zinc-300 dark:border-zinc-700 ' : ''}${
                         searchEngine === value
-                          ? 'bg-emerald-600 dark:bg-emerald-500 text-white'
-                          : 'bg-white dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-700'
+                          ? 'bg-teal-700/10 dark:bg-teal-300/10 text-teal-800 dark:text-teal-200'
+                          : 'bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700'
                       }`}
                     >
                       {label}
                     </button>
                   ))}
                 </div>
-                <p className="text-[10px] text-zinc-400 dark:text-zinc-500">
+                <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
                   Tm and oligo picks follow the selected engine's model
                 </p>
               </div>
@@ -775,7 +846,7 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
               <div key={s.key} className="flex items-center">
                 <div className="flex flex-col items-center">
                   <div
-                    className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium transition-all duration-300 ${isStepCurrent(s.key)
+                    className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium transition-colors duration-250 ${isStepCurrent(s.key)
                       ? 'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900'
                       : isStepActive(s.key)
                         ? 'bg-teal-700 text-white dark:bg-teal-300 dark:text-zinc-900'
@@ -789,7 +860,7 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                     ) : idx + 1}
                   </div>
                   <span
-                    className={`mt-1.5 text-xs font-medium ${isStepActive(s.key) ? 'text-teal-700 dark:text-teal-300' : 'text-zinc-400 dark:text-zinc-600'
+                    className={`mt-1.5 text-xs font-medium ${isStepActive(s.key) ? 'text-teal-700 dark:text-teal-300' : 'text-zinc-400 dark:text-zinc-500'
                       }`}
                   >
                     {s.label}
@@ -797,7 +868,7 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                 </div>
                 {idx < steps.length - 1 && (
                   <div
-                    className={`w-16 sm:w-24 h-0.5 mx-2 transition-colors duration-300 ${stepOrder.indexOf(step) > idx ? 'bg-teal-600 dark:bg-teal-400' : 'bg-zinc-200 dark:bg-zinc-800'
+                    className={`w-16 sm:w-24 h-0.5 mx-2 transition-colors duration-250 ${stepOrder.indexOf(step) > idx ? 'bg-teal-700 dark:bg-teal-300' : 'bg-zinc-200 dark:bg-zinc-800'
                       }`}
                   />
                 )}
@@ -808,14 +879,14 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
             <img
               src="/rabbit_oligool.png"
               alt="Oligool Logo"
-              className="absolute h-32 w-auto object-contain z-10 pointer-events-none hidden lg:block opacity-90 transition-all duration-500 xl:left-[calc(100%+440px)] lg:left-[calc(100%+60px)] top-[-18px]"
+              className="absolute h-32 w-auto object-contain z-10 pointer-events-none hidden lg:block opacity-90 transition-opacity duration-250 xl:left-[calc(100%+440px)] lg:left-[calc(100%+60px)] top-[-18px]"
             />
 
             {/* Titmouse logo positioned right next to the rabbit's left side */}
             <img
               src="/titmouse_oligool.png"
               alt="Oligool Titmouse Logo"
-              className="absolute h-16 w-auto object-contain z-10 pointer-events-none hidden xl:block opacity-90 transition-all duration-500 xl:left-[calc(100%-150px)] top-[-27px]"
+              className="absolute h-16 w-auto object-contain z-10 pointer-events-none hidden xl:block opacity-90 transition-opacity duration-250 xl:left-[calc(100%-150px)] top-[-27px]"
             />
           </div>
         </div>
@@ -854,13 +925,13 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
             />
             {queryHeader && (
               <p className="mt-1 text-xs text-emerald-600 dark:text-emerald-400 break-all">
-                Header detected — it will be used in the report: <span className="font-mono font-semibold">{queryHeader}</span>
+                Header detected. It will be used in the report: <span className="font-mono font-semibold">{queryHeader}</span>
               </p>
             )}
 
             <label htmlFor="genbank-header" className="block text-sm font-semibold text-zinc-700 dark:text-zinc-300 mb-2 mt-4">
               GenBank Header
-              <span className="ml-2 font-normal text-zinc-400 dark:text-zinc-500">(optional — paste the full header from GenBank)</span>
+              <span className="ml-2 font-normal text-zinc-400 dark:text-zinc-500">(optional: paste the full header from GenBank)</span>
             </label>
             <textarea
               id="genbank-header"
@@ -872,7 +943,7 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
               onChange={(e) => setGenbankHeader(e.target.value)}
             />
             {/* ... filters ... */}
-            <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4 border-t border-zinc-100 dark:border-zinc-800 pt-4">
+            <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4 border-t border-zinc-200 dark:border-zinc-800 pt-4">
               {/* Organism Filter */}
               <div>
                 <label className="block text-xs font-semibold text-zinc-500 dark:text-zinc-400 mb-1">Organism (Optional)</label>
@@ -933,7 +1004,7 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                       type="button"
                       onClick={() => setMaxHitsPreset(opt.value)}
                       disabled={step !== 'input'}
-                      className={`px-2.5 py-1 text-xs font-medium transition-colors disabled:opacity-50 ${i > 0 ? 'border-l border-zinc-300 dark:border-zinc-700' : ''
+                      className={`px-2.5 py-1 text-xs font-medium transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-teal-700 dark:focus-visible:outline-teal-300 disabled:opacity-50 ${i > 0 ? 'border-l border-zinc-300 dark:border-zinc-700' : ''
                         } ${maxHitsPreset === opt.value
                           ? 'bg-teal-700/10 dark:bg-teal-300/10 text-teal-800 dark:text-teal-200'
                           : 'bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700'
@@ -945,7 +1016,7 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                   ))}
                 </div>
                 <div
-                  className={`overflow-hidden transition-all duration-300 ease-out flex items-center ${maxHitsPreset === 'custom' ? 'w-24 ml-2 opacity-100' : 'w-0 ml-0 opacity-0'
+                  className={`overflow-hidden transition-all duration-250 ease-out flex items-center ${maxHitsPreset === 'custom' ? 'w-24 ml-2 opacity-100' : 'w-0 ml-0 opacity-0'
                     }`}
                 >
                   <input
@@ -969,7 +1040,7 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                     type="button"
                     onClick={() => setFilterMatches(true)}
                     disabled={step !== 'input'}
-                    className={`px-2.5 py-1 text-xs font-medium transition-colors disabled:opacity-50 ${filterMatches ? 'bg-teal-700/10 dark:bg-teal-300/10 text-teal-800 dark:text-teal-200' : 'bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700'
+                    className={`px-2.5 py-1 text-xs font-medium transition-colors disabled:opacity-50 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-teal-700 dark:focus-visible:outline-teal-300 ${filterMatches ? 'bg-teal-700/10 dark:bg-teal-300/10 text-teal-800 dark:text-teal-200' : 'bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700'
                       }`}
                   >
                     Yes
@@ -978,7 +1049,7 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                     type="button"
                     onClick={() => setFilterMatches(false)}
                     disabled={step !== 'input'}
-                    className={`px-2.5 py-1 text-xs font-medium transition-colors disabled:opacity-50 border-l border-zinc-300 dark:border-zinc-700 ${!filterMatches ? 'bg-teal-700/10 dark:bg-teal-300/10 text-teal-800 dark:text-teal-200' : 'bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700'
+                    className={`px-2.5 py-1 text-xs font-medium transition-colors disabled:opacity-50 border-l border-zinc-300 dark:border-zinc-700 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-teal-700 dark:focus-visible:outline-teal-300 ${!filterMatches ? 'bg-teal-700/10 dark:bg-teal-300/10 text-teal-800 dark:text-teal-200' : 'bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700'
                       }`}
                   >
                     No
@@ -1006,7 +1077,7 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                 <button
                   onClick={handleSearch}
                   disabled={step !== 'input' || !input.trim()}
-                  className={`px-5 py-2 text-sm font-medium rounded-md text-white transition-colors ${step !== 'input' || !input.trim()
+                  className={`px-5 py-2 text-sm font-medium rounded-md text-white transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-teal-700 dark:focus-visible:outline-teal-300 ${step !== 'input' || !input.trim()
                     ? 'bg-zinc-300 dark:bg-zinc-800 dark:text-zinc-500 cursor-not-allowed'
                     : 'bg-zinc-900 hover:bg-zinc-700 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300'
                     }`}
@@ -1093,8 +1164,8 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
           {step === 'done' && blastMeta && (
             <div className="mb-6 card p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
               <div>
-                <h3 className="text-sm font-semibold text-zinc-800 dark:text-zinc-200 flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-emerald-600 dark:bg-emerald-400"></span>
                   {(jobName && jobName !== 'Query') ? jobName : 'Search Analysis'} Completed
                 </h3>
                 <div className="mt-1 text-xs text-zinc-500 dark:text-zinc-400 font-mono tabular-nums flex flex-wrap gap-x-4 gap-y-1">
@@ -1112,7 +1183,7 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                   Edit Search
                 </button>
                 <button
-                  onClick={handleReset}
+                  onClick={() => setShowResetConfirm(true)}
                   className="btn-destructive"
                 >
                   Start Over
@@ -1215,21 +1286,34 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
             <div className="card shadow-xl max-w-lg w-full max-h-[80vh] overflow-y-auto p-6" onClick={e => e.stopPropagation()}>
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
-                  <span className="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-teal-600/10 dark:bg-teal-300/10 text-teal-700 dark:text-teal-300 text-xs font-bold">v0.9.9</span>
-                  <h2 className="text-lg font-semibold text-zinc-800 dark:text-zinc-200">Co je nového</h2>
+                  <span className="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-teal-700/10 dark:bg-teal-300/10 text-teal-700 dark:text-teal-300 text-xs font-bold">v0.9.9</span>
+                  <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">Co je nového</h2>
                 </div>
-                <button onClick={() => setShowWhatsNew(false)} className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 text-xl leading-none">&times;</button>
+                <button onClick={() => setShowWhatsNew(false)} className="text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-200 text-xl leading-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700 dark:focus-visible:outline-teal-300">&times;</button>
               </div>
               <div className="space-y-4 text-sm text-zinc-700 dark:text-zinc-300">
                 <section className="flex gap-3">
-                  <svg className="h-5 w-5 flex-shrink-0 mt-0.5 text-teal-600 dark:text-teal-400" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M11.3 1.046A1 1 0 0112 2v5h4a1 1 0 01.82 1.573l-7 10A1 1 0 018 18v-5H4a1 1 0 01-.82-1.573l7-10a1 1 0 011.12-.38z" clipRule="evenodd" /></svg>
+                  <svg className="h-5 w-5 flex-shrink-0 mt-0.5 text-teal-700 dark:text-teal-300" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" /></svg>
+                  <div>
+                    <h3 className="font-semibold text-teal-700 dark:text-teal-300 mb-1">Klávesové zkratky, potvrzení resetu a úspornější hlavička</h3>
+                    <p>
+                      Přihlašovací údaje (NCBI, IDT) jsou nyní skryté pod tlačítkem <b>Účet</b>, na obrazovce
+                      je hned vidět prostor pro zadání sekvence. Tlačítko <b>Start Over</b> se nově ptá
+                      na potvrzení a nabízí <b>Undo</b> (vrátit zpět) po dobu 10 sekund. Přibyly klávesové
+                      zkratky: <b>Ctrl+S</b> uloží relaci, <b>Ctrl+M</b> přepne MOLigo provenance schéma,
+                      <b>Ctrl+E</b> otevře nebo skroluje na sekci flanking primerů.
+                    </p>
+                  </div>
+                </section>
+                <section className="flex gap-3">
+                  <svg className="h-5 w-5 flex-shrink-0 mt-0.5 text-teal-700 dark:text-teal-300" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M11.3 1.046A1 1 0 0112 2v5h4a1 1 0 01.82 1.573l-7 10A1 1 0 018 18v-5H4a1 1 0 01-.82-1.573l7-10a1 1 0 011.12-.38z" clipRule="evenodd" /></svg>
                   <div>
                     <h3 className="font-semibold text-teal-700 dark:text-teal-300 mb-1">Přepínač Mathews / SantaLucia a přesnější sekundární struktury</h3>
                     <p>
                       Nalevo od tlačítka <b>Structural analysis</b> je nový přepínač <b>Mathews / SantaLucia</b>,
                       který vybírá parametry nejbližších sousedů pro lokální výpočet. Současně byly opraveny
                       tabulky Mathews 2004 (orientace stack klíčů, bulge a interior smyčky) a přidán __dangling__
-                      stacking na koncích stemů — hairpiny, self-dimery i jejich Tm nyní sledují IDT na
+                      stacking na koncích stemů, hairpiny, self-dimery i jejich Tm nyní sledují IDT na
                       desetiny kcal/mol, bez uměle stabilních bulgovaných struktur, které aplikace dříve
                       ukazovala. Self-dimer ΔG se nově reportuje bez duplexní iniciace, stejně jako u IDT.
                       Mg²⁺ je nadále v pokročilých parametrech. V PDF reportu jsou oddělovače nyní
@@ -1238,7 +1322,7 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                   </div>
                 </section>
                 <section className="flex gap-3">
-                  <svg className="h-5 w-5 flex-shrink-0 mt-0.5 text-teal-600 dark:text-teal-400" viewBox="0 0 20 20" fill="currentColor"><path d="M9 12l2 2 4-4M10 18a8 8 0 100-16 8 8 0 000 16z" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                  <svg className="h-5 w-5 flex-shrink-0 mt-0.5 text-teal-700 dark:text-teal-300" viewBox="0 0 20 20" fill="currentColor"><path d="M9 12l2 2 4-4M10 18a8 8 0 100-16 8 8 0 000 16z" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round" /></svg>
                   <div>
                     <h3 className="font-semibold text-teal-700 dark:text-teal-300 mb-1">Souřadnicový tooltip v MSA přehledu</h3>
                     <p>
@@ -1252,25 +1336,25 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                   </div>
                 </section>
                 <section className="flex gap-3">
-                  <svg className="h-5 w-5 flex-shrink-0 mt-0.5 text-teal-600 dark:text-teal-400" viewBox="0 0 20 20" fill="currentColor"><path d="M11 3a1 1 0 100 2h2.586l-6.293 6.293a1 1 0 101.414 1.414L15 6.414V9a1 1 0 102 0V4a1 1 0 00-1-1h-5z" /><path d="M5 5a2 2 0 00-2 2v8a2 2 0 002 2h8a2 2 0 002-2v-3a1 1 0 10-2 0v3H5V7h3a1 1 0 000-2H5z" /></svg>
+                  <svg className="h-5 w-5 flex-shrink-0 mt-0.5 text-teal-700 dark:text-teal-300" viewBox="0 0 20 20" fill="currentColor"><path d="M11 3a1 1 0 100 2h2.586l-6.293 6.293a1 1 0 101.414 1.414L15 6.414V9a1 1 0 102 0V4a1 1 0 00-1-1h-5z" /><path d="M5 5a2 2 0 00-2 2v8a2 2 0 002 2h8a2 2 0 002-2v-3a1 1 0 10-2 0v3H5V7h3a1 1 0 000-2H5z" /></svg>
                   <div>
                     <h3 className="font-semibold text-teal-700 dark:text-teal-300 mb-1">Režim Kowalski / Analýza!</h3>
                     <p>
                       Tlačítko <b>autofind</b> bylo přejmenováno na <b>Kowalski</b>. V klidovém
                       režimu (Kowalski) kliknutí na hit v MSA přehledu rovnou otevře NCBI modal
-                      s genomem a CDS — nemusíte klikat na levý okraj. Po zapnutí analýzy
+                      s genomem a CDS, nemusíte klikat na levý okraj. Po zapnutí analýzy
                       (tlačítko se změní na <b>Analysis!</b>) kliknutí vybírá hity pro autofind,
                       tedy hledání oblastí bez mismatchů, jako dříve.
                     </p>
                   </div>
                 </section>
                 <section className="flex gap-3">
-                  <svg className="h-5 w-5 flex-shrink-0 mt-0.5 text-teal-600 dark:text-teal-400" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M3 5a2 2 0 012-2h10a2 2 0 012 2v10a2 2 0 01-2 2H5a2 2 0 01-2-2V5zm3.293 1.293a1 1 0 011.414 0L10 8.586l2.293-2.293a1 1 0 111.414 1.414L11.414 10l2.293 2.293a1 1 0 01-1.414 1.414L10 11.414l-2.293 2.293a1 1 0 01-1.414-1.414L8.586 10 6.293 7.707a1 1 0 010-1.414z" clipRule="evenodd" /></svg>
+                  <svg className="h-5 w-5 flex-shrink-0 mt-0.5 text-teal-700 dark:text-teal-300" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M3 5a2 2 0 012-2h10a2 2 0 012 2v10a2 2 0 01-2 2H5a2 2 0 01-2-2V5zm3.293 1.293a1 1 0 011.414 0L10 8.586l2.293-2.293a1 1 0 111.414 1.414L11.414 10l2.293 2.293a1 1 0 01-1.414 1.414L10 11.414l-2.293 2.293a1 1 0 01-1.414-1.414L8.586 10 6.293 7.707a1 1 0 010-1.414z" clipRule="evenodd" /></svg>
                   <div>
                     <h3 className="font-semibold text-teal-700 dark:text-teal-300 mb-1">Oprava IDT prokvenance u flanking primerů</h3>
                     <p>
                       V panelu flanking primerů se nyní IDT ΔG a Tm zobrazují správně pro
-                      hairpiny — dříve chyběly, protože IDT vrací hodnoty pod různými názvy
+                      hairpiny, dříve chyběly, protože IDT vrací hodnoty pod různými názvy
                       klíčů._backend nyní všechny varianty normalizuje. Řádky s chybějícími
                       hodnotami se čistě skrývají místo zobrazení „N/A“. ΔG i Tm hodnoty
                       (IDT i Strider) jsou zarovnané vpravo, stejně jako v MOLigo panelu.
@@ -1278,7 +1362,7 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                   </div>
                 </section>
                 <section className="flex gap-3">
-                  <svg className="h-5 w-5 flex-shrink-0 mt-0.5 text-teal-600 dark:text-teal-400" viewBox="0 0 20 20" fill="currentColor"><path d="M2 10a8 8 0 1116 0 8 8 0 01-16 0zm6.5-3a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0zM10 12a3 3 0 00-2.83 2h5.66A3 3 0 0010 12z" /></svg>
+                  <svg className="h-5 w-5 flex-shrink-0 mt-0.5 text-teal-700 dark:text-teal-300" viewBox="0 0 20 20" fill="currentColor"><path d="M2 10a8 8 0 1116 0 8 8 0 01-16 0zm6.5-3a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0zM10 12a3 3 0 00-2.83 2h5.66A3 3 0 0010 12z" /></svg>
                   <div>
                     <h3 className="font-semibold text-teal-700 dark:text-teal-300 mb-1">Top-2 hairpiny a top-5 self-dimery</h3>
                     <p>
@@ -1290,7 +1374,7 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                   </div>
                 </section>
                 <section className="flex gap-3">
-                  <svg className="h-5 w-5 flex-shrink-0 mt-0.5 text-teal-600 dark:text-teal-400" viewBox="0 0 20 20" fill="currentColor"><path d="M4 4a2 2 0 012-2h8a2 2 0 012 2v12a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm3 2a1 1 0 000 2h6a1 1 0 100-2H7zm0 4a1 1 0 100 2h6a1 1 0 100-2H7zm0 4a1 1 0 100 2h3a1 1 0 100-2H7z" /></svg>
+                  <svg className="h-5 w-5 flex-shrink-0 mt-0.5 text-teal-700 dark:text-teal-300" viewBox="0 0 20 20" fill="currentColor"><path d="M4 4a2 2 0 012-2h8a2 2 0 012 2v12a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm3 2a1 1 0 000 2h6a1 1 0 100-2H7zm0 4a1 1 0 100 2h6a1 1 0 100-2H7zm0 4a1 1 0 100 2h3a1 1 0 100-2H7z" /></svg>
                   <div>
                     <h3 className="font-semibold text-teal-700 dark:text-teal-300 mb-1">Loga Kowalski v reportu a patičce</h3>
                     <p>
@@ -1301,18 +1385,18 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                   </div>
                 </section>
                 <section className="flex gap-3">
-                  <svg className="h-5 w-5 flex-shrink-0 mt-0.5 text-teal-600 dark:text-teal-400" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M3 4a1 1 0 011-1h12a1 1 0 011 1v2a1 1 0 01-.293.707L12 11.414V15a1 1 0 01-.293.707l-2 2A1 1 0 018 17v-5.586L3.293 6.707A1 1 0 013 6V4z" clipRule="evenodd" /></svg>
+                  <svg className="h-5 w-5 flex-shrink-0 mt-0.5 text-teal-700 dark:text-teal-300" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M3 4a1 1 0 011-1h12a1 1 0 011 1v2a1 1 0 01-.293.707L12 11.414V15a1 1 0 01-.293.707l-2 2A1 1 0 018 17v-5.586L3.293 6.707A1 1 0 013 6V4z" clipRule="evenodd" /></svg>
                   <div>
                     <h3 className="font-semibold text-teal-700 dark:text-teal-300 mb-1">Minimap vždy viditelná</h3>
                     <p>
-                      Přehledová lišta (minimapa) v MSA přehledu je nyní trvale zapnutá —
+                      Přehledová lišta (minimapa) v MSA přehledu je nyní trvale zapnutá,
                       tlačítko pro její skrytí bylo odstraněno. Minimapa je klíčová pro
                       orientaci v dlouhých alignementech a neměla by být skrytelná.
                     </p>
                   </div>
                 </section>
                 <section className="flex gap-3">
-                  <svg className="h-5 w-5 flex-shrink-0 mt-0.5 text-teal-600 dark:text-teal-400" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M4.083 9h1.754c.319-1.824.853-3.247 1.5-4.246A8.001 8.001 0 002 9c.083.386.197.755.339 1.108.572-.386 1.213-.69 1.744-.108zM10 2a8 8 0 100 16 8 8 0 000-16zm0 4c.99 0 1.683.763 2.072 1.5a8.46 8.46 0 01.43 1H7.498c.12-.34.265-.67.43-1C8.317 6.763 9.01 6 10 6zm-2.5 5a8.46 8.46 0 00.43 1c.389.737 1.082 1.5 2.07 1.5.988 0 1.681-.763 2.07-1.5a8.46 8.46 0 00.43-1h-5z" clipRule="evenodd" /></svg>
+                  <svg className="h-5 w-5 flex-shrink-0 mt-0.5 text-teal-700 dark:text-teal-300" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M4.083 9h1.754c.319-1.824.853-3.247 1.5-4.246A8.001 8.001 0 002 9c.083.386.197.755.339 1.108.572-.386 1.213-.69 1.744-.108zM10 2a8 8 0 100 16 8 8 0 000-16zm0 4c.99 0 1.683.763 2.072 1.5a8.46 8.46 0 01.43 1H7.498c.12-.34.265-.67.43-1C8.317 6.763 9.01 6 10 6zm-2.5 5a8.46 8.46 0 00.43 1c.389.737 1.082 1.5 2.07 1.5.988 0 1.681-.763 2.07-1.5a8.46 8.46 0 00.43-1h-5z" clipRule="evenodd" /></svg>
                   <div>
                     <h3 className="font-semibold text-teal-700 dark:text-teal-300 mb-1">Oprava NCBI odkazů</h3>
                     <p>
@@ -1324,7 +1408,7 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                   </div>
                 </section>
                 <section className="flex gap-3">
-                  <svg className="h-5 w-5 flex-shrink-0 mt-0.5 text-teal-600 dark:text-teal-400" viewBox="0 0 20 20" fill="currentColor"><path d="M5 2a1 1 0 011 1v1h1a1 1 0 010 2H6v1a1 1 0 01-2 0V6H3a1 1 0 010-2h1V3a1 1 0 011-1zm0 10a1 1 0 011 1v1h1a1 1 0 110 2H6v1a1 1 0 11-2 0v-1H3a1 1 0 110-2h1v-1a1 1 0 011-1zM12 2a1 1 0 01.967.744L14.146 7.2A1 1 0 0114 8a1 1 0 01-2 0l-.073-.257H10.073L10 8a1 1 0 11-2 0l1.033-5.256A1 1 0 0110 2h2z" /></svg>
+                  <svg className="h-5 w-5 flex-shrink-0 mt-0.5 text-teal-700 dark:text-teal-300" viewBox="0 0 20 20" fill="currentColor"><path d="M5 2a1 1 0 011 1v1h1a1 1 0 010 2H6v1a1 1 0 01-2 0V6H3a1 1 0 010-2h1V3a1 1 0 011-1zm0 10a1 1 0 011 1v1h1a1 1 0 110 2H6v1a1 1 0 11-2 0v-1H3a1 1 0 110-2h1v-1a1 1 0 011-1zM12 2a1 1 0 01.967.744L14.146 7.2A1 1 0 0114 8a1 1 0 01-2 0l-.073-.257H10.073L10 8a1 1 0 11-2 0l1.033-5.256A1 1 0 0110 2h2z" /></svg>
                   <div>
                     <h3 className="font-semibold text-teal-700 dark:text-teal-300 mb-1">Velká písmena ve flanking primerech</h3>
                     <p>
@@ -1334,11 +1418,11 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                   </div>
                 </section>
                 <section className="flex gap-3">
-                  <svg className="h-5 w-5 flex-shrink-0 mt-0.5 text-teal-600 dark:text-teal-400" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z" clipRule="evenodd" /></svg>
+                  <svg className="h-5 w-5 flex-shrink-0 mt-0.5 text-teal-700 dark:text-teal-300" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z" clipRule="evenodd" /></svg>
                   <div>
                     <h3 className="font-semibold text-teal-700 dark:text-teal-300 mb-1">Přepínač vyhledávacího enginu Primer3 / Strider</h3>
                     <p>
-                      V nastavení (ozubené kolo) je nový přepínač <b>Search engine</b> —
+                      V nastavení (ozubené kolo) je nový přepínač <b>Search engine</b>:
                       <b>Primer3</b> (výchozí) nebo <b>Strider</b>. Vybraný engine řídí MOLigo
                       quick search i výběr flanking primerů: Tm a picky oligů se řídí modelem
                       vybraného enginu. Stejné číselné parametry mohou vybrat mírně odlišné oligy,
@@ -1365,23 +1449,23 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
           <div className="modal-overlay" onClick={rejectPendingSession}>
             <div className="card shadow-xl max-w-md w-full p-6" onClick={e => e.stopPropagation()}>
               <div className="flex items-center justify-between mb-4">
-                <h2 className="text-lg font-semibold text-zinc-800 dark:text-zinc-200">Restore session?</h2>
-                <button onClick={rejectPendingSession} className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 text-xl leading-none">&times;</button>
+                <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">Restore session?</h2>
+                <button onClick={rejectPendingSession} className="text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-200 text-xl leading-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700 dark:focus-visible:outline-teal-300">&times;</button>
               </div>
               <div className="space-y-3 text-sm text-zinc-700 dark:text-zinc-300">
-                <div className="flex justify-between border-b border-zinc-100 dark:border-zinc-800 pb-2">
+                <div className="flex justify-between border-b border-zinc-200 dark:border-zinc-800 pb-2">
                   <span className="text-zinc-500">Job name</span>
                   <span className="font-medium">{pendingSession.jobName}</span>
                 </div>
-                <div className="flex justify-between border-b border-zinc-100 dark:border-zinc-800 pb-2">
+                <div className="flex justify-between border-b border-zinc-200 dark:border-zinc-800 pb-2">
                   <span className="text-zinc-500">Alignment length</span>
                   <span className="font-medium">{pendingSession.results.alignment.split('\n').find(l => !l.startsWith('>'))?.length ?? 0} bp</span>
                 </div>
-                <div className="flex justify-between border-b border-zinc-100 dark:border-zinc-800 pb-2">
+                <div className="flex justify-between border-b border-zinc-200 dark:border-zinc-800 pb-2">
                   <span className="text-zinc-500">Pinned positions</span>
                   <span className="font-medium">{pendingSession.oligo?.savedPositions.length ?? 0}</span>
                 </div>
-                <div className="flex justify-between border-b border-zinc-100 dark:border-zinc-800 pb-2">
+                <div className="flex justify-between border-b border-zinc-200 dark:border-zinc-800 pb-2">
                   <span className="text-zinc-500">Current oligo</span>
                   <span className="font-medium">{pendingSession.oligo?.currentOligo ? 'yes' : 'no'}</span>
                 </div>
@@ -1405,6 +1489,46 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                 </button>
               </div>
             </div>
+          </div>
+        )}
+
+        {showResetConfirm && (
+          <div className="modal-overlay" onClick={() => setShowResetConfirm(false)}>
+            <div className="card shadow-xl max-w-sm w-full p-6" onClick={e => e.stopPropagation()}>
+              <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100 mb-2">Are you sure?</h2>
+              <p className="text-sm text-zinc-500 dark:text-zinc-400 mb-6">
+                This will clear the current session including BLAST results, alignment, and designed primers.
+              </p>
+              <div className="flex justify-end gap-3">
+                <button
+                  onClick={() => setShowResetConfirm(false)}
+                  className="btn-secondary px-4 py-2 text-sm"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => {
+                    handleResetWithUndo();
+                    setShowResetConfirm(false);
+                  }}
+                  className="btn-destructive px-4 py-2 text-sm"
+                >
+                  Reset
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {showUndo && (
+          <div className="fixed bottom-4 right-4 z-50 flex items-center gap-3 rounded-md border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-4 py-3 shadow-xl">
+            <span className="text-sm text-zinc-500 dark:text-zinc-400">Session reset.</span>
+            <button
+              onClick={handleUndo}
+              className="text-sm font-medium text-teal-700 dark:text-teal-300 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700 dark:focus-visible:outline-teal-300"
+            >
+              Undo
+            </button>
           </div>
         )}
 
