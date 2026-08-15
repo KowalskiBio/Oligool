@@ -44,6 +44,9 @@ function App() {
   const [parameterSet, setParameterSet] = useState(
     () => localStorage.getItem('parameter_set') || 'mathews2004-dna'
   );
+  const [searchEngine, setSearchEngine] = useState<'primer3' | 'strider'>(
+    () => localStorage.getItem('search_engine') === 'strider' ? 'strider' : 'primer3'
+  );
   const [showSettings, setShowSettings] = useState(!localStorage.getItem('ncbi_api_key'));
   const [maxHitsPreset, setMaxHitsPreset] = useState(() => localStorage.getItem('max_hits_preset') || '50');
   const [customHits, setCustomHits] = useState(() => localStorage.getItem('custom_hits') || '');
@@ -114,6 +117,7 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
   useEffect(() => { localStorage.setItem('job_name', jobName); }, [jobName]);
   useEffect(() => { localStorage.setItem('idt_mg_conc', idtMgConc); }, [idtMgConc]);
   useEffect(() => { localStorage.setItem('parameter_set', parameterSet); }, [parameterSet]);
+  useEffect(() => { localStorage.setItem('search_engine', searchEngine); }, [searchEngine]);
   useEffect(() => { localStorage.setItem('idt_region', idtRegion); }, [idtRegion]);
   useEffect(() => {
     localStorage.setItem('autofind_treat_indels_as_mismatches', autofindTreatIndelsAsMismatches.toString());
@@ -730,6 +734,37 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                 </p>
               </div>
             </div>
+            <div className="border-t border-zinc-100 dark:border-zinc-700 p-4">
+              <div className="flex items-center gap-3 flex-wrap">
+                <label className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider w-24">
+                  Search engine
+                </label>
+                <div
+                  className="flex items-center rounded-md border border-zinc-300 dark:border-zinc-700 overflow-hidden"
+                  title="Engine for MOLigo quick search and flanking primer picking — Tm and picks follow the chosen engine's model; Primer3 is the default"
+                >
+                  {([
+                    ['primer3', 'Primer3'],
+                    ['strider', 'Strider'],
+                  ] as const).map(([value, label]) => (
+                    <button
+                      key={value}
+                      onClick={() => setSearchEngine(value)}
+                      className={`px-2 py-1 text-[10px] font-bold uppercase transition-all ${
+                        searchEngine === value
+                          ? 'bg-emerald-600 dark:bg-emerald-500 text-white'
+                          : 'bg-white dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-700'
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-[10px] text-zinc-400 dark:text-zinc-500">
+                  Tm and oligo picks follow the selected engine's model
+                </p>
+              </div>
+            </div>
           </div>
         )}
 
@@ -1155,6 +1190,7 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                     parameterSet
                   }}
                   onParameterSetChange={setParameterSet}
+                  searchEngine={searchEngine}
                   alignment={alignment}
                   navigateTarget={navigateTarget}
                   isDarkMode={isDarkMode}
@@ -1294,6 +1330,21 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                     <p>
                       Sekvence flanking primerů zůstávají při přesunu nebo změně velikosti
                       vždy velkými písmeny, místo aby se náhodně přepnuly na malá.
+                    </p>
+                  </div>
+                </section>
+                <section className="flex gap-3">
+                  <svg className="h-5 w-5 flex-shrink-0 mt-0.5 text-teal-600 dark:text-teal-400" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z" clipRule="evenodd" /></svg>
+                  <div>
+                    <h3 className="font-semibold text-teal-700 dark:text-teal-300 mb-1">Přepínač vyhledávacího enginu Primer3 / Strider</h3>
+                    <p>
+                      V nastavení (ozubené kolo) je nový přepínač <b>Search engine</b> —
+                      <b>Primer3</b> (výchozí) nebo <b>Strider</b>. Vybraný engine řídí MOLigo
+                      quick search i výběr flanking primerů: Tm a picky oligů se řídí modelem
+                      vybraného enginu. Stejné číselné parametry mohou vybrat mírně odlišné oligy,
+                      protože Strider čte Tm zhruba o 1–2 °C výše než Primer3. Obě Tm hodnoty
+                      (Primer3 i Strider) zůstávají zobrazené vedle sebe na každé kartě. Volba
+      přežije restart aplikace.
                     </p>
                   </div>
                 </section>
