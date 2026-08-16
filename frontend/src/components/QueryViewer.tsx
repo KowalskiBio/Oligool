@@ -1942,7 +1942,7 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                                 type="number"
                                 value={searchParams.min_len || 15}
                                 onChange={e => setSearchParams({ ...searchParams, min_len: parseInt(e.target.value) })}
-                                className="input px-2 py-1 text-xs font-mono tabular-nums appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [&::-moz-appearance:textfield]"
+                                className="input px-2 py-1 text-xs font-mono tabular-nums"
                             />
                         </div>
                         <div className="flex flex-col gap-1">
@@ -1951,7 +1951,7 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                                 type="number"
                                 value={searchParams.max_l || 35}
                                 onChange={e => setSearchParams({ ...searchParams, max_l: parseInt(e.target.value) })}
-                                className="input px-2 py-1 text-xs font-mono tabular-nums appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [&::-moz-appearance:textfield]"
+                                className="input px-2 py-1 text-xs font-mono tabular-nums"
                             />
                         </div>
                         <div className="flex flex-col gap-1">
@@ -1961,7 +1961,7 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                                 step="0.1"
                                 value={searchParams.tm_min || 60.0}
                                 onChange={e => setSearchParams({ ...searchParams, tm_min: parseFloat(e.target.value) })}
-                                className="input px-2 py-1 text-xs font-mono tabular-nums appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [&::-moz-appearance:textfield]"
+                                className="input px-2 py-1 text-xs font-mono tabular-nums"
                             />
                         </div>
                         <div className="flex flex-col gap-1">
@@ -1971,7 +1971,7 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                                 step="0.1"
                                 value={searchParams.tm_max || 63.0}
                                 onChange={e => setSearchParams({ ...searchParams, tm_max: parseFloat(e.target.value) })}
-                                className="input px-2 py-1 text-xs font-mono tabular-nums appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [&::-moz-appearance:textfield]"
+                                className="input px-2 py-1 text-xs font-mono tabular-nums"
                             />
                         </div>
                         <div className="flex flex-col gap-1">
@@ -1981,7 +1981,7 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                                 step="0.1"
                                 value={searchParams.tm_diff || 1.5}
                                 onChange={e => setSearchParams({ ...searchParams, tm_diff: parseFloat(e.target.value) })}
-                                className="input px-2 py-1 text-xs font-mono tabular-nums appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [&::-moz-appearance:textfield]"
+                                className="input px-2 py-1 text-xs font-mono tabular-nums"
                             />
                         </div>
                         <div className="flex flex-col gap-1">
@@ -1990,7 +1990,7 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                                 type="number"
                                 value={searchParams.gc_min || 30}
                                 onChange={e => setSearchParams({ ...searchParams, gc_min: parseInt(e.target.value) })}
-                                className="input px-2 py-1 text-xs font-mono tabular-nums appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [&::-moz-appearance:textfield]"
+                                className="input px-2 py-1 text-xs font-mono tabular-nums"
                             />
                         </div>
                         <div className="flex flex-col gap-1">
@@ -1999,7 +1999,7 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                                 type="number"
                                 value={searchParams.gc_max || 80}
                                 onChange={e => setSearchParams({ ...searchParams, gc_max: parseInt(e.target.value) })}
-                                className="input px-2 py-1 text-xs font-mono tabular-nums appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [&::-moz-appearance:textfield]"
+                                className="input px-2 py-1 text-xs font-mono tabular-nums"
                             />
                         </div>
                     </div>
@@ -2024,7 +2024,7 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                                                     setAdvancedParams(next);
                                                     localStorage.setItem('oligo_advanced_params', JSON.stringify(next));
                                                 }}
-                                                className="input px-2 py-1 text-xs font-mono tabular-nums appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [&::-moz-appearance:textfield]"
+                                                className="input px-2 py-1 text-xs font-mono tabular-nums"
                                             />
                                         </div>
                                         <div className="flex flex-col gap-1">
@@ -2037,7 +2037,7 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                                                     setAdvancedParams(next);
                                                     localStorage.setItem('oligo_advanced_params', JSON.stringify(next));
                                                 }}
-                                                className="input px-2 py-1 text-xs font-mono tabular-nums appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [&::-moz-appearance:textfield]"
+                                                className="input px-2 py-1 text-xs font-mono tabular-nums"
                                             />
                                         </div>
                                         <div className="flex flex-col gap-1">
@@ -2050,7 +2050,7 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                                                     setAdvancedParams(next);
                                                     localStorage.setItem('oligo_advanced_params', JSON.stringify(next));
                                                 }}
-                                                className="input px-2 py-1 text-xs font-mono tabular-nums appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [&::-moz-appearance:textfield]"
+                                                className="input px-2 py-1 text-xs font-mono tabular-nums"
                                             />
                                         </div>
                                         <div className="flex flex-col gap-1">
@@ -2063,7 +2063,7 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                                                     setAdvancedParams(next);
                                                     localStorage.setItem('oligo_advanced_params', JSON.stringify(next));
                                                 }}
-                                                className="input px-2 py-1 text-xs font-mono tabular-nums appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [&::-moz-appearance:textfield]"
+                                                className="input px-2 py-1 text-xs font-mono tabular-nums"
                                             />
                                         </div>
                                         <div className="flex flex-col gap-1">
@@ -2097,7 +2097,7 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                                                     setIdtAdvancedParams(next);
                                                     localStorage.setItem('idt_advanced_params', JSON.stringify(next));
                                                 }}
-                                                className="input px-2 py-1 text-xs font-mono tabular-nums appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [&::-moz-appearance:textfield]"
+                                                className="input px-2 py-1 text-xs font-mono tabular-nums"
                                             />
                                         </div>
                                         <div className="flex flex-col gap-1">
@@ -2110,7 +2110,7 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                                                     setIdtAdvancedParams(next);
                                                     localStorage.setItem('idt_advanced_params', JSON.stringify(next));
                                                 }}
-                                                className="input px-2 py-1 text-xs font-mono tabular-nums appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [&::-moz-appearance:textfield]"
+                                                className="input px-2 py-1 text-xs font-mono tabular-nums"
                                             />
                                         </div>
                                         <div className="flex flex-col gap-1">
@@ -2123,7 +2123,7 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                                                     setIdtAdvancedParams(next);
                                                     localStorage.setItem('idt_advanced_params', JSON.stringify(next));
                                                 }}
-                                                className="input px-2 py-1 text-xs font-mono tabular-nums appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [&::-moz-appearance:textfield]"
+                                                className="input px-2 py-1 text-xs font-mono tabular-nums"
                                             />
                                         </div>
                                         <div className="flex flex-col gap-1">
@@ -2136,7 +2136,7 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                                                     setIdtAdvancedParams(next);
                                                     localStorage.setItem('idt_advanced_params', JSON.stringify(next));
                                                 }}
-                                                className="input px-2 py-1 text-xs font-mono tabular-nums appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [&::-moz-appearance:textfield]"
+                                                className="input px-2 py-1 text-xs font-mono tabular-nums"
                                             />
                                         </div>
                                     </div>
@@ -2301,7 +2301,7 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                                     type="number"
                                     value={interactiveFlankWindow}
                                     onChange={e => setInteractiveFlankWindow(Math.max(0, parseInt(e.target.value) || 0))}
-                                    className="input w-20 px-2 py-1 text-xs font-mono tabular-nums appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [&::-moz-appearance:textfield]"
+                                    className="input w-20 px-2 py-1 text-xs font-mono tabular-nums"
                                 />
                             </div>
                         </div>

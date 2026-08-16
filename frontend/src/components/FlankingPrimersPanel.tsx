@@ -1303,7 +1303,7 @@ export default function FlankingPrimersPanel({
             <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">{label}</label>
             <input type="number" value={val} step={step} min={min} max={max}
                 onChange={e => set(parseFloat(e.target.value) || 0)}
-                className="input px-2 py-1 text-xs font-mono tabular-nums appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [&::-moz-appearance:textfield]" />
+                className="input px-2 py-1 text-xs font-mono tabular-nums" />
         </div>
     );
 

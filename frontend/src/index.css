@@ -63,6 +63,16 @@
       focus:ring-teal-700 dark:focus:ring-teal-300 disabled:opacity-50;
   }
 
+  /* Hide number input spin buttons everywhere */
+  input[type="number"]::-webkit-inner-spin-button,
+  input[type="number"]::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+  input[type="number"] {
+    -moz-appearance: textfield;
+  }
+
   /* ── Surfaces ── */
   .card {
     @apply rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900;
