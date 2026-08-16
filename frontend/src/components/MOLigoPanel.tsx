@@ -72,7 +72,7 @@ export default function MOLigoPanel(props: MOLigoProps) {
     const fwdRCSeq = reverseComplement(fwdPrimer || "");
 
     const leftOligoSeq = (revPrimer || "") + moligo2Seq;
-    const rightOligoSeq = moligo1Seq + (tagSeq || "") + (fwdPrimer || "");
+    const rightOligoSeq = moligo1Seq + (tagSeq || "").toLowerCase() + (fwdPrimer || "");
 
     const copyToClipboard = (text: string, label: string) => {
         if (!navigator.clipboard) return;
@@ -224,13 +224,13 @@ export default function MOLigoPanel(props: MOLigoProps) {
                             <span className="text-[10px] font-mono text-zinc-400 font-bold">{leftOligoSeq.length}nt</span>
                         </div>
                         <div className="relative">
-                            <div className="bg-zinc-50 dark:bg-zinc-900/50 p-2.5 rounded border border-zinc-200 dark:border-zinc-700 font-mono text-xs text-zinc-700 dark:text-zinc-300 break-all pr-16">
+                            <div className="bg-zinc-50 dark:bg-zinc-900/50 p-2.5 pb-8 rounded border border-zinc-200 dark:border-zinc-700 font-mono text-xs text-zinc-700 dark:text-zinc-300 break-all">
                                 {leftOligoSeq || <span className="text-zinc-400 italic">Enter reverse primer and Oligo 2...</span>}
                             </div>
                             <button
                                 onClick={() => copyToClipboard(leftOligoSeq, 'left')}
                                 disabled={!leftOligoSeq}
-                                className="absolute right-1.5 top-1/2 -tranzinc-y-1/2 btn-secondary text-[10px] px-2 py-1"
+                                className="absolute right-1.5 bottom-1.5 btn-secondary text-[10px] px-2 py-1"
                             >
                                 {copiedLabel === 'left' ? 'Copied!' : 'Copy'}
                             </button>
@@ -248,13 +248,13 @@ export default function MOLigoPanel(props: MOLigoProps) {
                             <span className="text-[10px] font-mono text-zinc-400 font-bold">{rightOligoSeq.length}nt</span>
                         </div>
                         <div className="relative">
-                            <div className="bg-zinc-50 dark:bg-zinc-900/50 p-2.5 rounded border border-zinc-200 dark:border-zinc-700 font-mono text-xs text-zinc-700 dark:text-zinc-300 break-all pr-16">
+                            <div className="bg-zinc-50 dark:bg-zinc-900/50 p-2.5 pb-8 rounded border border-zinc-200 dark:border-zinc-700 font-mono text-xs text-zinc-700 dark:text-zinc-300 break-all">
                                 {rightOligoSeq || <span className="text-zinc-400 italic">Enter Oligo 1, TAG, and forward primer...</span>}
                             </div>
                             <button
                                 onClick={() => copyToClipboard(rightOligoSeq, 'right')}
                                 disabled={!rightOligoSeq}
-                                className="absolute right-1.5 top-1/2 -tranzinc-y-1/2 btn-secondary text-[10px] px-2 py-1"
+                                className="absolute right-1.5 bottom-1.5 btn-secondary text-[10px] px-2 py-1"
                             >
                                 {copiedLabel === 'right' ? 'Copied!' : 'Copy'}
                             </button>
