@@ -1438,20 +1438,16 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
 
                                     const isP1 = primers && i >= liveP1Start && i < liveP1End;
                                     const isP2 = primers && i >= liveP2Start && i < liveP2End;
-                                    const isP1Start = i === liveP1Start;
                                     const isP1End   = i === liveP1End - 1;
                                     const isP2Start = i === liveP2Start;
-                                    const isP2End   = i === liveP2End - 1;
 
                                     if (isP1) {
-                                        className = `bg-green-200 dark:bg-green-900/40 text-green-900 dark:text-green-300 font-bold hover:bg-green-300 dark:hover:bg-green-800/60 select-none ${isP1Start || isP1End ? 'cursor-ew-resize' : 'cursor-grab active:cursor-grabbing'}`;
-                                        if (isP1Start) handlers = { onMouseDown: (e: React.MouseEvent) => handleSeqMouseDown(e, 'p1', 'left') };
-                                        else if (isP1End) handlers = { onMouseDown: (e: React.MouseEvent) => handleSeqMouseDown(e, 'p1', 'right') };
+                                        className = `bg-green-200 dark:bg-green-900/40 text-green-900 dark:text-green-300 font-bold hover:bg-green-300 dark:hover:bg-green-800/60 select-none ${isP1End ? 'cursor-ew-resize' : 'cursor-grab active:cursor-grabbing'}`;
+                                        if (isP1End) handlers = { onMouseDown: (e: React.MouseEvent) => handleSeqMouseDown(e, 'p1', 'right') };
                                         else handlers = { onMouseDown: (e: React.MouseEvent) => handleSeqMouseDown(e, 'p1', 'move') };
                                     } else if (isP2) {
-                                        className = `bg-amber-200 dark:bg-amber-900/40 text-amber-900 dark:text-amber-300 font-bold hover:bg-amber-300 dark:hover:bg-amber-800/60 select-none ${isP2Start || isP2End ? 'cursor-ew-resize' : 'cursor-grab active:cursor-grabbing'}`;
+                                        className = `bg-amber-200 dark:bg-amber-900/40 text-amber-900 dark:text-amber-300 font-bold hover:bg-amber-300 dark:hover:bg-amber-800/60 select-none ${isP2Start ? 'cursor-ew-resize' : 'cursor-grab active:cursor-grabbing'}`;
                                         if (isP2Start) handlers = { onMouseDown: (e: React.MouseEvent) => handleSeqMouseDown(e, 'p2', 'left') };
-                                        else if (isP2End) handlers = { onMouseDown: (e: React.MouseEvent) => handleSeqMouseDown(e, 'p2', 'right') };
                                         else handlers = { onMouseDown: (e: React.MouseEvent) => handleSeqMouseDown(e, 'p2', 'move') };
                                     }
 
@@ -2149,9 +2145,7 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                                         <span>GC: <b className={primers.p1.gc_ok === false ? "text-red-500 font-bold" : "text-emerald-500 font-bold"}>{primers.p1.gc != null ? primers.p1.gc.toFixed(1) : ((primers.p1.seq.match(/[GCgc]/g) || []).length / primers.p1.seq.length * 100).toFixed(1)}%</b></span>
                                         <span title="Primer3 Tm">P3 Tm: <b className={primers.p1.tm_ok === false ? "text-red-500 font-bold" : "text-emerald-500 font-bold"}>{primers.p1.tm}°C</b></span>
                                         {primers.p1.tm_strider != null && (
-                                            <span title="Strider duplex Tm" className="bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 px-1.5 py-0.5 rounded border border-zinc-200 dark:border-zinc-700 inline-flex flex-col items-center leading-tight whitespace-nowrap font-mono tabular-nums">
-                                                <span>Strider Tm</span><b className="font-bold">{primers.p1.tm_strider.toFixed(1)}°C</b>
-                                            </span>
+                                            <span title="Strider duplex Tm">Strider Tm: <b className="text-emerald-500 font-bold tabular-nums">{primers.p1.tm_strider.toFixed(1)}°C</b></span>
                                         )}
                                         {idtResults?.m1?.analyze && (
                                             <span title="IDT Tm" className="bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 px-1.5 py-0.5 rounded border border-zinc-200 dark:border-zinc-700 inline-flex flex-col items-center leading-tight whitespace-nowrap font-mono tabular-nums">
