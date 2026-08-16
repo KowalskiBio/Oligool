@@ -1,0 +1,220 @@
+THERMODYNAMICS OF HAIRPINS & DIMERS IN OLIGOOL / STRIDER
+==========================================================
+A plain-English explanation of the "Ensemble ΔG", "% of Ensemble", and
+competition bar (Free / Hairpin / Self-Dimer / Cross-Dimer) added to the
+Secondary Structures panel — what they mean, why they were added, and
+how to read them. Written as the questions actually came up, with the
+real numbers from testing.
+
+
+WHAT WE ADDED, IN ONE PARAGRAPH
+--------------------------------
+Before this, the panel only showed the single BEST hairpin/dimer structure
+for each oligo (its ΔG), plus 4 runner-up structures. That tells you "if
+this exact structure formed, how strong would it be" — but nothing about
+whether it actually forms in your tube, at your concentration. We added
+three numbers that answer that real question instead of just ranking
+structures by strength.
+
+
+===========================================================================
+1) "The tool found a dimer with ΔG -3.85, so why does it say 100% Free?"
+===========================================================================
+
+Because "found the best dimer" and "this dimer actually forms" are two
+completely different questions.
+
+The ΔG search is a MATH PUZZLE: given two copies of this oligo, what is
+the single best possible way they could stick together? It always answers
+that question, the same way a chess engine always finds "the best move" —
+even in a hopeless position. Best doesn't mean good.
+
+Whether that best dimer actually happens in solution is a separate,
+concentration-dependent question. Two separate molecules finding each
+other and sticking together always costs some energy — losing the freedom
+of moving around independently. That cost is roughly fixed, no matter how
+good the eventual pairing is, and it matters much more when the solution
+is dilute (fewer molecules bumping into each other). A hairpin never pays
+this cost, since it's one molecule folding on itself.
+
+  Example 1: a -3.85 kcal/mol self-dimer -> 100% Free
+    A mediocre pairing. Nowhere near strong enough to be worth the
+    "finding each other" cost at a typical primer concentration
+    (0.25 uM in these examples), so essentially no copies pair up.
+
+  Example 2: a -19.65 kcal/mol self-dimer (a near-perfect 10-base match)
+    -> 28% Self-Dimer, 72% Free
+    Dramatically stronger, easily worth the cost, so a real chunk of the
+    population pairs up even at the same dilute concentration.
+
+Takeaway: raw ΔG tells you how good the best pairing WOULD be. The
+competition bar (see #3) tells you whether it's actually worth forming.
+
+
+===========================================================================
+2) "What do 'Ensemble ΔG' and 'X% of Ensemble' mean?"
+===========================================================================
+
+Every ΔG shown (IDT ΔG, Strider ΔG) is for ONE specific structure — the
+single best alignment the search found. But in reality, two strands (or
+one strand folding on itself) can stick together in many different, only
+slightly-worse ways too.
+
+  Ensemble ΔG adds up ALL of those ways, not just the best one. It is
+  always at least as favorable (equal or more negative) as the single
+  best structure, because it includes that structure plus every other
+  possibility.
+
+  "X% of Ensemble" tells you how much the best structure dominates the
+  others.
+    - High % (e.g. 100%) = one clear winning shape. What's drawn is
+      basically the whole story.
+    - Low % (e.g. 3%) = many different, roughly-equally-likely ways to
+      pair up. The picture shown is just one of several similar options,
+      not the definitive answer for "the" structure.
+
+This number is informational, not a verdict — see #5 for why it isn't
+color-graded red/yellow/green like ΔG and Tm are.
+
+
+===========================================================================
+3) "What does the Free / Hairpin / Self-Dimer / Cross-Dimer bar mean?"
+===========================================================================
+
+This is the number that actually answers "what happens in my tube."
+
+It asks: out of all the copies of this oligo floating in solution, at the
+concentration you set, what fraction right now are
+
+  - Free       — just floating around, not doing anything structured
+  - Hairpin    — folded back on themselves (a SUBSET of "free" — see
+                 note below)
+  - Self-Dimer — paired up with another copy of themselves
+  - Cross-Dimer — paired up with the OTHER oligo in the pair
+
+This is computed with real statistical mechanics (a mass-action
+equilibrium solve, the same style of calculation NUPACK uses), not a
+rule of thumb. It is the only place on the panel where concentration
+actually enters the math — which is exactly why it can disagree with
+what the raw ΔG numbers would suggest (see #1 and #4).
+
+Note on Hairpin vs Free: "Hairpin %" is not a separate slice from "Free
+%" — it's the portion OF the free population that happens to be folded
+into that specific hairpin shape. The bar subtracts it out so the
+segments don't double-count (Free shown = truly open + unstructured
+only).
+
+Note on missing segments: a segment only shows if it's above 0.1% of the
+population. If Cross-Dimer doesn't appear, it means either (a) it wasn't
+computed at all (single-oligo mode, or no pairing was found between the
+two oligos), or (b) it WAS computed but is genuinely negligible — in
+that case you'll see a small dim "<0.1%" note instead of nothing, so you
+can tell the two situations apart.
+
+
+===========================================================================
+4) "A -6.21 kcal/mol cross-dimer looks risky. Why is it <0.1%?"
+===========================================================================
+
+This is the single most important, least obvious idea in the whole
+feature, so here it is with real numbers from testing:
+
+  Oligo 1 alone already has some standalone stability, just from its own
+  weak hairpin-folding possibilities:      ensemble ~ -2.5 kcal/mol
+  Oligo 2 alone, same idea:                ensemble ~ -4.5 kcal/mol
+  The cross-dimer complex itself:          ensemble ~ -8.76 kcal/mol
+
+The question that actually matters is not "is -8.76 a big negative
+number" — it's "how much EXTRA do these two strands gain by finding each
+other, compared to what they'd already be doing on their own?"
+
+    extra benefit = -8.76 - (-2.5) - (-4.5) = -1.76 kcal/mol
+
+Only -1.76 kcal/mol of real extra incentive to pair up. That's weak —
+nowhere near enough to be worth the cost of two separate molecules
+finding each other at a dilute concentration, so essentially none of the
+population ends up as a cross-dimer.
+
+Compare that to a case that DID show up strongly: Oligo 2's self-dimer.
+
+    ensemble ~ -17.45,  Oligo 2 alone ~ -4.5
+    extra benefit = -17.45 - 2 x (-4.5) = -8.45 kcal/mol
+
+That's a much bigger true driving force, so it really does compete for
+population (28% self-dimer, in testing).
+
+The deeper reason: an oligo's OWN internal hairpin stability protects it
+from dimerizing with a partner, because "already tied up in its own
+fold" directly competes with "available to pair with something else."
+Raw ΔG of a complex, looked at alone, can't see this — it has to be
+compared against what each strand was already going to do by itself.
+
+So: a scary-looking raw ΔG for a cross-dimer does not automatically mean
+real risk. If both partners already have some structure of their own,
+much of that ΔG was "already accounted for," and the true extra
+incentive to cross-pair can be much smaller than it looks.
+
+
+===========================================================================
+5) Colors — what they mean and why percentage isn't graded
+===========================================================================
+
+ALL ΔG values (IDT ΔG, Strider ΔG, Ensemble ΔG, summary ΔG):
+    < -6 kcal/mol  ............ RED     (strong / concerning)
+    -6 to -2 kcal/mol .......... YELLOW  (moderate)
+    >= -2 kcal/mol .............. GREEN   (weak / fine)
+
+Tm values (IDT Tm, Local Tm):
+    > 55 C ...................... RED
+    40 - 55 C ................... YELLOW
+    < 40 C ....................... GREEN
+
+"% of Ensemble": always plain BLUE, never graded red/yellow/green.
+  Why: this number isn't measuring "how bad is this," it's measuring
+  "how much should you trust the one picture you're looking at." A high
+  % means the drawn structure is the only real way this forms — the
+  picture is representative. A low % means many different alignments
+  are competing and the one drawn is just a sample. Neither is
+  inherently good or bad for PCR — that's what ΔG and the competition
+  bar are for — so grading it by severity would be misleading.
+
+
+===========================================================================
+QUICK REFERENCE
+===========================================================================
+
+  ΔG (any)      < -6 red | -6..-2 yellow | >= -2 green
+  Tm            > 55 red | 40..55 yellow | < 40 green
+  % of Ensemble always blue, no grading (confidence, not risk)
+
+  Ensemble ΔG    = strength of ALL competing ways to pair up, not just
+                   the best one. Always <= the best single structure's ΔG.
+  % of Ensemble  = how much the single best structure dominates the rest.
+  Competition bar = the only number that accounts for concentration —
+                   what fraction of the population is actually free,
+                   hairpinned, self-dimerized, or cross-dimerized right
+                   now, given the oligo concentration you set.
+
+  Rule of thumb: raw ΔG tells you how good a pairing WOULD be.
+                 The competition bar tells you whether it's actually
+                 worth it, once concentration and each strand's own
+                 competing structure are accounted for.
+
+
+===========================================================================
+A COUPLE OF HONEST CAVEATS
+===========================================================================
+
+- The competition bar always uses native SantaLucia 2004 parameters for
+  its internal math, regardless of whether the Mathews/SantaLucia toggle
+  elsewhere is set to Mathews — this keeps the free/hairpin/self-dimer/
+  cross-dimer comparison internally consistent (mixing two different
+  parameter sets in one equilibrium calculation would be meaningless).
+  The individual ΔG numbers shown elsewhere on the panel do still follow
+  the toggle.
+
+- Every competition number is tied to the oligo concentration you set
+  (0.25 uM by default). Change the concentration and the split changes —
+  that's the point, not a bug. A borderline dimer at PCR primer
+  concentrations can become a real problem at higher (e.g. hybridization
+  or ligation) concentrations.
