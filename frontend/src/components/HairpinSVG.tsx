@@ -97,8 +97,12 @@ function splitStemGroups(
     if (groups.length <= 1) return null;
 
     return groups.map(g => {
+        // Within a group, pairs are sorted left-ascending and (by construction of
+        // the grouping loop above) strictly nested, so g[0] is always the
+        // outermost pair — its right index is the domain's true closing bound,
+        // not g[last]'s (which is the innermost pair and closes earliest).
         const start = g[0][0];
-        const end = g[g.length - 1][1];
+        const end = g[0][1];
         return {
             seq: seq.slice(start, end + 1),
             dotBracket: db.slice(start, end + 1),
