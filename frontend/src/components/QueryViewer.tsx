@@ -2104,9 +2104,7 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                                         <span>GC: <b className={primers.p2.gc_ok === false ? "text-red-500 font-bold" : "text-emerald-500 font-bold"}>{primers.p2.gc != null ? primers.p2.gc.toFixed(1) : ((primers.p2.seq.match(/[GCgc]/g) || []).length / primers.p2.seq.length * 100).toFixed(1)}%</b></span>
                                         <span title="Primer3 Tm">P3 Tm: <b className={primers.p2.tm_ok === false ? "text-red-500 font-bold" : "text-emerald-500 font-bold"}>{primers.p2.tm}°C</b></span>
                                         {primers.p2.tm_strider != null && (
-                                            <span title="Strider duplex Tm" className="bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 px-1.5 py-0.5 rounded border border-zinc-200 dark:border-zinc-700 inline-flex flex-col items-center leading-tight whitespace-nowrap font-mono tabular-nums">
-                                                <span>Strider Tm</span><b className="font-bold">{primers.p2.tm_strider.toFixed(1)}°C</b>
-                                            </span>
+                                            <span title="Strider duplex Tm">Strider Tm: <b className="text-emerald-500 font-bold">{primers.p2.tm_strider.toFixed(1)}°C</b></span>
                                         )}
                                         {idtResults?.m2?.analyze && (
                                             <span title="IDT Tm" className="bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 px-1.5 py-0.5 rounded border border-zinc-200 dark:border-zinc-700 inline-flex flex-col items-center leading-tight whitespace-nowrap font-mono tabular-nums">
@@ -2738,7 +2736,7 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                         <svg className="w-4 h-4 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
                         </svg>
-                        <span className="text-sm font-bold text-zinc-500 uppercase tracking-widest">Flanking Primers Provenance</span>
+                        <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Flanking Primers Provenance</span>
                         {flankingPrimersData?.amplicon != null && (
                             <span
                                 className="px-2 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 text-xs font-semibold font-mono tabular-nums normal-case tracking-normal"
