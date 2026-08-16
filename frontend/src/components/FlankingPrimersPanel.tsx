@@ -1462,7 +1462,7 @@ export default function FlankingPrimersPanel({
                                 ))}
                             </div>
                             <button onClick={() => design()} disabled={loading}
-                                className={`flex-1 rounded-md font-medium text-sm transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700 dark:focus-visible:outline-teal-300 ${loading ? 'py-2.5 bg-zinc-100 dark:bg-zinc-900 text-zinc-400 cursor-not-allowed' : 'bg-teal-700 text-white hover:bg-teal-800 dark:bg-teal-300 dark:text-zinc-900 dark:hover:bg-teal-200 justify-center py-2.5'}`}>
+                                className={`flex-1 rounded-md font-medium text-sm transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700 dark:focus-visible:outline-teal-300 ${loading ? 'py-2.5 bg-zinc-100 dark:bg-zinc-900 text-zinc-400 cursor-not-allowed' : 'bg-zinc-900 text-white hover:bg-zinc-700 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300 justify-center py-2.5'}`}>
                                 {loading ? (
                                     <span className="flex items-center justify-center gap-2">
                                         <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
