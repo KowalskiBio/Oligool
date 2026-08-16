@@ -1738,6 +1738,71 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
         );
     };
 
+    // Merge fresh Strider results (structures + Local ΔG/Tm) with stable IDT
+    // values. After a Mathews/SantaLucia toggle, striderResults is recomputed
+    // (fresh hairpins, fresh ΔG/Tm) while idtResults keeps its IDT values from
+    // when the user last clicked Run IDT. This produces a single panel that
+    // shows both side-by-side: Strider ΔG (fresh) with IDT ΔG (stable) next to it.
+    // IDT ΔG is an independent measurement (IDT's own fold), so it goes on the
+    // best (first) structure only, matching how /idt/analyze itself structures
+    // the response.
+    const mergeStability = (strider: IdtData | null, idt: IdtData | null): IdtData | null => {
+        if (!strider && !idt) return null;
+        if (!strider) return idt;
+        if (!idt) return strider;
+
+        const overlay = (s: any, i: any) => {
+            if (!s) return i;
+            if (!i) return s;
+            const sRaw: any[] = Array.isArray(s.raw) ? s.raw : (s.raw ? [s.raw] : []);
+            const iRaw0: any = Array.isArray(i.raw) ? i.raw?.[0] : i.raw;
+            const idtDg = i.DeltaG ?? iRaw0?.DeltaG ?? null;
+            const idtTm = iRaw0?.IDT_Tm ?? null;
+            return {
+                ...s,
+                DeltaG: idtDg,
+                all_DeltaG: sRaw.map((_: any, idx: number) => idx === 0 ? idtDg : null),
+                all_IDT_Tm: sRaw.map((_: any, idx: number) => idx === 0 ? idtTm : null),
+            };
+        };
+
+        return {
+            m1: {
+                hairpin: overlay(strider.m1?.hairpin, idt.m1?.hairpin),
+                self_dimer: overlay(strider.m1?.self_dimer, idt.m1?.self_dimer),
+                analyze: idt.m1?.analyze ?? strider.m1?.analyze,
+            },
+            m2: {
+                hairpin: overlay(strider.m2?.hairpin, idt.m2?.hairpin),
+                self_dimer: overlay(strider.m2?.self_dimer, idt.m2?.self_dimer),
+                analyze: idt.m2?.analyze ?? strider.m2?.analyze,
+            },
+            pairwise: overlay(strider.pairwise, idt.pairwise),
+        } as IdtData;
+    };
+
+    const renderStabilityGrid = (results: IdtData, seqs: { p1: string; p2: string } | null, isLoading: boolean) => (
+        <div className={`grid grid-cols-1 md:grid-cols-3 gap-3 transition-opacity duration-200 ${isLoading ? 'opacity-40' : 'opacity-100'}`}>
+            <div className="bg-zinc-50 dark:bg-zinc-900/40 p-3 rounded border border-zinc-100 dark:border-zinc-800">
+                <div className="text-xs font-bold text-zinc-500 uppercase mb-1">Oligo 2 Stability</div>
+                {renderIdtCard("Hairpin ΔG", results.m2.hairpin, seqs?.p2 ?? primers?.p2.seq)}
+                {renderIdtCard("Self-Dimer ΔG", results.m2.self_dimer, seqs?.p2 ?? primers?.p2.seq)}
+                <div className="text-[10px] text-zinc-400 mt-1 italic">kcal/mol</div>
+            </div>
+            <div className="bg-zinc-50 dark:bg-zinc-900/40 p-3 rounded border border-zinc-100 dark:border-zinc-800">
+                <div className="text-xs font-bold text-zinc-500 uppercase mb-1">Oligo 1 Stability</div>
+                {renderIdtCard("Hairpin ΔG", results.m1.hairpin, seqs?.p1 ?? primers?.p1.seq)}
+                {renderIdtCard("Self-Dimer ΔG", results.m1.self_dimer, seqs?.p1 ?? primers?.p1.seq)}
+                <div className="text-[10px] text-zinc-400 mt-1 italic">kcal/mol</div>
+            </div>
+            <div className="bg-teal-700/5 dark:bg-teal-300/5 p-3 rounded border border-teal-700/15 dark:border-teal-300/15">
+                <div className="text-xs font-bold text-teal-800 dark:text-teal-300 uppercase mb-1">Cross-Dimer Pairwise</div>
+                {renderIdtCard("Hetero-Dimer ΔG", results.pairwise, seqs?.p1 ?? primers?.p1.seq, seqs?.p2 ?? primers?.p2.seq)}
+                <div className="text-[10px] text-zinc-400 mt-1 italic">kcal/mol</div>
+            </div>
+        </div>
+    );
+
     const extractTm = (analyzeData: any) => {
         if (!analyzeData || analyzeData.error) return null;
 
@@ -2647,30 +2712,10 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                             </div>
                             {idtError && <div className="text-xs text-red-500 bg-red-50 dark:bg-red-900/20 p-2 rounded mb-3 border border-red-100 dark:border-red-900/30">Error: {idtError}</div>}
                             {(() => {
-                                const activeResults = idtResults || striderResults;
-                                const activeSeqs = idtAnalyzedSeqs || striderAnalyzedSeqs;
-                                if (!activeResults) return null;
-                                return (
-                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                                        <div className="bg-zinc-50 dark:bg-zinc-900/40 p-3 rounded border border-zinc-100 dark:border-zinc-800">
-                                            <div className="text-xs font-bold text-zinc-500 uppercase mb-1">Oligo 2 Stability</div>
-                                            {renderIdtCard("Hairpin ΔG", activeResults.m2.hairpin, activeSeqs?.p2 ?? primers.p2.seq)}
-                                            {renderIdtCard("Self-Dimer ΔG", activeResults.m2.self_dimer, activeSeqs?.p2 ?? primers.p2.seq)}
-                                            <div className="text-[10px] text-zinc-400 mt-1 italic">kcal/mol</div>
-                                        </div>
-                                        <div className="bg-zinc-50 dark:bg-zinc-900/40 p-3 rounded border border-zinc-100 dark:border-zinc-800">
-                                            <div className="text-xs font-bold text-zinc-500 uppercase mb-1">Oligo 1 Stability</div>
-                                            {renderIdtCard("Hairpin ΔG", activeResults.m1.hairpin, activeSeqs?.p1 ?? primers.p1.seq)}
-                                            {renderIdtCard("Self-Dimer ΔG", activeResults.m1.self_dimer, activeSeqs?.p1 ?? primers.p1.seq)}
-                                            <div className="text-[10px] text-zinc-400 mt-1 italic">kcal/mol</div>
-                                        </div>
-                                        <div className="bg-teal-700/5 dark:bg-teal-300/5 p-3 rounded border border-teal-700/15 dark:border-teal-300/15">
-                                            <div className="text-xs font-bold text-teal-800 dark:text-teal-300 uppercase mb-1">Cross-Dimer Pairwise</div>
-                                            {renderIdtCard("Hetero-Dimer ΔG", activeResults.pairwise, activeSeqs?.p1 ?? primers.p1.seq, activeSeqs?.p2 ?? primers.p2.seq)}
-                                            <div className="text-[10px] text-zinc-400 mt-1 italic">kcal/mol</div>
-                                        </div>
-                                    </div>
-                                );
+                                const merged = mergeStability(striderResults, idtResults);
+                                if (!merged) return null;
+                                const activeSeqs = striderAnalyzedSeqs || idtAnalyzedSeqs;
+                                return renderStabilityGrid(merged, activeSeqs, isStriderLoading || isIdtLoading);
                             })()}
                         </div>
                     )}
