@@ -987,7 +987,7 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                   value={eValue}
                   onChange={(e) => setEValue(e.target.value)}
                   disabled={step !== 'input'}
-                  className="input"
+                  className="input px-2 py-1 text-xs font-mono tabular-nums appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [&::-moz-appearance:textfield]"
                 />
               </div>
 
@@ -1001,7 +1001,7 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                   value={percIdentity}
                   onChange={(e) => setPercIdentity(e.target.value)}
                   disabled={step !== 'input'}
-                  className="input"
+                  className="input px-2 py-1 text-xs font-mono tabular-nums appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [&::-moz-appearance:textfield]"
                 />
               </div>
             </div>
@@ -1047,7 +1047,7 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                     onChange={(e) => setCustomHits(e.target.value)}
                     disabled={step !== 'input'}
                     placeholder="e.g. 200"
-                    className="input px-2 py-1 text-xs font-mono placeholder-zinc-400 dark:placeholder-zinc-500"
+                    className="input px-2 py-1 text-xs font-mono tabular-nums placeholder-zinc-400 dark:placeholder-zinc-500 appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [&::-moz-appearance:textfield]"
                   />
                 </div>
               </div>
