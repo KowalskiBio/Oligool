@@ -72,10 +72,27 @@ interface QueryViewerProps {
     onSaveSession?: () => void;
 }
 
+interface CompetitionResult {
+    P_Free?: number | null;
+    P_Hairpin?: number | null;
+    P_SelfDimer?: number | null;
+    P_HeteroDimer?: number | null;
+    Converged?: boolean;
+}
+
+interface IdtStructureResult {
+    DeltaG?: number;
+    Ensemble_DeltaG?: number | null;
+    Population_Fraction?: number | null;
+    all_Ensemble_DeltaG?: (number | null)[];
+    all_Population_Fraction?: (number | null)[];
+    raw?: any;
+}
+
 interface IdtData {
-    m1: { hairpin: { DeltaG?: number, raw?: any }; self_dimer: { DeltaG?: number, raw?: any }; analyze: any };
-    m2: { hairpin: { DeltaG?: number, raw?: any }; self_dimer: { DeltaG?: number, raw?: any }; analyze: any };
-    pairwise: { DeltaG?: number, raw?: any };
+    m1: { hairpin: IdtStructureResult; self_dimer: IdtStructureResult; analyze: any; competition?: CompetitionResult | null };
+    m2: { hairpin: IdtStructureResult; self_dimer: IdtStructureResult; analyze: any; competition?: CompetitionResult | null };
+    pairwise: IdtStructureResult;
 }
 
 interface Primer {
@@ -1590,11 +1607,18 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [idtCredentials?.parameterSet]);
 
-    const getIdtStatusColor = (dg: number | undefined) => {
-        if (dg === undefined) return 'text-zinc-400';
-        if (dg < -9) return 'text-red-500 font-bold';
-        if (dg < -6) return 'text-amber-500 font-bold';
+    const getIdtStatusColor = (dg: number | undefined | null) => {
+        if (dg === undefined || dg === null) return 'text-zinc-400';
+        if (dg < -6) return 'text-red-500 font-bold';
+        if (dg < -2) return 'text-amber-500 font-bold';
         return 'text-emerald-500 font-bold';
+    };
+
+    const getTmColor = (tm: number | undefined | null) => {
+        if (tm === undefined || tm === null) return 'text-zinc-400';
+        if (tm > 55) return 'text-red-500 font-medium';
+        if (tm >= 40) return 'text-amber-500 font-medium';
+        return 'text-emerald-500 font-medium';
     };
 
 
@@ -1628,11 +1652,17 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
         if (!data || data.error) return <div className="text-sm text-red-400">{data?.error || 'N/A'}</div>;
 
         // Extract DG and Visual from the structure { DeltaG, all_DeltaG, raw }
-        let dg = data.DeltaG;
         let raw = data.raw;
+        // Summary line shows Ensemble ΔG (the full competing-structure-pool
+        // strength), not the single best structure's IDT ΔG — more representative
+        // than any one candidate. Covers both response shapes: a plain dict has
+        // Ensemble_DeltaG directly, an array response carries it as the first
+        // (best) entry of all_Ensemble_DeltaG.
+        const summaryEnsembleDg: number | null | undefined = data.Ensemble_DeltaG ??
+            (Array.isArray(data.all_Ensemble_DeltaG) ? data.all_Ensemble_DeltaG[0] : undefined);
 
         // Render individual items (hairpins, dimers, etc.)
-        const renderItem = (item: any, seq: string | undefined, idx: number, itemDg?: number, itemLocalDg?: number, itemIdtTmVal?: number, itemLocalTmVal?: number) => {
+        const renderItem = (item: any, seq: string | undefined, idx: number, itemDg?: number, itemLocalDg?: number, itemIdtTmVal?: number, itemLocalTmVal?: number, itemPopFrac?: number | null) => {
             let asciiStructure: string | undefined = undefined;
             let hairpinDotBracket: string | undefined = undefined;
             let hairpinSeq: string | undefined = undefined;
@@ -1671,21 +1701,26 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                             <span className="font-semibold">{title} {idx + 1}:</span>
                             <div className="flex gap-3">
                                 {itemDg !== undefined && itemDg !== null && (
-                                    <span>IDT ΔG: <span className={getIdtStatusColor(itemDg)}>{itemDg.toFixed(2)}</span></span>
+                                    <span>IDT ΔG: <span className={`font-mono tabular-nums ${getIdtStatusColor(itemDg)}`}>{itemDg.toFixed(2)}</span></span>
                                 )}
                                 {itemLocalDg !== undefined && itemLocalDg !== null && (
-                                    <span>Strider ΔG: <span className={itemLocalDg <= 0 ? "text-amber-500 dark:text-amber-400 font-medium" : "text-zinc-400 dark:text-zinc-500 font-medium"}>{itemLocalDg > 0 ? '+' : ''}{itemLocalDg.toFixed(2)}</span></span>
+                                    <span>Strider ΔG: <span className={`font-mono tabular-nums ${getIdtStatusColor(itemLocalDg)}`}>{itemLocalDg > 0 ? '+' : ''}{itemLocalDg.toFixed(2)}</span></span>
                                 )}
                             </div>
                         </div>
                         <div className="flex justify-end gap-3 text-[9px] opacity-80">
                             {itemIdtTmVal !== undefined && itemIdtTmVal !== null && (
-                                <span>IDT Tm: <span className="text-zinc-500 dark:text-zinc-400 font-medium">{Number(itemIdtTmVal).toFixed(1)}°C</span></span>
+                                <span>IDT Tm: <span className={`font-mono tabular-nums ${getTmColor(itemIdtTmVal)}`}>{Number(itemIdtTmVal).toFixed(1)}°C</span></span>
                             )}
                             {itemLocalTmVal !== undefined && itemLocalTmVal !== null && (
-                                <span>Local Tm: <span className="text-zinc-500 dark:text-zinc-400 font-medium">{Number(itemLocalTmVal).toFixed(1)}°C</span></span>
+                                <span>Local Tm: <span className={`font-mono tabular-nums ${getTmColor(itemLocalTmVal)}`}>{Number(itemLocalTmVal).toFixed(1)}°C</span></span>
                             )}
                         </div>
+                        {itemPopFrac !== undefined && itemPopFrac !== null && (
+                            <div className="flex justify-end gap-3 text-[9px] opacity-80">
+                                <span title="Share of the full structural ensemble this MFE structure represents"><span className="font-mono tabular-nums text-blue-500 dark:text-blue-400 font-medium">{(itemPopFrac * 100).toFixed(itemPopFrac < 0.01 ? 2 : 0)}%</span> of Ensemble</span>
+                            </div>
+                        )}
                     </div>
                     {hairpinDotBracket && hairpinSeq && (
                         <div className="mt-1 w-full overflow-x-auto bg-zinc-100 dark:bg-zinc-800 rounded p-2">
@@ -1720,18 +1755,23 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
             const allLocalDgs = data.all_Local_DeltaG || [];
             const allIdtTms = data.all_IDT_Tm || [];
             const allLocalTms = data.all_Local_Tm || [];
+            const allPopFracs = data.all_Population_Fraction || [];
             raw.forEach((item: any, idx: number) => {
-                items.push(renderItem(item, seq1, idx, allDgs[idx], allLocalDgs[idx], allIdtTms[idx], allLocalTms[idx]));
+                items.push(renderItem(item, seq1, idx, allDgs[idx], allLocalDgs[idx], allIdtTms[idx], allLocalTms[idx], allPopFracs[idx]));
             });
         } else if (raw) {
-            items.push(renderItem(raw, seq1, 0, data.DeltaG, raw.Local_DeltaG, raw.IDT_Tm, raw.Local_Tm));
+            items.push(renderItem(raw, seq1, 0, data.DeltaG, raw.Local_DeltaG, raw.IDT_Tm, raw.Local_Tm, data.Population_Fraction ?? raw.Population_Fraction));
         }
 
         return (
             <div className="flex flex-col gap-1 mb-2">
                 <div className="flex justify-between items-center text-sm font-medium border-b border-zinc-200 dark:border-zinc-700 pb-1 mb-1">
                     <span className="text-zinc-600 dark:text-zinc-300">Summary {title}:</span>
-                    <span className={getIdtStatusColor(dg)}>{dg !== undefined && dg !== null ? `${dg.toFixed(2)} kcal/mol` : 'N/A'}</span>
+                    <span className={getIdtStatusColor(summaryEnsembleDg)}>
+                        {summaryEnsembleDg !== undefined && summaryEnsembleDg !== null
+                            ? <><span className="font-mono tabular-nums">{summaryEnsembleDg.toFixed(2)}</span> kcal/mol</>
+                            : 'N/A'}
+                    </span>
                 </div>
                 {items}
             </div>
@@ -1771,26 +1811,91 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                 hairpin: overlay(strider.m1?.hairpin, idt.m1?.hairpin),
                 self_dimer: overlay(strider.m1?.self_dimer, idt.m1?.self_dimer),
                 analyze: idt.m1?.analyze ?? strider.m1?.analyze,
+                competition: strider.m1?.competition ?? idt.m1?.competition,
             },
             m2: {
                 hairpin: overlay(strider.m2?.hairpin, idt.m2?.hairpin),
                 self_dimer: overlay(strider.m2?.self_dimer, idt.m2?.self_dimer),
                 analyze: idt.m2?.analyze ?? strider.m2?.analyze,
+                competition: strider.m2?.competition ?? idt.m2?.competition,
             },
             pairwise: overlay(strider.pairwise, idt.pairwise),
         } as IdtData;
+    };
+
+    // Static segmented bar showing the equilibrium population split for one
+    // oligo: free monomer / hairpin / self-dimer / heterodimer, at the
+    // configured oligo concentration. Answers "which fate is this oligo
+    // actually most likely to end up in" on one shared scale, rather than
+    // eyeballing separate hairpin/dimer ΔG numbers.
+    const renderCompetitionStrip = (competition: CompetitionResult | null | undefined) => {
+        if (!competition) return null;
+        // P_Hairpin is a *subset* of P_Free (the fraction of the non-dimerized
+        // population that happens to be in the MFE hairpin fold), not a disjoint
+        // category — subtract it out here so the bar's segments are mutually
+        // exclusive and actually sum to ~100% instead of double-counting it.
+        const pHairpin = competition.P_Hairpin ?? 0;
+        const pFreeOpen = Math.max(0, (competition.P_Free ?? 0) - pHairpin);
+        const segments: { label: string; value: number; className: string }[] = [
+            { label: 'Free', value: pFreeOpen, className: 'bg-zinc-300 dark:bg-zinc-600' },
+            { label: 'Hairpin', value: pHairpin, className: 'bg-amber-500' },
+            { label: 'Self-Dimer', value: competition.P_SelfDimer ?? 0, className: 'bg-red-500' },
+            { label: 'Cross-Dimer', value: competition.P_HeteroDimer ?? 0, className: 'bg-purple-500' },
+        ];
+        const shown = segments.filter(s => s.value > 0.001);
+        if (shown.length === 0) return null;
+        // Distinguish "computed but negligible" (a real number that just rounds
+        // to ~0%, e.g. two oligos barely form a heterodimer at this concentration)
+        // from "not applicable" (P_HeteroDimer is null/undefined — single-oligo
+        // mode, or no pairing was found at all) — otherwise a genuinely-tiny-but
+        // -real value looks identical to n/a and this exact question comes up.
+        const wasComputed: Record<string, boolean> = {
+            Hairpin: competition.P_Hairpin !== null && competition.P_Hairpin !== undefined,
+            'Self-Dimer': competition.P_SelfDimer !== null && competition.P_SelfDimer !== undefined,
+            'Cross-Dimer': competition.P_HeteroDimer !== null && competition.P_HeteroDimer !== undefined,
+        };
+        const negligible = segments.filter(s => s.label !== 'Free' && s.value <= 0.001 && wasComputed[s.label]);
+
+        return (
+            <div className="mb-2">
+                <div className="flex h-3 w-full rounded-full overflow-hidden border border-zinc-200 dark:border-zinc-700">
+                    {shown.map(s => (
+                        <div key={s.label} className={s.className} style={{ width: `${s.value * 100}%` }} title={`${s.label}: ${(s.value * 100).toFixed(1)}%`} />
+                    ))}
+                </div>
+                <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1 text-[9px] text-zinc-500 dark:text-zinc-400">
+                    {shown.map(s => (
+                        <span key={s.label} className="flex items-center gap-1">
+                            <span className={`inline-block w-1.5 h-1.5 rounded-full ${s.className}`} />
+                            {s.label} <span className="font-mono tabular-nums">{(s.value * 100).toFixed(1)}%</span>
+                        </span>
+                    ))}
+                    {negligible.map(s => (
+                        <span key={s.label} className="flex items-center gap-1 opacity-60">
+                            <span className={`inline-block w-1.5 h-1.5 rounded-full ${s.className}`} />
+                            {s.label} <span className="font-mono tabular-nums">&lt;0.1%</span>
+                        </span>
+                    ))}
+                </div>
+                {competition.Converged === false && (
+                    <div className="text-[9px] text-amber-500 mt-0.5 italic">Equilibrium solve did not fully converge — treat as approximate.</div>
+                )}
+            </div>
+        );
     };
 
     const renderStabilityGrid = (results: IdtData, seqs: { p1: string; p2: string } | null, isLoading: boolean) => (
         <div className={`grid grid-cols-1 md:grid-cols-3 gap-3 transition-opacity duration-200 ${isLoading ? 'opacity-40' : 'opacity-100'}`}>
             <div className="bg-zinc-50 dark:bg-zinc-900/40 p-3 rounded border border-zinc-100 dark:border-zinc-800">
                 <div className="text-xs font-bold text-zinc-500 uppercase mb-1">Oligo 2 Stability</div>
+                {renderCompetitionStrip(results.m2.competition)}
                 {renderIdtCard("Hairpin ΔG", results.m2.hairpin, seqs?.p2 ?? primers?.p2.seq)}
                 {renderIdtCard("Self-Dimer ΔG", results.m2.self_dimer, seqs?.p2 ?? primers?.p2.seq)}
                 <div className="text-[10px] text-zinc-400 mt-1 italic">kcal/mol</div>
             </div>
             <div className="bg-zinc-50 dark:bg-zinc-900/40 p-3 rounded border border-zinc-100 dark:border-zinc-800">
                 <div className="text-xs font-bold text-zinc-500 uppercase mb-1">Oligo 1 Stability</div>
+                {renderCompetitionStrip(results.m1.competition)}
                 {renderIdtCard("Hairpin ΔG", results.m1.hairpin, seqs?.p1 ?? primers?.p1.seq)}
                 {renderIdtCard("Self-Dimer ΔG", results.m1.self_dimer, seqs?.p1 ?? primers?.p1.seq)}
                 <div className="text-[10px] text-zinc-400 mt-1 italic">kcal/mol</div>
@@ -2179,11 +2284,11 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                                 </div>
                                 <div className="mt-3 flex items-center justify-between border-t border-zinc-100 dark:border-zinc-700 pt-2">
                                     <div className="flex gap-3 text-xs text-zinc-500 dark:text-zinc-400 items-center">
-                                        <span>Len: <b className={primers.p2.len_ok === false ? "text-red-500 font-bold" : "text-emerald-500 font-bold"}>{primers.p2.len}</b></span>
-                                        <span>GC: <b className={primers.p2.gc_ok === false ? "text-red-500 font-bold" : "text-emerald-500 font-bold"}>{primers.p2.gc != null ? primers.p2.gc.toFixed(1) : ((primers.p2.seq.match(/[GCgc]/g) || []).length / primers.p2.seq.length * 100).toFixed(1)}%</b></span>
-                                        <span title="Primer3 Tm">P3 Tm: <b className={primers.p2.tm_ok === false ? "text-red-500 font-bold" : "text-emerald-500 font-bold"}>{primers.p2.tm}°C</b></span>
+                                        <span>Len: <b className={`font-mono tabular-nums ${primers.p2.len_ok === false ? "text-red-500 font-bold" : "text-emerald-500 font-bold"}`}>{primers.p2.len}</b></span>
+                                        <span>GC: <b className={`font-mono tabular-nums ${primers.p2.gc_ok === false ? "text-red-500 font-bold" : "text-emerald-500 font-bold"}`}>{primers.p2.gc != null ? primers.p2.gc.toFixed(1) : ((primers.p2.seq.match(/[GCgc]/g) || []).length / primers.p2.seq.length * 100).toFixed(1)}%</b></span>
+                                        <span title="Primer3 Tm">P3 Tm: <b className={`font-mono tabular-nums ${primers.p2.tm_ok === false ? "text-red-500 font-bold" : "text-emerald-500 font-bold"}`}>{primers.p2.tm}°C</b></span>
                                         {primers.p2.tm_strider != null && (
-                                            <span title="Strider duplex Tm">Strider Tm: <b className="text-emerald-500 font-bold">{primers.p2.tm_strider.toFixed(1)}°C</b></span>
+                                            <span title="Strider duplex Tm">Strider Tm: <b className="font-mono tabular-nums text-emerald-500 font-bold">{primers.p2.tm_strider.toFixed(1)}°C</b></span>
                                         )}
                                         {idtResults?.m2?.analyze && (
                                             <span title="IDT Tm" className="bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 px-1.5 py-0.5 rounded border border-zinc-200 dark:border-zinc-700 inline-flex flex-col items-center leading-tight whitespace-nowrap font-mono tabular-nums">
@@ -2191,7 +2296,7 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                                             </span>
                                         )}
                                         <span title="Tm Difference" className="text-[10px] opacity-80 flex items-center gap-1">
-                                            ΔTm: <b className={primers.tm_diff_ok === false ? "text-red-500 font-bold" : "text-emerald-500 font-bold"}>{Math.abs(primers.p1.tm - primers.p2.tm).toFixed(1)}°C</b>
+                                            ΔTm: <b className={`font-mono tabular-nums ${primers.tm_diff_ok === false ? "text-red-500 font-bold" : "text-emerald-500 font-bold"}`}>{Math.abs(primers.p1.tm - primers.p2.tm).toFixed(1)}°C</b>
                                         </span>
                                     </div>
                                     <div className="flex bg-zinc-100 dark:bg-zinc-800 rounded-md border border-zinc-200 dark:border-zinc-700 overflow-hidden">
@@ -2224,11 +2329,11 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                                 </div>
                                 <div className="mt-3 flex items-center justify-between border-t border-zinc-100 dark:border-zinc-700 pt-2">
                                     <div className="flex gap-3 text-xs text-zinc-500 dark:text-zinc-400 items-center">
-                                        <span>Len: <b className={primers.p1.len_ok === false ? "text-red-500 font-bold" : "text-emerald-500 font-bold"}>{primers.p1.len}</b></span>
-                                        <span>GC: <b className={primers.p1.gc_ok === false ? "text-red-500 font-bold" : "text-emerald-500 font-bold"}>{primers.p1.gc != null ? primers.p1.gc.toFixed(1) : ((primers.p1.seq.match(/[GCgc]/g) || []).length / primers.p1.seq.length * 100).toFixed(1)}%</b></span>
-                                        <span title="Primer3 Tm">P3 Tm: <b className={primers.p1.tm_ok === false ? "text-red-500 font-bold" : "text-emerald-500 font-bold"}>{primers.p1.tm}°C</b></span>
+                                        <span>Len: <b className={`font-mono tabular-nums ${primers.p1.len_ok === false ? "text-red-500 font-bold" : "text-emerald-500 font-bold"}`}>{primers.p1.len}</b></span>
+                                        <span>GC: <b className={`font-mono tabular-nums ${primers.p1.gc_ok === false ? "text-red-500 font-bold" : "text-emerald-500 font-bold"}`}>{primers.p1.gc != null ? primers.p1.gc.toFixed(1) : ((primers.p1.seq.match(/[GCgc]/g) || []).length / primers.p1.seq.length * 100).toFixed(1)}%</b></span>
+                                        <span title="Primer3 Tm">P3 Tm: <b className={`font-mono tabular-nums ${primers.p1.tm_ok === false ? "text-red-500 font-bold" : "text-emerald-500 font-bold"}`}>{primers.p1.tm}°C</b></span>
                                         {primers.p1.tm_strider != null && (
-                                            <span title="Strider duplex Tm">Strider Tm: <b className="text-emerald-500 font-bold tabular-nums">{primers.p1.tm_strider.toFixed(1)}°C</b></span>
+                                            <span title="Strider duplex Tm">Strider Tm: <b className="font-mono tabular-nums text-emerald-500 font-bold">{primers.p1.tm_strider.toFixed(1)}°C</b></span>
                                         )}
                                         {idtResults?.m1?.analyze && (
                                             <span title="IDT Tm" className="bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 px-1.5 py-0.5 rounded border border-zinc-200 dark:border-zinc-700 inline-flex flex-col items-center leading-tight whitespace-nowrap font-mono tabular-nums">
@@ -2236,7 +2341,7 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                                             </span>
                                         )}
                                         <span title="Tm Difference" className="text-[10px] opacity-80 flex items-center gap-1">
-                                            ΔTm: <b className={primers.tm_diff_ok === false ? "text-red-500 font-bold" : "text-emerald-500 font-bold"}>{Math.abs(primers.p1.tm - primers.p2.tm).toFixed(1)}°C</b>
+                                            ΔTm: <b className={`font-mono tabular-nums ${primers.tm_diff_ok === false ? "text-red-500 font-bold" : "text-emerald-500 font-bold"}`}>{Math.abs(primers.p1.tm - primers.p2.tm).toFixed(1)}°C</b>
                                         </span>
                                     </div>
                                     <div className="flex bg-zinc-100 dark:bg-zinc-800 rounded-md border border-zinc-200 dark:border-zinc-700 overflow-hidden">
@@ -2460,8 +2565,8 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                                                         </div>
                                                         <div className="flex gap-2 text-[9px] text-zinc-400">
                                                             <span className="font-mono text-[9px] text-zinc-500 shrink-0">bp {pos.p2AbsStart}–{pos.p2AbsEnd}</span>
-                                                            <span className="ml-auto">GC: <b className="text-zinc-500">{pos.p2.gc.toFixed(1)}%</b></span>
-                                                            <span>Tm: <b className="text-zinc-500">{pos.p2.tm.toFixed(1)}°C</b></span>
+                                                            <span className="ml-auto">GC: <b className="font-mono tabular-nums text-zinc-500">{pos.p2.gc.toFixed(1)}%</b></span>
+                                                            <span>Tm: <b className="font-mono tabular-nums text-zinc-500">{pos.p2.tm.toFixed(1)}°C</b></span>
                                                         </div>
                                                     </div>
                                                 </div>
@@ -2480,8 +2585,8 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                                                         </div>
                                                         <div className="flex gap-2 text-[9px] text-zinc-400">
                                                             <span className="font-mono text-[9px] text-zinc-500 shrink-0">bp {pos.p1AbsStart}–{pos.p1AbsEnd}</span>
-                                                            <span className="ml-auto">GC: <b className="text-zinc-500">{pos.p1.gc.toFixed(1)}%</b></span>
-                                                            <span>Tm: <b className="text-zinc-500">{pos.p1.tm.toFixed(1)}°C</b></span>
+                                                            <span className="ml-auto">GC: <b className="font-mono tabular-nums text-zinc-500">{pos.p1.gc.toFixed(1)}%</b></span>
+                                                            <span>Tm: <b className="font-mono tabular-nums text-zinc-500">{pos.p1.tm.toFixed(1)}°C</b></span>
                                                         </div>
                                                     </div>
                                                 </div>
@@ -2607,8 +2712,8 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                                                          </div>
                                                          <div className="flex flex-wrap gap-2 text-[10px] text-zinc-500 dark:text-zinc-400">
                                                              <span className="font-mono">bp {base[`${oligoKey}AbsStart`]}–{base[`${oligoKey}AbsEnd`]}</span>
-                                                             <span>GC: <b className="text-zinc-600 dark:text-zinc-300">{baseOligo.gc.toFixed(1)}%</b></span>
-                                                             <span>Tm: <b className="text-zinc-600 dark:text-zinc-300">{baseOligo.tm.toFixed(1)}°C</b></span>
+                                                             <span>GC: <b className="font-mono tabular-nums text-zinc-600 dark:text-zinc-300">{baseOligo.gc.toFixed(1)}%</b></span>
+                                                             <span>Tm: <b className="font-mono tabular-nums text-zinc-600 dark:text-zinc-300">{baseOligo.tm.toFixed(1)}°C</b></span>
                                                          </div>
                                                      </div>
                                                      
@@ -2637,8 +2742,8 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                                                          </div>
                                                          <div className="flex flex-wrap gap-2 text-[10px] text-zinc-500 dark:text-zinc-400">
                                                               <span className="font-mono">bp {target[`${oligoKey}AbsStart`]}–{target[`${oligoKey}AbsEnd`]}</span>
-                                                             <span>GC: <b className="text-zinc-600 dark:text-zinc-300">{targetOligo.gc.toFixed(1)}%</b></span>
-                                                             <span>Tm: <b className="text-zinc-600 dark:text-zinc-300">{targetOligo.tm.toFixed(1)}°C</b></span>
+                                                             <span>GC: <b className="font-mono tabular-nums text-zinc-600 dark:text-zinc-300">{targetOligo.gc.toFixed(1)}%</b></span>
+                                                             <span>Tm: <b className="font-mono tabular-nums text-zinc-600 dark:text-zinc-300">{targetOligo.tm.toFixed(1)}°C</b></span>
                                                          </div>
                                                      </div>
                                                  </div>
