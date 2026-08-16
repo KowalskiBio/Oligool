@@ -603,8 +603,7 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
             </h1>
             <p className="mt-1 text-zinc-500 dark:text-zinc-400">BLAST Search → Multiple Sequence Alignment</p>
           </div>
-          <div className="flex items-center gap-4">
-            {/* Session Save / Load */}
+          <div className="flex items-center gap-4 mt-7">
             <input
               ref={fileInputRef}
               type="file"
@@ -616,57 +615,61 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                 e.target.value = ''; // allow re-loading the same file
               }}
             />
-                <div className="flex items-center gap-2">
+            <div className="flex items-center gap-3">
+              <div
+                className="flex items-center rounded-md border border-zinc-300 dark:border-zinc-700 overflow-hidden"
+                role="group"
+                aria-label="Session actions"
+              >
+                <button
+                  type="button"
+                  onClick={() => setShowUserReport(true)}
+                  title="Create a standalone report with images and notes"
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-teal-700 dark:focus-visible:outline-teal-300"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                  Report
+                </button>
+                <button
+                  onClick={() => setShowWhatsNew(true)}
+                  title="Kliknutím zobrazíte novinky a návod k použití"
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium whitespace-nowrap border-l border-zinc-300 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-teal-700 dark:focus-visible:outline-teal-300"
+                >
+                  v0.9.9 beta
+                </button>
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  title="Load a saved Oligool session (.oligool.json)"
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium border-l border-zinc-300 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-teal-700 dark:focus-visible:outline-teal-300"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                  </svg>
+                  Load
+                </button>
+                {step === 'done' && alignment && (
                   <button
-                    type="button"
-                    onClick={() => setShowUserReport(true)}
-                    title="Create a standalone report with images and notes"
-                    className="btn-secondary"
+                    onClick={handleSaveSession}
+                    title="Save this session (oligos, pinned positions, primers & alignment) to a file"
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium border-l border-zinc-300 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-teal-700 dark:focus-visible:outline-teal-300"
                   >
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 16v1a3 3 0 01-3 3H7a3 3 0 01-3-3v-1m4-4l4 4m0 0l4-4m-4 4V4" />
                     </svg>
-                    Report
+                    Save
                   </button>
-                  <button
-                    onClick={() => setShowWhatsNew(true)}
-                    title="Kliknutím zobrazíte novinky a návod k použití"
-                    className="btn-secondary whitespace-nowrap"
-                  >
-                    v0.9.9 beta
-                  </button>
-                  {sessionMsg && (
-                    <span
-                      className={`text-xs font-medium tabular-nums ${sessionMsg.type === 'ok' ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}
-                    >
-                      {sessionMsg.text}
-                    </span>
-                  )}
-                  <button
-                    onClick={() => fileInputRef.current?.click()}
-                    title="Load a saved Oligool session (.oligool.json)"
-                    className="btn-secondary"
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                    </svg>
-                    Load
-                  </button>
-                  {step === 'done' && alignment && (
-                    <button
-                      onClick={handleSaveSession}
-                      title="Save this session (oligos, pinned positions, primers & alignment) to a file"
-                      className="btn-secondary"
-                    >
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 16v1a3 3 0 01-3 3H7a3 3 0 01-3-3v-1m4-4l4 4m0 0l4-4m-4 4V4" />
-                      </svg>
-                      Save
-                    </button>
-                  )}
-                </div>
-
-            {/* Theme Toggle Button (Primerool style) */}
+                )}
+              </div>
+              {sessionMsg && (
+                <span
+                  className={`text-xs font-medium tabular-nums ${sessionMsg.type === 'ok' ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}
+                >
+                  {sessionMsg.text}
+                </span>
+              )}
+            </div>
             <button
               onClick={() => setIsDarkMode(!isDarkMode)}
               aria-label={isDarkMode ? 'Switch to light mode' : 'Switch to dark mode'}
@@ -683,17 +686,34 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                 </svg>
               )}
             </button>
-
-            <button
-              onClick={() => setShowSettings((v) => !v)}
-              className={`btn-secondary ${showSettings ? 'border-teal-700 dark:border-teal-300 text-teal-700 dark:text-teal-300' : ''}`}
-              title="Účet a přihlašovací údaje"
+            <div
+              className="flex items-center rounded-md border border-zinc-300 dark:border-zinc-700 overflow-hidden"
+              role="group"
+              aria-label="Account settings"
             >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-              </svg>
-              Účet
-            </button>
+              <button
+                type="button"
+                onClick={() => { setShowSettings(true); requestAnimationFrame(() => document.getElementById('uizze-credentials-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' })); }}
+                title="Account & credentials (NCBI, IDT)"
+                className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-teal-700 dark:focus-visible:outline-teal-300"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                </svg>
+                Account
+              </button>
+              <button
+                type="button"
+                onClick={() => { setShowSettings(true); requestAnimationFrame(() => document.getElementById('uizze-searchengine-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' })); }}
+                title="Search engine (Primer3 / Strider)"
+                className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium border-l border-zinc-300 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-teal-700 dark:focus-visible:outline-teal-300"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-4.35-4.35M17 11a6 6 0 11-12 0 6 6 0 0112 0z" />
+                </svg>
+                Engine
+              </button>
+            </div>
           </div>
         </header>
 
@@ -719,7 +739,7 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                 </span>
               </label>
             </div>
-            <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div id="uizze-credentials-section" className="p-4 grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-3">
                 <div className="flex items-center gap-3">
                   <label className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider w-24">
@@ -805,7 +825,7 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                 </p>
               </div>
             </div>
-            <div className="border-t border-zinc-200 dark:border-zinc-800 p-4">
+            <div id="uizze-searchengine-section" className="border-t border-zinc-200 dark:border-zinc-800 p-4">
               <div className="flex items-center gap-3 flex-wrap">
                 <label className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider w-24">
                   Search engine
