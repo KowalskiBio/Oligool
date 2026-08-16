@@ -67,6 +67,10 @@ opencode.jsonc
 AGENTS.md
 GEMINI.md
 
+# Uizze live runtime state (config.json stays tracked)
+.uizze/live/server.json
+.uizze/live/sessions/
+
 # Local screenshots / artifacts
 frontend_desktop.png
 frontend_mobile.png
