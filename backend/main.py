@@ -655,6 +655,9 @@ class IdtAnalyzeRequest(BaseModel):
     parameter_set: str = "mathews2004-dna"  # "mathews2004-dna" (matches IDT) or "native" (SantaLucia 2004)
 
 
+R_GAS = 1.987e-3  # kcal/(mol*K), matches strider.thermo.engine.R
+
+
 def _dg_rescale(dh_kcal: float, ds_cal_per_k: float, celsius: float = 25.0) -> float:
     """Two-state ΔG(T) = ΔH − T·ΔS.
 
@@ -688,6 +691,20 @@ def _dg_rescale_dimer(dh_kcal: float, ds_cal_per_k: float, celsius: float = 25.0
         return _dg_rescale(dh_kcal, ds_cal_per_k, celsius)
     init_ds_cal = (_DUPLEX_INIT_DH - _DUPLEX_INIT_DG37) / _DIMER_T_REF * 1000.0
     return _dg_rescale(dh_kcal - _DUPLEX_INIT_DH, ds_cal_per_k - init_ds_cal, celsius)
+
+
+def _dimer_init_dg(celsius: float = 25.0) -> float:
+    """ΔG(T) of the duplex-initiation term alone, i.e. exactly the constant
+    ``_dg_rescale_dimer`` subtracts out of the raw two-state ΔG. Used to rebase
+    ``ThermoEngine.pfunc()``'s ensemble ΔG (which keeps the association term,
+    same as strider's raw dH/dS) onto the IDT-stripped convention that
+    ``Local_DeltaG``/``viz_dg`` already display, so the two numbers are
+    directly comparable on screen.
+    """
+    if _DUPLEX_INIT_DG37 is None:
+        return 0.0
+    init_ds_cal = (_DUPLEX_INIT_DH - _DUPLEX_INIT_DG37) / _DIMER_T_REF * 1000.0
+    return _dg_rescale(_DUPLEX_INIT_DH, init_ds_cal, celsius)
 
 
 def _idt_host(region: str) -> str:
@@ -780,6 +797,12 @@ def _run_strider_analysis(
         oligo_conc_m = oligo_conc / 1e6
 
         eng = _thermo_engine_cached('dna', base_temp, mv_m, effective_mg, parameter_set)
+        # Dedicated native-SantaLucia engine for ensemble/competition math on the
+        # dimer side, mirroring the existing rule that dimer MFE always uses native
+        # params regardless of the `parameter_set` toggle (see comment below on
+        # `dimer_thermo` dimers-always-native) — mixing paramsets inside one
+        # solve_equilibrium() call would be physically incoherent.
+        eng_native = _thermo_engine_cached('dna', base_temp, mv_m, effective_mg, "native")
 
         # Load the ParameterSet object for hairpin_thermo (Tm) if non-default
         _paramset_obj = None
@@ -847,14 +870,51 @@ def _run_strider_analysis(
                         viz_struct_raw = raw_mfe
                         viz_dg = _dg_rescale_dimer(res.dH, res.dS)
                         mfe_tm = round(res.tm_celsius, 1) if res.tm_celsius and res.tm_celsius > 1.0 else None
+                        try:
+                            # Ensemble math always uses native SantaLucia (eng_native), not the
+                            # `parameter_set` toggle — same rule as the MFE dimer ΔG above.
+                            dimer_pfunc = eng_native.pfunc(seq1, seq2)
+                            # pfunc's ensemble ΔG keeps the ~1.96 kcal/mol duplex-init/association
+                            # term (same convention as res.dH/res.dS) — this is the physically
+                            # complete ΔG and is what solve_equilibrium (Part C) must use, since
+                            # stripping the association penalty would understate how hard it
+                            # actually is to dimerize at real concentrations.
+                            ensemble_dg_native = round(float(dimer_pfunc.free_energy), 2)
+                            # For DISPLAY, rebase onto the same IDT-stripped convention as
+                            # viz_dg/Local_DeltaG so "Ensemble ΔG" is never shown as (confusingly)
+                            # weaker than the single MFE structure sitting right next to it —
+                            # they're the same physical quantity, just two different reporting
+                            # conventions, and the population-fraction math is invariant to the
+                            # constant shift either way.
+                            ensemble_dg = round(ensemble_dg_native - _dimer_init_dg(base_temp), 2)
+                            # dimer_thermo's dedicated MFE search and pfunc's ensemble DP are two
+                            # independently-implemented energy models (different internal loop/
+                            # coaxial-stacking handling); for very strongly-paired duplexes they can
+                            # disagree by a small margin and (rarely) show the ensemble as *weaker*
+                            # than the MFE structure it must contain. Clamp display to the physical
+                            # invariant ensemble ΔG <= MFE ΔG — matches the population-fraction clamp
+                            # below, which already floors this same gap at 0.
+                            ensemble_dg = min(ensemble_dg, viz_dg)
+                            _diff = max(0.0, viz_dg - ensemble_dg)
+                            population_fraction = round(math.exp(-_diff / (R_GAS * (base_temp + 273.15))), 4)
+                        except Exception:
+                            ensemble_dg_native = None
+                            ensemble_dg = None
+                            population_fraction = None
                     else:
                         viz_struct_raw = None
                         viz_dg = None
                         mfe_tm = None
+                        ensemble_dg_native = None
+                        ensemble_dg = None
+                        population_fraction = None
                 except Exception:
                     viz_struct_raw = None
                     viz_dg = None
                     mfe_tm = None
+                    ensemble_dg_native = None
+                    ensemble_dg = None
+                    population_fraction = None
 
                 subopt_dimers: list[dict] = []
                 if dimer_thermo_subopt is not None:
@@ -892,9 +952,29 @@ def _run_strider_analysis(
                 if _valid_paired(raw_mfe):
                     viz_struct_raw = raw_mfe
                     viz_dg = round(float(mfe_result.energy), 2)
+                    try:
+                        hairpin_pfunc = eng.pfunc(seq1)
+                        ensemble_dg = round(float(hairpin_pfunc.free_energy), 2)
+                        # eng.mfe() defaults to dangles=2 but pfunc() is always dangle-free, so
+                        # the two independently-computed energies can occasionally disagree and
+                        # show the ensemble as *weaker* than its own MFE structure — clamp the
+                        # displayed value to the physical invariant ensemble ΔG <= MFE ΔG.
+                        ensemble_dg = min(ensemble_dg, viz_dg)
+                        # No bimolecular association term for a single strand, so no
+                        # convention shift is needed here (unlike the dimer branch).
+                        ensemble_dg_native = ensemble_dg
+                        _diff = max(0.0, viz_dg - ensemble_dg)
+                        population_fraction = round(math.exp(-_diff / (R_GAS * (base_temp + 273.15))), 4)
+                    except Exception:
+                        ensemble_dg_native = None
+                        ensemble_dg = None
+                        population_fraction = None
                 else:
                     viz_struct_raw = None
                     viz_dg = None
+                    ensemble_dg_native = None
+                    ensemble_dg = None
+                    population_fraction = None
 
                 # Tm: unimolecular two-state for hairpins via hairpin_thermo.
                 def _struct_tm(structure, energy):
@@ -926,6 +1006,13 @@ def _run_strider_analysis(
                 item["Sequence"] = display_seq
                 item["Local_DeltaG"] = viz_dg
                 item["Local_Tm"] = mfe_tm
+                item["Ensemble_DeltaG"] = ensemble_dg
+                item["Population_Fraction"] = population_fraction
+                # Physically-complete (association-term-kept) ensemble ΔG — not
+                # displayed, only fed into the Part C competition solve, which
+                # needs the real bimolecular thermodynamics, not the IDT-matching
+                # display convention.
+                item["Ensemble_DeltaG_Native"] = ensemble_dg_native
                 item["SuboptDimers"] = subopt_dimers if is_dimer else []
                 if idt_error is not None:
                     item["IDT_Error"] = idt_error
@@ -1052,11 +1139,15 @@ def _run_strider_analysis(
             top_local_dgs = [item.get("Local_DeltaG") for item in scored_items[:5]]
             top_idt_tms = [item.get("IDT_Tm") for item in scored_items[:5]]
             top_local_tms = [item.get("Local_Tm") for item in scored_items[:5]]
+            top_ensemble_dgs = [item.get("Ensemble_DeltaG") for item in scored_items[:5]]
+            top_pop_fracs = [item.get("Population_Fraction") for item in scored_items[:5]]
 
             return {
                 "DeltaG": top_idt_dgs[0] if top_idt_dgs else None,
                 "all_DeltaG": top_idt_dgs,
                 "all_Local_DeltaG": top_local_dgs,
+                "all_Ensemble_DeltaG": top_ensemble_dgs,
+                "all_Population_Fraction": top_pop_fracs,
                 "all_IDT_Tm": top_idt_tms,
                 "all_Local_Tm": top_local_tms,
                 "raw": top_items
@@ -1065,20 +1156,95 @@ def _run_strider_analysis(
         # If response is a dict, DeltaG and Tm should be at top level
         if isinstance(data, dict):
             dg = _extract_idt_delta_g(data)
-            return {"DeltaG": dg, "raw": data}
+            return {
+                "DeltaG": dg,
+                "Ensemble_DeltaG": data.get("Ensemble_DeltaG"),
+                "Population_Fraction": data.get("Population_Fraction"),
+                "raw": data,
+            }
 
         return {"DeltaG": None, "raw": None}
+
+    def _first_field(result, key):
+        """Pull a field off the MFE item of an add_strider_analysis() result,
+        tolerating the non-list/non-dict shapes that function can fall back to
+        on error."""
+        if isinstance(result, list) and result:
+            return result[0].get(key)
+        if isinstance(result, dict):
+            return result.get(key)
+        return None
+
+    def _competition(seq_a, seq_b, selfdimer_dg, hetero_dg, has_hetero, hairpin_pop_frac):
+        """Concentration-aware free/hairpin/self-dimer/heterodimer split via
+        strider's mass-action solver. Always uses native SantaLucia params
+        (eng_native) for every complex fed into one solve_equilibrium() call —
+        mixing paramsets across complexes there would be physically incoherent.
+        Returns None (rather than raising) if strider is unavailable or the
+        Newton solve can't be set up, so this never breaks the rest of the
+        response."""
+        if selfdimer_dg is None:
+            return None
+        try:
+            from strider.equilibrium import solve_equilibrium
+            monomer_a = eng_native.pfunc(seq_a).free_energy
+            complexes = {
+                "A": (["A"], monomer_a),
+                "AA": (["A", "A"], selfdimer_dg),
+            }
+            totals = {"A": oligo_conc_m}
+            if has_hetero and hetero_dg is not None:
+                monomer_b = eng_native.pfunc(seq_b).free_energy
+                complexes["B"] = (["B"], monomer_b)
+                complexes["AB"] = (["A", "B"], hetero_dg)
+                totals["B"] = oligo_conc_m
+            else:
+                has_hetero = False
+            result = solve_equilibrium(complexes, totals, celsius=base_temp)
+            total_a = totals["A"]
+            p_selfdimer = 2 * result.concentrations.get("AA", 0.0) / total_a
+            p_hetero = result.concentrations.get("AB", 0.0) / total_a if has_hetero else 0.0
+            p_free = result.strand_free.get("A", 0.0) / total_a
+            # Compose with Part B's population fraction: "of the monomer not
+            # sequestered in a dimer, X% is in the reported MFE hairpin fold."
+            p_hairpin = p_free * hairpin_pop_frac if hairpin_pop_frac is not None else None
+            return {
+                "P_Free": round(p_free, 4),
+                "P_Hairpin": round(p_hairpin, 4) if p_hairpin is not None else None,
+                "P_SelfDimer": round(p_selfdimer, 4),
+                "P_HeteroDimer": round(p_hetero, 4) if has_hetero else None,
+                "Converged": bool(result.converged),
+            }
+        except Exception:
+            logging.exception("hairpin/dimer competition solve failed")
+            return None
+
+    # Ensemble_DeltaG_Native (association-term-kept) — not Ensemble_DeltaG
+    # (the display-only, IDT-stripped value) — is what the mass-action solve
+    # in _competition needs; see the dimer branch of add_strider_analysis.
+    _has_hetero = p1_seq != p2_seq
+    _hetero_ens_dg = _first_field(hetero, "Ensemble_DeltaG_Native")
+    competition_m1 = _competition(
+        p1_seq, p2_seq, _first_field(m1_selfdimer, "Ensemble_DeltaG_Native"), _hetero_ens_dg, _has_hetero,
+        _first_field(m1_hairpin, "Population_Fraction"),
+    )
+    competition_m2 = _competition(
+        p2_seq, p1_seq, _first_field(m2_selfdimer, "Ensemble_DeltaG_Native"), _hetero_ens_dg, _has_hetero,
+        _first_field(m2_hairpin, "Population_Fraction"),
+    )
 
     return {
         "m1": {
             "hairpin": find_dg_and_raw(m1_hairpin),
             "self_dimer": find_dg_and_raw(m1_selfdimer),
-            "analyze": idt_m1_analyze
+            "analyze": idt_m1_analyze,
+            "competition": competition_m1
         },
         "m2": {
             "hairpin": find_dg_and_raw(m2_hairpin),
             "self_dimer": find_dg_and_raw(m2_selfdimer),
-            "analyze": idt_m2_analyze
+            "analyze": idt_m2_analyze,
+            "competition": competition_m2
         },
         "pairwise": find_dg_and_raw(hetero)
     }
@@ -1214,7 +1380,12 @@ async def analyze_idt_oligos(request: IdtAnalyzeRequest):
     except Exception as e:
         return {"error": f"Parallel execution failed: {str(e)}"}
 
-    return _run_strider_analysis(
+    # _run_strider_analysis now issues several extra ThermoEngine.pfunc()/
+    # solve_equilibrium() calls (ensemble ΔG + competition) on top of the
+    # existing mfe/subopt work — run it off the event loop like the IDT calls
+    # above, so one slow request can't stall every other concurrent request.
+    return await asyncio.to_thread(
+        _run_strider_analysis,
         p1_seq=request.p1_seq,
         p2_seq=request.p2_seq,
         mv_conc=request.mv_conc,
@@ -1244,7 +1415,7 @@ class StriderAnalyzeRequest(BaseModel):
 
 
 @app.post("/strider/analyze")
-async def analyze_strider_oligos(request: StriderAnalyzeRequest):
+def analyze_strider_oligos(request: StriderAnalyzeRequest):
     """Local-only strider-dna folding analysis (hairpin, self-dimer, hetero-dimer).
 
     No IDT API call, no credentials needed.  Returns the same {m1, m2, pairwise}
