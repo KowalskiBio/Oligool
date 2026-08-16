@@ -17,16 +17,32 @@ interface IdtRawItem {
 
 export type IdtRawResult = IdtRawItem | IdtRawItem[];
 
+interface IdtStructureResult {
+    DeltaG?: number;
+    Ensemble_DeltaG?: number | null;
+    Population_Fraction?: number | null;
+    raw?: IdtRawResult;
+}
+
+export interface CompetitionResult {
+    P_Free?: number | null;
+    P_Hairpin?: number | null;
+    P_SelfDimer?: number | null;
+    P_HeteroDimer?: number | null;
+    Converged?: boolean;
+}
+
 export interface IdtSingleResult {
-    hairpin?: { DeltaG?: number; raw?: IdtRawResult };
-    self_dimer?: { DeltaG?: number; raw?: IdtRawResult };
+    hairpin?: IdtStructureResult;
+    self_dimer?: IdtStructureResult;
     analyze?: IdtRawResult;
+    competition?: CompetitionResult | null;
 }
 
 export interface MoligoIdtResults {
     m1?: IdtSingleResult;
     m2?: IdtSingleResult;
-    pairwise?: { DeltaG?: number; raw?: IdtRawResult };
+    pairwise?: IdtStructureResult;
 }
 
 export interface MOLigoProps {

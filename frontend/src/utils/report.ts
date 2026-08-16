@@ -31,6 +31,14 @@ export interface IdtReportRawData {
     all_IDT_Tm?: (number | null)[];
     /** Per-structure Strider/local Tm values (°C). */
     all_Local_Tm?: (number | null)[];
+    /** Ensemble ΔG (kcal/mol, -RT ln Z over the full competing structural ensemble) for the best structure. */
+    Ensemble_DeltaG?: number | null;
+    /** Boltzmann population fraction of the best/MFE structure within its own ensemble (0-1). */
+    Population_Fraction?: number | null;
+    /** Per-structure ensemble ΔG values (kcal/mol); only the MFE entry is populated. */
+    all_Ensemble_DeltaG?: (number | null)[];
+    /** Per-structure population fractions (0-1); only the MFE entry is populated. */
+    all_Population_Fraction?: (number | null)[];
 }
 
 export const calcGC = (seq: string): number => {
