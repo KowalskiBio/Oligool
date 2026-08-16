@@ -1572,6 +1572,24 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
     };
 
 
+    // Auto re-run Strider (only) when the NN parameter set (Mathews/SantaLucia)
+    // changes, so switching it updates the local structure numbers immediately
+    // instead of requiring a separate Re-run click. IDT is never auto-triggered
+    // here: it's a paid external call, model-independent, so it only (re-)runs
+    // when the user explicitly clicks Run/Re-run IDT, and stays exactly as-is
+    // otherwise (shown in its own panel, independent of Strider's panel).
+    // Skips the very first render (e.g. session restore already has a
+    // parameter set).
+    const parameterSetMounted = useRef(false);
+    useEffect(() => {
+        if (!parameterSetMounted.current) {
+            parameterSetMounted.current = true;
+            return;
+        }
+        if (striderResults) setTimeout(runStriderAnalysis, 0);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [idtCredentials?.parameterSet]);
+
     const getIdtStatusColor = (dg: number | undefined) => {
         if (dg === undefined) return 'text-zinc-400';
         if (dg < -9) return 'text-red-500 font-bold';
@@ -2588,20 +2606,25 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                                 <h4 className="text-sm font-bold text-zinc-400 uppercase tracking-widest">Secondary structures</h4>
                                 <div className="flex items-center gap-3">
                                     <div
-                                        className="flex items-center rounded-md border border-zinc-300 dark:border-zinc-700 overflow-hidden"
+                                        className="relative grid grid-cols-2 rounded-md border border-zinc-300 dark:border-zinc-700 overflow-hidden bg-white dark:bg-zinc-800"
                                         title="NN parameter set for local (Strider) structure analysis. Mg²⁺ lives in the advanced parameters above."
                                     >
+                                        <div
+                                            aria-hidden="true"
+                                            className="absolute inset-y-0 left-0 w-1/2 bg-teal-700/10 dark:bg-teal-300/10 transition-transform duration-200 ease-out"
+                                            style={{ transform: (idtCredentials?.parameterSet || 'mathews2004-dna') === 'native' ? 'translateX(100%)' : 'translateX(0%)' }}
+                                        />
                                         {([
                                             ['mathews2004-dna', 'Mathews'],
                                             ['native', 'SantaLucia'],
-                                        ] as const).map(([value, label]) => (
+                                        ] as const).map(([value, label], idx) => (
                                             <button
                                                 key={value}
                                                 onClick={() => onParameterSetChange?.(value)}
-                                                className={`px-2 py-1 text-[10px] font-bold uppercase transition-all ${
+                                                className={`relative px-2.5 py-2 text-xs font-medium text-center transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-teal-700 dark:focus-visible:outline-teal-300 ${idx > 0 ? 'border-l border-zinc-300 dark:border-zinc-700' : ''} ${
                                                     (idtCredentials?.parameterSet || 'mathews2004-dna') === value
-                                                        ? 'bg-emerald-600 dark:bg-emerald-500 text-white'
-                                                        : 'bg-white dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-700'
+                                                        ? 'text-teal-800 dark:text-teal-200'
+                                                        : 'text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700'
                                                 }`}
                                             >
                                                 {label}
