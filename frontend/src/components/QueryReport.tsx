@@ -10,7 +10,7 @@ interface QueryReportProps {
     data: CompleteReportData;
 }
 
-const V = ({ children }: { children: ReactNode }) => <span className="font-bold text-zinc-900">{children}</span>;
+const V = ({ children }: { children: ReactNode }) => <span className="font-mono tabular-nums font-bold text-zinc-900">{children}</span>;
 
 const fmtNum = (v: number | undefined | null, digits = 1): string => {
     if (v === undefined || v === null) return 'N/A';
@@ -156,10 +156,10 @@ const StructureSection = ({
                     return (
                         <div key={idx} className="break-inside-avoid">
                             <div className="grid grid-cols-2 gap-x-4 gap-y-0.5 text-xs text-zinc-600 mb-1 whitespace-pre-wrap">
-                                {fmtDG(idtDg) !== 'N/A' && <span>IDT ΔG{'\t'}<span className="font-bold text-zinc-900">{fmtDG(idtDg)}</span></span>}
-                                {fmtDG(localDg) !== 'N/A' && <span>Strider ΔG{'\t'}<span className="font-bold text-zinc-900">{fmtDG(localDg)}</span></span>}
-                                {fmtNum(idtTm) !== 'N/A' && <span>IDT Tm{'\t'}<span className="font-bold text-zinc-900">{fmtNum(idtTm)} °C</span></span>}
-                                {fmtNum(localTm) !== 'N/A' && <span>Local Tm{'\t'}<span className="font-bold text-zinc-900">{fmtNum(localTm)} °C</span></span>}
+                                {fmtDG(idtDg) !== 'N/A' && <span>IDT ΔG{'\t'}<span className="font-mono tabular-nums font-bold text-zinc-900">{fmtDG(idtDg)}</span></span>}
+                                {fmtDG(localDg) !== 'N/A' && <span>Strider ΔG{'\t'}<span className="font-mono tabular-nums font-bold text-zinc-900">{fmtDG(localDg)}</span></span>}
+                                {fmtNum(idtTm) !== 'N/A' && <span>IDT Tm{'\t'}<span className="font-mono tabular-nums font-bold text-zinc-900">{fmtNum(idtTm)} °C</span></span>}
+                                {fmtNum(localTm) !== 'N/A' && <span>Local Tm{'\t'}<span className="font-mono tabular-nums font-bold text-zinc-900">{fmtNum(localTm)} °C</span></span>}
                             </div>
                             {renderIdtSvg(item, seq1, seq2)}
                         </div>
@@ -338,12 +338,12 @@ export default function QueryReport({ data }: QueryReportProps) {
                                         <div>
                                             <span className="font-semibold text-zinc-600">Oligo 1{'\t'}</span>{pos.p1.seq}
                                             <br />
-                                            <span className="text-zinc-500">bp <span className="font-bold text-zinc-900">{pos.p1AbsStart}–{pos.p1AbsEnd}</span> | GC <span className="font-bold text-zinc-900">{pos.p1.gc.toFixed(1)}%</span> | Tm <span className="font-bold text-zinc-900">{pos.p1.tm.toFixed(1)}°C</span></span>
+                                            <span className="text-zinc-500">bp <span className="font-mono tabular-nums font-bold text-zinc-900">{pos.p1AbsStart}–{pos.p1AbsEnd}</span> | GC <span className="font-mono tabular-nums font-bold text-zinc-900">{pos.p1.gc.toFixed(1)}%</span> | Tm <span className="font-mono tabular-nums font-bold text-zinc-900">{pos.p1.tm.toFixed(1)}°C</span></span>
                                         </div>
                                         <div>
                                             <span className="font-semibold text-zinc-600">Oligo 2{'\t'}</span>{pos.p2.seq}
                                             <br />
-                                            <span className="text-zinc-500">bp <span className="font-bold text-zinc-900">{pos.p2AbsStart}–{pos.p2AbsEnd}</span> | GC <span className="font-bold text-zinc-900">{pos.p2.gc.toFixed(1)}%</span> | Tm <span className="font-bold text-zinc-900">{pos.p2.tm.toFixed(1)}°C</span></span>
+                                            <span className="text-zinc-500">bp <span className="font-mono tabular-nums font-bold text-zinc-900">{pos.p2AbsStart}–{pos.p2AbsEnd}</span> | GC <span className="font-mono tabular-nums font-bold text-zinc-900">{pos.p2.gc.toFixed(1)}%</span> | Tm <span className="font-mono tabular-nums font-bold text-zinc-900">{pos.p2.tm.toFixed(1)}°C</span></span>
                                         </div>
                                     </div>
                                     {pos.notes && <p className="text-xs text-zinc-500 mt-1 italic">{pos.notes}</p>}

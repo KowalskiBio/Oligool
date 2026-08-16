@@ -2154,7 +2154,7 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
             {/* ── selection stats footer ── */}
             {
                 selectionStats && (
-                    <div className="bg-zinc-50 dark:bg-zinc-950 border-t border-zinc-200 dark:border-zinc-800 px-5 py-2 text-xs text-zinc-600 dark:text-zinc-400 font-mono flex items-center justify-between">
+                    <div className="bg-zinc-50 dark:bg-zinc-950 border-t border-zinc-200 dark:border-zinc-800 px-5 py-2 text-xs text-zinc-600 dark:text-zinc-400 font-mono tabular-nums flex items-center justify-between">
                         <div className="flex items-center gap-4">
                             <span className="font-semibold text-zinc-700 dark:text-zinc-300">Visible Range: {startCol + 1}–{endCol + 1}</span>
                             <span>Length: {selectionStats.total} bp</span>
@@ -2191,7 +2191,7 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
                         : { left: `${insertHoverInfo.x + 12}px`, top: `${insertHoverInfo.y + 12}px` }
                     }
                 >
-                    <div>Length: {insertHoverInfo.length} bp</div>
+                    <div className="font-mono tabular-nums">Length: {insertHoverInfo.length} bp</div>
                     <div className="font-mono">Sequence: {insertHoverInfo.sequence.toUpperCase().length > 60 ? insertHoverInfo.sequence.toUpperCase().substring(0, 60) + '…' : insertHoverInfo.sequence.toUpperCase()}</div>
                 </div>
             )}

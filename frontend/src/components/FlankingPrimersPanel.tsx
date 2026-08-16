@@ -679,7 +679,7 @@ export default function FlankingPrimersPanel({
             <div className="card p-3 flex flex-col gap-2">
                 <div className="flex justify-between items-center border-b border-zinc-100 dark:border-zinc-800 pb-2">
                     <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider text-ellipsis overflow-hidden whitespace-nowrap">{title}</span>
-                    <span className={`text-xs flex-shrink-0 ${getIdtStatusColor(topDg)}`}>{topDg != null ? `${topDg.toFixed(2)} kcal/mol` : 'N/A'}</span>
+                    <span className={`text-xs flex-shrink-0 font-mono tabular-nums ${getIdtStatusColor(topDg)}`}>{topDg != null ? `${topDg.toFixed(2)} kcal/mol` : 'N/A'}</span>
                 </div>
                 <div className="flex flex-col gap-3 mt-1">
                     {displayItems.map((item: any, i: number) => {
@@ -698,13 +698,13 @@ export default function FlankingPrimersPanel({
                                         <div className="flex justify-between items-center">
                                             {maxItems > 1 && <span className="font-semibold text-[10px]">{title} {i + 1}</span>}
                                             <div className="flex gap-3 ml-auto">
-                                                <span>IDT ΔG: <b className={getIdtStatusColor(itemDg ?? undefined)}>{itemDg != null ? `${itemDg > 0 ? '+' : ''}${itemDg.toFixed(2)}` : '–'}</b></span>
-                                                <span>Strider ΔG: <b className={itemLocalDg != null ? (itemLocalDg <= 0 ? "text-amber-500" : "text-zinc-400") : "text-zinc-400"}>{itemLocalDg != null ? `${itemLocalDg > 0 ? '+' : ''}${itemLocalDg.toFixed(2)}` : '–'}</b></span>
+                                                <span>IDT ΔG: <b className={`font-mono tabular-nums ${getIdtStatusColor(itemDg ?? undefined)}`}>{itemDg != null ? `${itemDg > 0 ? '+' : ''}${itemDg.toFixed(2)}` : '–'}</b></span>
+                                                <span>Strider ΔG: <b className={`font-mono tabular-nums ${itemLocalDg != null ? (itemLocalDg <= 0 ? "text-amber-500" : "text-zinc-400") : "text-zinc-400"}`}>{itemLocalDg != null ? `${itemLocalDg > 0 ? '+' : ''}${itemLocalDg.toFixed(2)}` : '–'}</b></span>
                                             </div>
                                         </div>
                                         <div className="flex gap-3 justify-end opacity-80">
-                                            <span>IDT Tm: <b className="text-zinc-500">{itemIdtTm != null ? `${Number(itemIdtTm).toFixed(1)}°C` : '–'}</b></span>
-                                            <span>Strider Tm: <b className="text-zinc-500">{itemLocalTm != null ? `${itemLocalTm.toFixed(1)}°C` : '–'}</b></span>
+                                            <span>IDT Tm: <b className="font-mono tabular-nums text-zinc-500">{itemIdtTm != null ? `${Number(itemIdtTm).toFixed(1)}°C` : '–'}</b></span>
+                                            <span>Strider Tm: <b className="font-mono tabular-nums text-zinc-500">{itemLocalTm != null ? `${itemLocalTm.toFixed(1)}°C` : '–'}</b></span>
                                         </div>
                                     </div>
                                 )}
@@ -1262,13 +1262,13 @@ export default function FlankingPrimersPanel({
                     </div>
                 </div>
                 <div className="grid grid-cols-7 gap-2 text-[10px] text-zinc-500 dark:text-zinc-400">
-                    <div><span className="font-bold text-zinc-600 dark:text-zinc-300">Len</span><br />{p.length} bp</div>
-                    <div><span className="font-bold text-zinc-600 dark:text-zinc-300">P3 Tm</span><br />{p.tm ?? p.primer3?.tm ?? '–'}°C</div>
-                    <div><span className="font-bold text-zinc-600 dark:text-zinc-300" title="IDT Tm">IDT Tm</span><br />{idtResult?.analyze ? (extractTm(idtResult.analyze)?.toFixed(1) || 'N/A') + '°C' : '–'}</div>
-                    <div><span className="font-bold text-zinc-600 dark:text-zinc-300" title="Strider duplex Tm">Strider Tm</span><br />{p.tm_strider != null ? `${p.tm_strider.toFixed(1)}°C` : '–'}</div>
-                    <div><span className="font-bold text-zinc-600 dark:text-zinc-300">GC</span><br />{p.gc_percent ?? p.primer3?.gc_percent ?? '–'}%</div>
-                    <div><span className="font-bold text-zinc-600 dark:text-zinc-300">Hairpin Tm</span><br /><span className={p.hairpin.structure_found ? 'text-amber-500' : 'text-emerald-500'}>{p.hairpin.structure_found ? `${p.primer3?.hairpin_th ?? '–'}°C` : 'None'}</span></div>
-                    <div><span className="font-bold text-zinc-600 dark:text-zinc-300">Self-dimer</span><br /><span className={statusDg(p.homodimer?.dg)}>{p.homodimer?.dg !== null ? `${p.homodimer.dg} kcal` : 'OK'}</span></div>
+                    <div><span className="font-bold text-zinc-600 dark:text-zinc-300">Len</span><br /><span className="font-mono tabular-nums">{p.length} bp</span></div>
+                    <div><span className="font-bold text-zinc-600 dark:text-zinc-300">P3 Tm</span><br /><span className="font-mono tabular-nums">{p.tm ?? p.primer3?.tm ?? '–'}°C</span></div>
+                    <div><span className="font-bold text-zinc-600 dark:text-zinc-300" title="IDT Tm">IDT Tm</span><br /><span className="font-mono tabular-nums">{idtResult?.analyze ? (extractTm(idtResult.analyze)?.toFixed(1) || 'N/A') + '°C' : '–'}</span></div>
+                    <div><span className="font-bold text-zinc-600 dark:text-zinc-300" title="Strider duplex Tm">Strider Tm</span><br /><span className="font-mono tabular-nums">{p.tm_strider != null ? `${p.tm_strider.toFixed(1)}°C` : '–'}</span></div>
+                    <div><span className="font-bold text-zinc-600 dark:text-zinc-300">GC</span><br /><span className="font-mono tabular-nums">{p.gc_percent ?? p.primer3?.gc_percent ?? '–'}%</span></div>
+                    <div><span className="font-bold text-zinc-600 dark:text-zinc-300">Hairpin Tm</span><br /><span className={`font-mono tabular-nums ${p.hairpin.structure_found ? 'text-amber-500' : 'text-emerald-500'}`}>{p.hairpin.structure_found ? `${p.primer3?.hairpin_th ?? '–'}°C` : 'None'}</span></div>
+                    <div><span className="font-bold text-zinc-600 dark:text-zinc-300">Self-dimer</span><br /><span className={`font-mono tabular-nums ${statusDg(p.homodimer?.dg)}`}>{p.homodimer?.dg !== null ? `${p.homodimer.dg} kcal` : 'OK'}</span></div>
                 </div>
 
                 {isSelected && (
@@ -1390,7 +1390,7 @@ export default function FlankingPrimersPanel({
                             Amplicon Length
                         </span>
                         <span
-                            className="text-base font-bold font-mono text-emerald-700 dark:text-emerald-300"
+                            className="text-base font-bold font-mono tabular-nums text-emerald-700 dark:text-emerald-300"
                             title="Amplicon size: forward primer + template between primers + reverse primer"
                         >
                             {ampliconBp.toLocaleString()} bp
