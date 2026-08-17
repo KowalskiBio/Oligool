@@ -1900,8 +1900,8 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                 {renderIdtCard("Self-Dimer ΔG", results.m1.self_dimer, seqs?.p1 ?? primers?.p1.seq)}
                 <div className="text-[10px] text-zinc-400 mt-1 italic">kcal/mol</div>
             </div>
-            <div className="bg-teal-700/5 dark:bg-teal-300/5 p-3 rounded border border-teal-700/15 dark:border-teal-300/15">
-                <div className="text-xs font-bold text-teal-800 dark:text-teal-300 uppercase mb-1">Cross-Dimer Pairwise</div>
+            <div className="bg-accent-700/5 dark:bg-accent-300/5 p-3 rounded border border-accent-700/15 dark:border-accent-300/15">
+                <div className="text-xs font-bold text-accent-800 dark:text-accent-300 uppercase mb-1">Cross-Dimer Pairwise</div>
                 {renderIdtCard("Hetero-Dimer ΔG", results.pairwise, seqs?.p1 ?? primers?.p1.seq, seqs?.p2 ?? primers?.p2.seq)}
                 <div className="text-[10px] text-zinc-400 mt-1 italic">kcal/mol</div>
             </div>
@@ -1935,7 +1935,7 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
             <div className="panel-header flex items-center justify-between flex-wrap gap-2">
                 <div className="flex items-center gap-3 flex-wrap">
                     <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-                        Oligo provenance: <span className="font-mono text-teal-700 dark:text-teal-300">{jobName}</span>
+                        Oligo provenance: <span className="font-mono text-accent-700 dark:text-accent-300">{jobName}</span>
                     </h2>
                     <span className="text-sm text-zinc-500 dark:text-zinc-400">
                         (bp {data.start + 1}–{data.end + 1}, len {rawSeq.length})
@@ -2034,7 +2034,7 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                         </div>
                         <button
                             onClick={() => setShowAdvanced(!showAdvanced)}
-                            className="text-[11px] font-medium text-teal-700 dark:text-teal-300 hover:text-teal-800 dark:hover:text-teal-200 uppercase tracking-wider flex items-center gap-1"
+                            className="text-[11px] font-medium text-accent-700 dark:text-accent-300 hover:text-accent-800 dark:hover:text-accent-200 uppercase tracking-wider flex items-center gap-1"
                         >
                             {showAdvanced ? 'Hide Advanced' : 'Show Advanced'}
                             <span>{showAdvanced ? '▴' : '▾'}</span>
@@ -2492,7 +2492,7 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                                     </span>
                                     <button
                                         onClick={undoDelete}
-                                        className="text-xs font-bold text-teal-700 dark:text-teal-300 hover:text-teal-800 dark:hover:text-teal-200 px-2 py-1 rounded hover:bg-zinc-100 dark:hover:bg-zinc-700 transition-colors"
+                                        className="text-xs font-bold text-accent-700 dark:text-accent-300 hover:text-accent-800 dark:hover:text-accent-200 px-2 py-1 rounded hover:bg-zinc-100 dark:hover:bg-zinc-700 transition-colors"
                                     >
                                         Undo
                                     </button>
@@ -2525,7 +2525,7 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                                                 ) : (
                                                     <button
                                                         onClick={() => { setEditingLabelId(pos.id); setEditingLabelText(pos.label); }}
-                                                        className="flex items-center gap-1 text-xs font-bold text-teal-700 dark:text-teal-300 hover:text-teal-800 dark:hover:text-teal-200 transition-colors group/label min-w-0"
+                                                        className="flex items-center gap-1 text-xs font-bold text-accent-700 dark:text-accent-300 hover:text-accent-800 dark:hover:text-accent-200 transition-colors group/label min-w-0"
                                                         title="Click to rename"
                                                     >
                                                         <span className="truncate">{pos.label}</span>
@@ -2607,7 +2607,7 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                                             <div className="flex border-t border-zinc-100 dark:border-zinc-700">
                                                 <button
                                                     onClick={() => restorePosition(pos)}
-                                                    className="flex-1 flex items-center justify-center gap-1 py-2 text-[10px] font-bold text-teal-700 dark:text-teal-300 hover:bg-zinc-100 dark:hover:bg-zinc-700 transition-colors border-r border-zinc-100 dark:border-zinc-700"
+                                                    className="flex-1 flex items-center justify-center gap-1 py-2 text-[10px] font-bold text-accent-700 dark:text-accent-300 hover:bg-zinc-100 dark:hover:bg-zinc-700 transition-colors border-r border-zinc-100 dark:border-zinc-700"
                                                     title="Restore this position and navigate MSA"
                                                 >
                                                     <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -2705,7 +2705,7 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                                                                  title="Copy sequence"
                                                                  className="p-1 hover:bg-zinc-100 dark:hover:bg-zinc-700 rounded transition-colors shrink-0 ml-2"
                                                              >
-                                                                 <svg className="w-3.5 h-3.5 text-zinc-400 hover:text-teal-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                                 <svg className="w-3.5 h-3.5 text-zinc-400 hover:text-accent-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
                                                                  </svg>
                                                              </button>
@@ -2735,7 +2735,7 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                                                                  title="Copy sequence"
                                                                  className="p-1 hover:bg-zinc-100 dark:hover:bg-zinc-700 rounded transition-colors shrink-0 ml-2"
                                                              >
-                                                                 <svg className="w-3.5 h-3.5 text-zinc-400 hover:text-teal-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                                 <svg className="w-3.5 h-3.5 text-zinc-400 hover:text-accent-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
                                                                  </svg>
                                                              </button>
@@ -2781,7 +2781,7 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                                     >
                                         <div
                                             aria-hidden="true"
-                                            className="absolute inset-y-0 left-0 w-1/2 bg-teal-700/10 dark:bg-teal-300/10 transition-transform duration-200 ease-out"
+                                            className="absolute inset-y-0 left-0 w-1/2 bg-accent-700/10 dark:bg-accent-300/10 transition-transform duration-200 ease-out"
                                             style={{ transform: (idtCredentials?.parameterSet || 'mathews2004-dna') === 'native' ? 'translateX(100%)' : 'translateX(0%)' }}
                                         />
                                         {([
@@ -2791,9 +2791,9 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                                             <button
                                                 key={value}
                                                 onClick={() => onParameterSetChange?.(value)}
-                                                className={`relative px-2.5 py-2 text-xs font-medium text-center transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-teal-700 dark:focus-visible:outline-teal-300 ${idx > 0 ? 'border-l border-zinc-300 dark:border-zinc-700' : ''} ${
+                                                className={`relative px-2.5 py-2 text-xs font-medium text-center transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent-700 dark:focus-visible:outline-accent-300 ${idx > 0 ? 'border-l border-zinc-300 dark:border-zinc-700' : ''} ${
                                                     (idtCredentials?.parameterSet || 'mathews2004-dna') === value
-                                                        ? 'text-teal-800 dark:text-teal-200'
+                                                        ? 'text-accent-800 dark:text-accent-200'
                                                         : 'text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700'
                                                 }`}
                                             >
@@ -2802,7 +2802,7 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                                         ))}
                                     </div>
                                     {!isStriderLoading && (
-                                        <button onClick={() => { setTimeout(runStriderAnalysis, 0); }} className={`btn-secondary transition-colors ${striderResults ? 'border-teal-700 dark:border-teal-300 text-teal-700 dark:text-teal-300 bg-teal-700/10 dark:bg-teal-300/10' : ''}`}>
+                                        <button onClick={() => { setTimeout(runStriderAnalysis, 0); }} className={`btn-secondary transition-colors ${striderResults ? 'border-accent-700 dark:border-accent-300 text-accent-700 dark:text-accent-300 bg-accent-700/10 dark:bg-accent-300/10' : ''}`}>
                                             {striderResults ? '↻ Re-run Structural Analysis' : 'Run Structural Analysis'}
                                         </button>
                                     )}

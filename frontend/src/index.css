@@ -11,6 +11,18 @@
   --font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, -apple-system, sans-serif;
   --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
   --dark-mode: selector;
+
+  --color-accent-50: #f0fdfa;
+  --color-accent-100: #ccfbf1;
+  --color-accent-200: #99f6e4;
+  --color-accent-300: #5eead4;
+  --color-accent-400: #2dd4bf;
+  --color-accent-500: #14b8a6;
+  --color-accent-600: #0d9488;
+  --color-accent-700: #0f766e;
+  --color-accent-800: #115e59;
+  --color-accent-900: #134e4a;
+  --color-accent-950: #042f2e;
 }
 
 @variant dark (&:where(.dark, .dark *));
@@ -29,21 +41,21 @@
   .btn-primary {
     @apply inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md border transition-colors
       disabled:opacity-50 disabled:pointer-events-none
-      focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700 dark:focus-visible:outline-teal-300
+      focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-700 dark:focus-visible:outline-accent-300
       border-transparent bg-zinc-900 text-white hover:bg-zinc-700
       dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300;
   }
   .btn-secondary {
     @apply inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md border transition-colors
       disabled:opacity-50 disabled:pointer-events-none
-      focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700 dark:focus-visible:outline-teal-300
+      focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-700 dark:focus-visible:outline-accent-300
       border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800
       text-zinc-700 dark:text-zinc-300 hover:border-zinc-400 dark:hover:border-zinc-600;
   }
   .btn-destructive {
     @apply inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md border transition-colors
       disabled:opacity-50 disabled:pointer-events-none
-      focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700 dark:focus-visible:outline-teal-300
+      focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-700 dark:focus-visible:outline-accent-300
       border-red-200 dark:border-red-900/50 bg-white dark:bg-zinc-800
       text-red-600 dark:text-red-400 hover:border-red-300 dark:hover:border-red-800;
   }
@@ -51,10 +63,10 @@
     @apply inline-flex items-center justify-center p-2 rounded-md border border-transparent
       text-zinc-500 dark:text-zinc-400 transition-colors
       hover:text-zinc-900 hover:bg-zinc-200/70 dark:hover:text-zinc-100 dark:hover:bg-zinc-800
-      focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700 dark:focus-visible:outline-teal-300;
+      focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-700 dark:focus-visible:outline-accent-300;
   }
   .icon-btn-active {
-    @apply text-teal-700 dark:text-teal-300 bg-teal-700/10 dark:bg-teal-300/10;
+    @apply text-accent-700 dark:text-accent-300 bg-accent-700/10 dark:bg-accent-300/10;
   }
 
   /*  /* ── Form controls ── */
@@ -62,8 +74,8 @@
     @apply w-full rounded-md border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800
       text-sm px-3 py-2 text-zinc-900 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-500
       transition-colors
-      focus:border-teal-700 dark:focus:border-teal-300 focus:outline-none focus:ring-1
-      focus:ring-teal-700 dark:focus:ring-teal-300 disabled:opacity-50;
+      focus:border-accent-700 dark:focus:border-accent-300 focus:outline-none focus:ring-1
+      focus:ring-accent-700 dark:focus:ring-accent-300 disabled:opacity-50;
   }
 
   /* Hide number input spin buttons everywhere */

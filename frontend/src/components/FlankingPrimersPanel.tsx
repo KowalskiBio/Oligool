@@ -1138,7 +1138,7 @@ export default function FlankingPrimersPanel({
                                         else handlers = { onMouseDown: (e) => handleFlankMouseDown(e, 'fwd', 'move') };
                                     } else if (isRev && liveRevInterval) {
                                         const isEdge = i === liveRevInterval[0] || i === liveRevInterval[1] - 1;
-                                        cn = `bg-teal-300 dark:bg-teal-700/60 text-teal-900 dark:text-teal-200 font-bold underline ${isEdge ? 'cursor-ew-resize' : 'cursor-grab active:cursor-grabbing'}`;
+                                        cn = `bg-accent-300 dark:bg-accent-700/60 text-accent-900 dark:text-accent-200 font-bold underline ${isEdge ? 'cursor-ew-resize' : 'cursor-grab active:cursor-grabbing'}`;
                                         if (i === liveRevInterval[0]) handlers = { onMouseDown: (e) => handleFlankMouseDown(e, 'rev', 'left') };
                                         else if (i === liveRevInterval[1] - 1) handlers = { onMouseDown: (e) => handleFlankMouseDown(e, 'rev', 'right') };
                                         else handlers = { onMouseDown: (e) => handleFlankMouseDown(e, 'rev', 'move') };
@@ -1166,10 +1166,10 @@ export default function FlankingPrimersPanel({
         const winEnd = Math.min(rawSeq.length, Math.max(moligoEnd, iv[1], partnerIv?.[1] ?? -Infinity) + FLANK);
         const primerCn = side === 'fwd'
             ? 'bg-emerald-300 dark:bg-emerald-700/60 text-emerald-900 dark:text-emerald-200 font-bold underline'
-            : 'bg-teal-300 dark:bg-teal-700/60 text-teal-900 dark:text-teal-200 font-bold underline';
+            : 'bg-accent-300 dark:bg-accent-700/60 text-accent-900 dark:text-accent-200 font-bold underline';
         const partnerCn = partnerSide === 'fwd'
             ? 'bg-emerald-300 dark:bg-emerald-700/60 text-emerald-900 dark:text-emerald-200 font-bold'
-            : 'bg-teal-300 dark:bg-teal-700/60 text-teal-900 dark:text-teal-200 font-bold';
+            : 'bg-accent-300 dark:bg-accent-700/60 text-accent-900 dark:text-accent-200 font-bold';
         const rows = [];
         for (let rowStart = winStart; rowStart < winEnd; rowStart += LINE) {
             const row = rawSeq.slice(rowStart, Math.min(rowStart + LINE, winEnd));
@@ -1216,7 +1216,7 @@ export default function FlankingPrimersPanel({
         const isAnalIdt = analyzingIndiv[p.sequence];
 
         return (
-            <div key={idx} className={`rounded-lg border p-3 text-xs transition-all ${isSelected ? 'border-teal-600/60 dark:border-teal-300/40 bg-teal-700/5 dark:bg-teal-300/10' : 'border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900'}`}>
+            <div key={idx} className={`rounded-lg border p-3 text-xs transition-all ${isSelected ? 'border-accent-600/60 dark:border-accent-300/40 bg-accent-700/5 dark:bg-accent-300/10' : 'border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900'}`}>
                 <div className="flex items-start justify-between gap-2 mb-2">
                     <div className="flex items-center gap-2">
                         <span className="font-bold text-zinc-500 dark:text-zinc-400 text-[10px] uppercase tracking-wider">#{idx + 1}</span>
@@ -1244,7 +1244,7 @@ export default function FlankingPrimersPanel({
                             {copyFb === copyKey ? 'Copied' : 'Copy'}
                         </button>
                         <button onClick={() => openPreview(p, side)}
-                            className="btn-secondary text-[10px] px-2 py-0.5 text-teal-700 dark:text-teal-300">
+                            className="btn-secondary text-[10px] px-2 py-0.5 text-accent-700 dark:text-accent-300">
                             Preview
                         </button>
                         <button onClick={() => {
@@ -1260,7 +1260,7 @@ export default function FlankingPrimersPanel({
                                 else { setSelRev(null); setRevName(''); }
                             }
                         }}
-                            className={`text-[10px] px-2 py-0.5 rounded-md border font-bold transition-all ${isSelected ? 'bg-teal-600 border-teal-600 text-white' : 'border-teal-600/40 text-teal-700 dark:text-teal-300 hover:bg-teal-700/10 dark:hover:bg-teal-300/10'}`}>
+                            className={`text-[10px] px-2 py-0.5 rounded-md border font-bold transition-all ${isSelected ? 'bg-accent-600 border-accent-600 text-white' : 'border-accent-600/40 text-accent-700 dark:text-accent-300 hover:bg-accent-700/10 dark:hover:bg-accent-300/10'}`}>
                             {isSelected ? 'Used' : 'Use'}
                         </button>
                     </div>
@@ -1353,7 +1353,7 @@ export default function FlankingPrimersPanel({
                             <span><span className="inline-block w-2.5 h-2.5 bg-amber-400 rounded-sm mr-1 align-middle" />Oligo 2</span>
                             <span><span className="inline-block w-2.5 h-2.5 bg-green-400 rounded-sm mr-1 align-middle" />Oligo 1</span>
                             {selFwd && <span><span className="inline-block w-2.5 h-2.5 bg-emerald-400 rounded-sm mr-1 align-middle" />Left Flanking</span>}
-                            {selRev && <span><span className="inline-block w-2.5 h-2.5 bg-teal-400 rounded-sm mr-1 align-middle" />Right Flanking</span>}
+                            {selRev && <span><span className="inline-block w-2.5 h-2.5 bg-accent-400 rounded-sm mr-1 align-middle" />Right Flanking</span>}
                         </div>
                         
                         {/* Manual Region Indicators in the legend bar */}
@@ -1368,7 +1368,7 @@ export default function FlankingPrimersPanel({
                                 )}
                                 {manualRightStart !== null && (
                                     <div className="bg-zinc-100 dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 text-[10px] font-medium px-2 py-0.5 rounded-md border border-zinc-200 dark:border-zinc-800 flex items-center gap-2 tabular-nums">
-                                        <span className="status-dot bg-teal-400" />
+                                        <span className="status-dot bg-accent-400" />
                                         <span>Right Target: {manualRightStart}-{manualRightEnd}</span>
                                         <button onClick={() => { setManualRightStart(null); setManualRightEnd(null); }} className="hover:text-red-500">Clear</button>
                                     </div>
@@ -1455,9 +1455,9 @@ export default function FlankingPrimersPanel({
                                     <button
                                         key={value}
                                         onClick={() => onParameterSetChange?.(value)}
-                                        className={`px-2.5 py-2 text-xs font-medium transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-teal-700 dark:focus-visible:outline-teal-300 ${idx > 0 ? 'border-l border-zinc-300 dark:border-zinc-700' : ''}${
+                                        className={`px-2.5 py-2 text-xs font-medium transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent-700 dark:focus-visible:outline-accent-300 ${idx > 0 ? 'border-l border-zinc-300 dark:border-zinc-700' : ''}${
                                             (idtCredentials?.parameterSet || 'mathews2004-dna') === value
-                                                ? 'bg-teal-700/10 dark:bg-teal-300/10 text-teal-800 dark:text-teal-200'
+                                                ? 'bg-accent-700/10 dark:bg-accent-300/10 text-accent-800 dark:text-accent-200'
                                                 : 'bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700'
                                         }`}
                                     >
@@ -1466,7 +1466,7 @@ export default function FlankingPrimersPanel({
                                 ))}
                             </div>
                             <button onClick={() => design()} disabled={loading}
-                                className={`flex-1 rounded-md font-medium text-sm transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700 dark:focus-visible:outline-teal-300 ${loading ? 'py-2.5 bg-zinc-100 dark:bg-zinc-900 text-zinc-400 cursor-not-allowed' : 'bg-zinc-900 text-white hover:bg-zinc-700 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300 justify-center py-2.5'}`}>
+                                className={`flex-1 rounded-md font-medium text-sm transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-700 dark:focus-visible:outline-accent-300 ${loading ? 'py-2.5 bg-zinc-100 dark:bg-zinc-900 text-zinc-400 cursor-not-allowed' : 'bg-zinc-900 text-white hover:bg-zinc-700 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300 justify-center py-2.5'}`}>
                                 {loading ? (
                                     <span className="flex items-center justify-center gap-2">
                                         <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
@@ -1502,13 +1502,13 @@ export default function FlankingPrimersPanel({
                                 : <div className="space-y-2">{result.forward.primers.map((p, i) => renderCard(p, 'fwd', i))}</div>)}
                         </div>
                         <div>
-                            <div className="text-xs font-bold text-teal-600 dark:text-teal-400 uppercase tracking-wider mb-2 px-1">
+                            <div className="text-xs font-bold text-accent-600 dark:text-accent-400 uppercase tracking-wider mb-2 px-1">
                                 Right (Reverse) Primers{result ? `: ${result.reverse.num_returned} found` : ''}
                             </div>
                             {/* Custom dragged primer card shown above results when it no longer matches any candidate */}
                             {selRev && !result?.reverse.primers.some(p => p.sequence === selRev.sequence) && (
                                 <div className="mb-2">
-                                    <div className="text-[10px] text-teal-600 dark:text-teal-400 font-bold uppercase tracking-widest px-1 mb-1">Custom (edited)</div>
+                                    <div className="text-[10px] text-accent-600 dark:text-accent-400 font-bold uppercase tracking-widest px-1 mb-1">Custom (edited)</div>
                                     {renderCard(selRev, 'rev', -1)}
                                 </div>
                             )}
@@ -1523,7 +1523,7 @@ export default function FlankingPrimersPanel({
                                     className="w-full flex justify-between items-center px-5 py-3 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
                                 >
                                     <div className="flex items-center gap-3">
-                                        <svg className="w-5 h-5 text-teal-700 dark:text-teal-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <svg className="w-5 h-5 text-accent-700 dark:text-accent-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
                                         </svg>
                                         <span className="text-sm font-bold text-zinc-700 dark:text-zinc-200 uppercase tracking-widest">
@@ -1587,7 +1587,7 @@ export default function FlankingPrimersPanel({
                                         />
                                     </div>
                                     <div className="flex flex-col gap-1">
-                                        <label className="text-[10px] font-bold text-teal-500 uppercase tracking-wider">Reverse Primer Label</label>
+                                        <label className="text-[10px] font-bold text-accent-500 uppercase tracking-wider">Reverse Primer Label</label>
                                         <input
                                             type="text"
                                             value={revName}
@@ -1635,7 +1635,7 @@ export default function FlankingPrimersPanel({
                         >
                             <div className="panel-header flex items-center justify-between gap-3">
                                 <div className="flex items-center gap-2 min-w-0">
-                                    <span className={`text-sm font-bold uppercase tracking-widest flex-shrink-0 ${previewPrimer.side === 'fwd' ? 'text-emerald-600 dark:text-emerald-400' : 'text-teal-600 dark:text-teal-400'}`}>
+                                    <span className={`text-sm font-bold uppercase tracking-widest flex-shrink-0 ${previewPrimer.side === 'fwd' ? 'text-emerald-600 dark:text-emerald-400' : 'text-accent-600 dark:text-accent-400'}`}>
                                         {sideLabel} primer preview
                                     </span>
                                     <span className="font-mono text-xs text-zinc-600 dark:text-zinc-300 truncate">{previewPrimer.primer.sequence}</span>
@@ -1679,9 +1679,9 @@ export default function FlankingPrimersPanel({
                             <div className="flex flex-wrap items-center gap-x-4 gap-y-1 px-5 py-2.5 border-t border-zinc-100 dark:border-zinc-800 text-[10px] font-bold text-zinc-500 dark:text-zinc-400">
                                 <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-green-300 dark:bg-green-700" /> MOLigo 1</span>
                                 <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-amber-300 dark:bg-amber-700" /> MOLigo 2</span>
-                                <span className="flex items-center gap-1.5"><span className={`w-2.5 h-2.5 rounded-sm ${previewPrimer.side === 'fwd' ? 'bg-emerald-400 dark:bg-emerald-600' : 'bg-teal-400 dark:bg-teal-600'}`} /> Previewed {sideLabel.toLowerCase()} primer (underlined)</span>
+                                <span className="flex items-center gap-1.5"><span className={`w-2.5 h-2.5 rounded-sm ${previewPrimer.side === 'fwd' ? 'bg-emerald-400 dark:bg-emerald-600' : 'bg-accent-400 dark:bg-accent-600'}`} /> Previewed {sideLabel.toLowerCase()} primer (underlined)</span>
                                 {partnerIv && (
-                                    <span className="flex items-center gap-1.5"><span className={`w-2.5 h-2.5 rounded-sm ${partnerSide === 'fwd' ? 'bg-emerald-400 dark:bg-emerald-600' : 'bg-teal-400 dark:bg-teal-600'}`} /> Selected {partnerSide === 'fwd' ? 'forward' : 'reverse'} primer</span>
+                                    <span className="flex items-center gap-1.5"><span className={`w-2.5 h-2.5 rounded-sm ${partnerSide === 'fwd' ? 'bg-emerald-400 dark:bg-emerald-600' : 'bg-accent-400 dark:bg-accent-600'}`} /> Selected {partnerSide === 'fwd' ? 'forward' : 'reverse'} primer</span>
                                 )}
                             </div>
                         </div>

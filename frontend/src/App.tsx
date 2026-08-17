@@ -6,8 +6,16 @@ import RabbitGame from './components/RabbitGame';
 import UserReport from './components/UserReport';
 import { downloadSession, parseSessionText, OLIGOOL_SESSION_APP, OLIGOOL_SESSION_VERSION, type OligoolSession, type FlankingPanelState, type FlankingPrimerSelection } from './utils/session';
 import { parseSequenceHeader } from './utils/dna';
+import { ACCENT_PRESETS, NEUTRAL_PRESETS, WALLPAPERS, applyAccentPreset, applyNeutralPreset, clearThemeOverrides, generatePalette } from './theme';
 
 type Step = 'input' | 'blasting' | 'aligning' | 'done';
+
+function hexToRgba(hex: string, alpha: number): string {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
 
 interface BlastHit {
   accession: string;
@@ -54,6 +62,16 @@ function App() {
   const [eValue, setEValue] = useState(() => localStorage.getItem('e_value') || '0.05');
   const [percIdentity, setPercIdentity] = useState(() => localStorage.getItem('perc_identity') || '0');
   const [filterMatches, setFilterMatches] = useState(() => localStorage.getItem('filter_matches') === 'true');
+
+  const [wallpaperUrl, setWallpaperUrl] = useState(() => localStorage.getItem('wallpaper_url') || '');
+  const [wallpaperOpacity, setWallpaperOpacity] = useState(() => {
+    const v = localStorage.getItem('wallpaper_opacity');
+    return v ? parseInt(v, 10) : 20;
+  });
+  const [accentPreset, setAccentPreset] = useState(() => localStorage.getItem('accent_preset') || 'teal');
+  const [neutralPreset, setNeutralPreset] = useState(() => localStorage.getItem('neutral_preset') || 'zinc');
+  const [customAccentColor, setCustomAccentColor] = useState(() => localStorage.getItem('custom_accent_color') || '#0d9488');
+  const [customNeutralColor, setCustomNeutralColor] = useState(() => localStorage.getItem('custom_neutral_color') || '#71717a');
 
   const [isDarkMode, setIsDarkMode] = useState(() => {
     const saved = localStorage.getItem('theme');
@@ -110,6 +128,18 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
       localStorage.setItem('theme', 'light');
     }
   }, [isDarkMode]);
+
+  useEffect(() => { applyAccentPreset(accentPreset, customAccentColor); }, [accentPreset, customAccentColor]);
+  useEffect(() => { applyNeutralPreset(neutralPreset, customNeutralColor); }, [neutralPreset, customNeutralColor]);
+  useEffect(() => {
+    try { localStorage.setItem('wallpaper_url', wallpaperUrl); }
+    catch { localStorage.removeItem('wallpaper_url'); }
+  }, [wallpaperUrl]);
+  useEffect(() => { localStorage.setItem('wallpaper_opacity', String(wallpaperOpacity)); }, [wallpaperOpacity]);
+  useEffect(() => { localStorage.setItem('accent_preset', accentPreset); }, [accentPreset]);
+  useEffect(() => { localStorage.setItem('neutral_preset', neutralPreset); }, [neutralPreset]);
+  useEffect(() => { localStorage.setItem('custom_accent_color', customAccentColor); }, [customAccentColor]);
+  useEffect(() => { localStorage.setItem('custom_neutral_color', customNeutralColor); }, [customNeutralColor]);
 
   // Persistence hooks
   useEffect(() => { localStorage.setItem('organism', organism); }, [organism]);
@@ -594,9 +624,31 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
 
   return (
     <div className="min-h-screen py-8 px-4 sm:px-6 lg:px-8">
+      {wallpaperUrl && (
+        <div
+          className="fixed inset-0 -z-10 pointer-events-none"
+          style={{
+            backgroundImage: `url(${wallpaperUrl})`,
+            backgroundSize: 'cover',
+            backgroundPosition: 'center',
+            opacity: wallpaperOpacity / 100,
+          }}
+        />
+      )}
       <div className="max-w-7xl mx-auto">
         {/* Header: sticky so context stays pinned while data scrolls */}
-        <header className="sticky top-0 z-40 -mt-3 mb-5 flex items-start justify-between bg-zinc-100 py-3 pt-3 dark:bg-zinc-950">
+        <header
+          className="sticky top-2 z-40 mb-5 flex items-start justify-between backdrop-blur-md rounded-lg border border-zinc-200/60 dark:border-zinc-800/60 py-3 px-4"
+          style={{
+            backgroundColor: hexToRgba(
+              (neutralPreset === 'custom' && customNeutralColor
+                ? generatePalette(customNeutralColor)
+                : NEUTRAL_PRESETS[neutralPreset] || NEUTRAL_PRESETS.zinc
+              )[isDarkMode ? '950' : '100'],
+              0.8,
+            ),
+          }}
+        >
           <div>
             <h1 className="text-lg font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">
               Oligool
@@ -625,7 +677,7 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                   type="button"
                   onClick={() => setShowUserReport(true)}
                   title="Create a standalone report with images and notes"
-                  className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-teal-700 dark:focus-visible:outline-teal-300"
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent-700 dark:focus-visible:outline-accent-300"
                 >
                   <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -635,14 +687,14 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                 <button
                   onClick={() => setShowWhatsNew(true)}
                   title="Kliknutím zobrazíte novinky a návod k použití"
-                  className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium whitespace-nowrap border-l border-zinc-300 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-teal-700 dark:focus-visible:outline-teal-300"
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium whitespace-nowrap border-l border-zinc-300 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent-700 dark:focus-visible:outline-accent-300"
                 >
                   v0.9.9 beta
                 </button>
                 <button
                   onClick={() => fileInputRef.current?.click()}
                   title="Load a saved Oligool session (.oligool.json)"
-                  className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium border-l border-zinc-300 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-teal-700 dark:focus-visible:outline-teal-300"
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium border-l border-zinc-300 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent-700 dark:focus-visible:outline-accent-300"
                 >
                   <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
@@ -653,7 +705,7 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                   <button
                     onClick={handleSaveSession}
                     title="Save this session (oligos, pinned positions, primers & alignment) to a file"
-                    className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium border-l border-zinc-300 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-teal-700 dark:focus-visible:outline-teal-300"
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium border-l border-zinc-300 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent-700 dark:focus-visible:outline-accent-300"
                   >
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 16v1a3 3 0 01-3 3H7a3 3 0 01-3-3v-1m4-4l4 4m0 0l4-4m-4 4V4" />
@@ -695,7 +747,7 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                 type="button"
                 onClick={() => { setShowSettings(true); requestAnimationFrame(() => document.getElementById('uizze-credentials-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' })); }}
                 title="Account & credentials (NCBI, IDT)"
-                className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-teal-700 dark:focus-visible:outline-teal-300"
+                className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent-700 dark:focus-visible:outline-accent-300"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
@@ -706,7 +758,7 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                 type="button"
                 onClick={() => { setShowSettings(true); requestAnimationFrame(() => document.getElementById('uizze-searchengine-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' })); }}
                 title="Search engine (Primer3 / Strider)"
-                className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium border-l border-zinc-300 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-teal-700 dark:focus-visible:outline-teal-300"
+                className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium border-l border-zinc-300 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent-700 dark:focus-visible:outline-accent-300"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-4.35-4.35M17 11a6 6 0 11-12 0 6 6 0 0112 0z" />
@@ -731,7 +783,7 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                     onChange={(e) => setShowSecrets(e.target.checked)}
                     aria-label="Show Secrets"
                   />
-                  <div className={`block w-8 h-4 rounded-full transition-colors ${showSecrets ? 'bg-teal-700' : 'bg-zinc-300 dark:bg-zinc-700'}`}></div>
+                  <div className={`block w-8 h-4 rounded-full transition-colors ${showSecrets ? 'bg-accent-700' : 'bg-zinc-300 dark:bg-zinc-700'}`}></div>
                   <div className={`absolute left-0.5 top-0.5 bg-white w-3 h-3 rounded-full transition-transform ${showSecrets ? 'tranzinc-x-4' : ''}`}></div>
                 </div>
                 <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400 group-hover:text-zinc-700 dark:group-hover:text-zinc-300 transition-colors">
@@ -754,7 +806,7 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                   />
                 </div>
                 <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
-                  Increases BLAST rate limit (3 → 10 req/s). Get from <a href="https://www.ncbi.nlm.nih.gov/account/settings/" target="_blank" rel="noopener noreferrer" className="text-teal-700 underline">NCBI Settings</a>.
+                  Increases BLAST rate limit (3 → 10 req/s). Get from <a href="https://www.ncbi.nlm.nih.gov/account/settings/" target="_blank" rel="noopener noreferrer" className="text-accent-700 underline">NCBI Settings</a>.
                 </p>
               </div>
 
@@ -821,7 +873,7 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                   </select>
                 </div>
                 <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
-                  Required for IDT OligoAnalyzer features. Obtain from <a href="https://www.idtdna.com/pages/scitools/plus-api" target="_blank" rel="noopener noreferrer" className="text-teal-700 underline">IDT SciTools Plus API</a>. US and EU accounts use separate IDT regions.
+                  Required for IDT OligoAnalyzer features. Obtain from <a href="https://www.idtdna.com/pages/scitools/plus-api" target="_blank" rel="noopener noreferrer" className="text-accent-700 underline">IDT SciTools Plus API</a>. US and EU accounts use separate IDT regions.
                 </p>
               </div>
             </div>
@@ -841,9 +893,9 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                     <button
                       key={value}
                       onClick={() => setSearchEngine(value)}
-                      className={`px-2.5 py-1 text-xs font-medium transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-teal-700 dark:focus-visible:outline-teal-300 ${idx > 0 ? 'border-l border-zinc-300 dark:border-zinc-700 ' : ''}${
+                      className={`px-2.5 py-1 text-xs font-medium transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent-700 dark:focus-visible:outline-accent-300 ${idx > 0 ? 'border-l border-zinc-300 dark:border-zinc-700 ' : ''}${
                         searchEngine === value
-                          ? 'bg-teal-700/10 dark:bg-teal-300/10 text-teal-800 dark:text-teal-200'
+                          ? 'bg-accent-700/10 dark:bg-accent-300/10 text-accent-800 dark:text-accent-200'
                           : 'bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700'
                       }`}
                     >
@@ -854,6 +906,143 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                 <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
                   Tm and oligo picks follow the selected engine's model
                 </p>
+              </div>
+            </div>
+            <div id="uizze-theme-section" className="border-t border-zinc-200 dark:border-zinc-800 p-4">
+              <h3 className="text-sm font-semibold text-zinc-700 dark:text-zinc-300 mb-3">Theme</h3>
+              <div className="space-y-4">
+                <div>
+                  <label className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">
+                    Wallpaper
+                  </label>
+                  <div className="grid grid-cols-6 sm:grid-cols-9 gap-2 mt-2">
+                    <button
+                      onClick={() => setWallpaperUrl('')}
+                      className={`h-12 rounded-md border-2 flex items-center justify-center text-[10px] text-zinc-400 transition-colors ${!wallpaperUrl ? 'border-accent-600 dark:border-accent-300' : 'border-zinc-200 dark:border-zinc-700 hover:border-zinc-300 dark:hover:border-zinc-600'}`}
+                    >
+                      None
+                    </button>
+                    {WALLPAPERS.map((wp) => (
+                      <button
+                        key={wp}
+                        onClick={() => setWallpaperUrl(`/wallpapers/${wp}`)}
+                        className={`h-12 rounded-md border-2 overflow-hidden transition-all ${wallpaperUrl === `/wallpapers/${wp}` ? 'border-accent-600 dark:border-accent-300 ring-1 ring-accent-600 dark:ring-accent-300' : 'border-zinc-200 dark:border-zinc-700 hover:border-zinc-300 dark:hover:border-zinc-600'}`}
+                      >
+                        <img src={`/wallpapers/${wp}`} alt={wp} className="w-full h-full object-cover" loading="lazy" />
+                      </button>
+                    ))}
+                    <label
+                      className={`h-12 rounded-md border-2 flex items-center justify-center cursor-pointer transition-colors ${wallpaperUrl.startsWith('data:') ? 'border-accent-600 dark:border-accent-300' : 'border-zinc-200 dark:border-zinc-700 hover:border-zinc-300 dark:hover:border-zinc-600'}`}
+                    >
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (!file) return;
+                          const reader = new FileReader();
+                          reader.onload = () => {
+                            const url = reader.result as string;
+                            try { localStorage.setItem('wallpaper_url', url); }
+                            catch { localStorage.removeItem('wallpaper_url'); }
+                            setWallpaperUrl(url);
+                          };
+                          reader.readAsDataURL(file);
+                        }}
+                      />
+                      <svg className="w-4 h-4 text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
+                    </label>
+                  </div>
+                  {wallpaperUrl && (
+                    <div className="flex items-center gap-3 mt-3">
+                      <label className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider w-20">
+                        Opacity
+                      </label>
+                      <input
+                        type="range"
+                        min="0"
+                        max="100"
+                        value={wallpaperOpacity}
+                        onChange={(e) => setWallpaperOpacity(parseInt(e.target.value, 10))}
+                        className="flex-1 accent-accent-600 dark:accent-accent-300"
+                      />
+                      <span className="text-xs text-zinc-500 dark:text-zinc-400 w-10 text-right tabular-nums">{wallpaperOpacity}%</span>
+                    </div>
+                  )}
+                </div>
+                <div>
+                  <label className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">
+                    Accent color
+                  </label>
+                  <div className="flex items-center gap-2 mt-2">
+                    {Object.entries(ACCENT_PRESETS).map(([name, palette]) => (
+                      <button
+                        key={name}
+                        onClick={() => setAccentPreset(name)}
+                        className={`w-7 h-7 rounded-full border-2 transition-transform hover:scale-110 ${accentPreset === name ? 'border-zinc-900 dark:border-zinc-100 scale-110' : 'border-zinc-200 dark:border-zinc-700'}`}
+                        style={{ backgroundColor: palette['600'] }}
+                        title={name}
+                      />
+                    ))}
+                    <label
+                      className={`w-7 h-7 rounded-full border-2 flex items-center justify-center cursor-pointer transition-transform hover:scale-110 ${accentPreset === 'custom' ? 'border-zinc-900 dark:border-zinc-100 scale-110' : 'border-zinc-200 dark:border-zinc-700'}`}
+                      title="Custom color"
+                    >
+                      <input
+                        type="color"
+                        value={customAccentColor}
+                        onChange={(e) => { setCustomAccentColor(e.target.value); setAccentPreset('custom'); }}
+                        className="w-4 h-4 rounded-full cursor-pointer"
+                        style={{ appearance: 'none', border: 'none', background: 'transparent' }}
+                      />
+                    </label>
+                  </div>
+                </div>
+                <div>
+                  <label className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">
+                    Neutral palette
+                  </label>
+                  <div className="flex items-center gap-2 mt-2">
+                    {Object.entries(NEUTRAL_PRESETS).map(([name, palette]) => (
+                      <button
+                        key={name}
+                        onClick={() => setNeutralPreset(name)}
+                        className={`w-7 h-7 rounded-full border-2 transition-transform hover:scale-110 ${neutralPreset === name ? 'border-zinc-900 dark:border-zinc-100 scale-110' : 'border-zinc-200 dark:border-zinc-700'}`}
+                        style={{ backgroundColor: palette['500'] }}
+                        title={name}
+                      />
+                    ))}
+                    <label
+                      className={`w-7 h-7 rounded-full border-2 flex items-center justify-center cursor-pointer transition-transform hover:scale-110 ${neutralPreset === 'custom' ? 'border-zinc-900 dark:border-zinc-100 scale-110' : 'border-zinc-200 dark:border-zinc-700'}`}
+                      title="Custom color"
+                    >
+                      <input
+                        type="color"
+                        value={customNeutralColor}
+                        onChange={(e) => { setCustomNeutralColor(e.target.value); setNeutralPreset('custom'); }}
+                        className="w-4 h-4 rounded-full cursor-pointer"
+                        style={{ appearance: 'none', border: 'none', background: 'transparent' }}
+                      />
+                    </label>
+                  </div>
+                </div>
+                <button
+                  onClick={() => {
+                    setWallpaperUrl('');
+                    setWallpaperOpacity(20);
+                    setAccentPreset('teal');
+                    setNeutralPreset('zinc');
+                    setCustomAccentColor('#0d9488');
+                    setCustomNeutralColor('#71717a');
+                    clearThemeOverrides();
+                    localStorage.removeItem('custom_accent_color');
+                    localStorage.removeItem('custom_neutral_color');
+                  }}
+                  className="btn-secondary"
+                >
+                  Reset to defaults
+                </button>
               </div>
             </div>
           </div>
@@ -869,7 +1058,7 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                     className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium transition-colors duration-250 ${isStepCurrent(s.key)
                       ? 'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900'
                       : isStepActive(s.key)
-                        ? 'bg-teal-700 text-white dark:bg-teal-300 dark:text-zinc-900'
+                        ? 'bg-accent-700 text-white dark:bg-accent-300 dark:text-zinc-900'
                         : 'bg-zinc-200 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400'
                       }`}
                   >
@@ -880,7 +1069,7 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                     ) : idx + 1}
                   </div>
                   <span
-                    className={`mt-1.5 text-xs font-medium ${isStepActive(s.key) ? 'text-teal-700 dark:text-teal-300' : 'text-zinc-400 dark:text-zinc-500'
+                    className={`mt-1.5 text-xs font-medium ${isStepActive(s.key) ? 'text-accent-700 dark:text-accent-300' : 'text-zinc-400 dark:text-zinc-500'
                       }`}
                   >
                     {s.label}
@@ -888,7 +1077,7 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                 </div>
                 {idx < steps.length - 1 && (
                   <div
-                    className={`w-16 sm:w-24 h-0.5 mx-2 transition-colors duration-250 ${stepOrder.indexOf(step) > idx ? 'bg-teal-700 dark:bg-teal-300' : 'bg-zinc-200 dark:bg-zinc-800'
+                    className={`w-16 sm:w-24 h-0.5 mx-2 transition-colors duration-250 ${stepOrder.indexOf(step) > idx ? 'bg-accent-700 dark:bg-accent-300' : 'bg-zinc-200 dark:bg-zinc-800'
                       }`}
                   />
                 )}
@@ -1024,9 +1213,9 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                       type="button"
                       onClick={() => setMaxHitsPreset(opt.value)}
                       disabled={step !== 'input'}
-                      className={`px-2.5 py-1 text-xs font-medium transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-teal-700 dark:focus-visible:outline-teal-300 disabled:opacity-50 ${i > 0 ? 'border-l border-zinc-300 dark:border-zinc-700' : ''
+                      className={`px-2.5 py-1 text-xs font-medium transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent-700 dark:focus-visible:outline-accent-300 disabled:opacity-50 ${i > 0 ? 'border-l border-zinc-300 dark:border-zinc-700' : ''
                         } ${maxHitsPreset === opt.value
-                          ? 'bg-teal-700/10 dark:bg-teal-300/10 text-teal-800 dark:text-teal-200'
+                          ? 'bg-accent-700/10 dark:bg-accent-300/10 text-accent-800 dark:text-accent-200'
                           : 'bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700'
                         }`}
                       title={opt.value === 'custom' ? 'Custom number' : opt.value === 'all' ? 'Up to 5000' : `Top ${opt.label}`}
@@ -1060,7 +1249,7 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                     type="button"
                     onClick={() => setFilterMatches(true)}
                     disabled={step !== 'input'}
-                    className={`px-2.5 py-1 text-xs font-medium transition-colors disabled:opacity-50 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-teal-700 dark:focus-visible:outline-teal-300 ${filterMatches ? 'bg-teal-700/10 dark:bg-teal-300/10 text-teal-800 dark:text-teal-200' : 'bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700'
+                    className={`px-2.5 py-1 text-xs font-medium transition-colors disabled:opacity-50 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent-700 dark:focus-visible:outline-accent-300 ${filterMatches ? 'bg-accent-700/10 dark:bg-accent-300/10 text-accent-800 dark:text-accent-200' : 'bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700'
                       }`}
                   >
                     Yes
@@ -1069,7 +1258,7 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                     type="button"
                     onClick={() => setFilterMatches(false)}
                     disabled={step !== 'input'}
-                    className={`px-2.5 py-1 text-xs font-medium transition-colors disabled:opacity-50 border-l border-zinc-300 dark:border-zinc-700 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-teal-700 dark:focus-visible:outline-teal-300 ${!filterMatches ? 'bg-teal-700/10 dark:bg-teal-300/10 text-teal-800 dark:text-teal-200' : 'bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700'
+                    className={`px-2.5 py-1 text-xs font-medium transition-colors disabled:opacity-50 border-l border-zinc-300 dark:border-zinc-700 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent-700 dark:focus-visible:outline-accent-300 ${!filterMatches ? 'bg-accent-700/10 dark:bg-accent-300/10 text-accent-800 dark:text-accent-200' : 'bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700'
                       }`}
                   >
                     No
@@ -1097,7 +1286,7 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                 <button
                   onClick={handleSearch}
                   disabled={step !== 'input' || !input.trim()}
-                  className={`px-5 py-2 text-sm font-medium rounded-md text-white transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-teal-700 dark:focus-visible:outline-teal-300 ${step !== 'input' || !input.trim()
+                  className={`px-5 py-2 text-sm font-medium rounded-md text-white transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent-700 dark:focus-visible:outline-accent-300 ${step !== 'input' || !input.trim()
                     ? 'bg-zinc-300 dark:bg-zinc-800 dark:text-zinc-500 cursor-not-allowed'
                     : 'bg-zinc-900 hover:bg-zinc-700 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300'
                     }`}
@@ -1116,7 +1305,7 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                 <div className="flex items-center gap-3 text-zinc-500 dark:text-zinc-400 font-mono text-sm">
                   <div className="w-5 h-5 border-2 border-zinc-300 dark:border-zinc-600 border-t-zinc-700 dark:border-t-zinc-300 rounded-full animate-spin"></div>
                   {step === 'blasting' ? 'Running BLAST search and collecting homologs...' : 'Finalizing MAFFT alignment...'}
-                  <span className="font-semibold text-teal-700 ml-2">
+                  <span className="font-semibold text-accent-700 ml-2">
                     {Math.floor(elapsedSeconds / 60)}:{(elapsedSeconds % 60).toString().padStart(2, '0')} elapsed
                   </span>
                 </div>
@@ -1306,16 +1495,16 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
             <div className="card shadow-xl max-w-lg w-full max-h-[80vh] overflow-y-auto p-6" onClick={e => e.stopPropagation()}>
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
-                  <span className="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-teal-700/10 dark:bg-teal-300/10 text-teal-700 dark:text-teal-300 text-xs font-bold">v0.9.9</span>
+                  <span className="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-accent-700/10 dark:bg-accent-300/10 text-accent-700 dark:text-accent-300 text-xs font-bold">v0.9.9</span>
                   <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">Co je nového</h2>
                 </div>
-                <button onClick={() => setShowWhatsNew(false)} className="text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-200 text-xl leading-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700 dark:focus-visible:outline-teal-300">&times;</button>
+                <button onClick={() => setShowWhatsNew(false)} className="text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-200 text-xl leading-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-700 dark:focus-visible:outline-accent-300">&times;</button>
               </div>
               <div className="space-y-4 text-sm text-zinc-700 dark:text-zinc-300">
                 <section className="flex gap-3">
-                  <svg className="h-5 w-5 flex-shrink-0 mt-0.5 text-teal-700 dark:text-teal-300" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" /></svg>
+                  <svg className="h-5 w-5 flex-shrink-0 mt-0.5 text-accent-700 dark:text-accent-300" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" /></svg>
                   <div>
-                    <h3 className="font-semibold text-teal-700 dark:text-teal-300 mb-1">Klávesové zkratky, potvrzení resetu a úspornější hlavička</h3>
+                    <h3 className="font-semibold text-accent-700 dark:text-accent-300 mb-1">Klávesové zkratky, potvrzení resetu a úspornější hlavička</h3>
                     <p>
                       Přihlašovací údaje (NCBI, IDT) jsou nyní skryté pod tlačítkem <b>Účet</b>, na obrazovce
                       je hned vidět prostor pro zadání sekvence. Tlačítko <b>Start Over</b> se nově ptá
@@ -1326,9 +1515,9 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                   </div>
                 </section>
                 <section className="flex gap-3">
-                  <svg className="h-5 w-5 flex-shrink-0 mt-0.5 text-teal-700 dark:text-teal-300" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M11.3 1.046A1 1 0 0112 2v5h4a1 1 0 01.82 1.573l-7 10A1 1 0 018 18v-5H4a1 1 0 01-.82-1.573l7-10a1 1 0 011.12-.38z" clipRule="evenodd" /></svg>
+                  <svg className="h-5 w-5 flex-shrink-0 mt-0.5 text-accent-700 dark:text-accent-300" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M11.3 1.046A1 1 0 0112 2v5h4a1 1 0 01.82 1.573l-7 10A1 1 0 018 18v-5H4a1 1 0 01-.82-1.573l7-10a1 1 0 011.12-.38z" clipRule="evenodd" /></svg>
                   <div>
-                    <h3 className="font-semibold text-teal-700 dark:text-teal-300 mb-1">Přepínač Mathews / SantaLucia a přesnější sekundární struktury</h3>
+                    <h3 className="font-semibold text-accent-700 dark:text-accent-300 mb-1">Přepínač Mathews / SantaLucia a přesnější sekundární struktury</h3>
                     <p>
                       Nalevo od tlačítka <b>Structural analysis</b> je nový přepínač <b>Mathews / SantaLucia</b>,
                       který vybírá parametry nejbližších sousedů pro lokální výpočet. Současně byly opraveny
@@ -1342,9 +1531,9 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                   </div>
                 </section>
                 <section className="flex gap-3">
-                  <svg className="h-5 w-5 flex-shrink-0 mt-0.5 text-teal-700 dark:text-teal-300" viewBox="0 0 20 20" fill="currentColor"><path d="M9 12l2 2 4-4M10 18a8 8 0 100-16 8 8 0 000 16z" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                  <svg className="h-5 w-5 flex-shrink-0 mt-0.5 text-accent-700 dark:text-accent-300" viewBox="0 0 20 20" fill="currentColor"><path d="M9 12l2 2 4-4M10 18a8 8 0 100-16 8 8 0 000 16z" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round" /></svg>
                   <div>
-                    <h3 className="font-semibold text-teal-700 dark:text-teal-300 mb-1">Souřadnicový tooltip v MSA přehledu</h3>
+                    <h3 className="font-semibold text-accent-700 dark:text-accent-300 mb-1">Souřadnicový tooltip v MSA přehledu</h3>
                     <p>
                       Při najetí kurzorem na BLAST hit v horním MSA přehledu se vedle kurzoru
                       objeví box se třemi čísly: pozice v MSA sloupci, pozice v celém genomu
@@ -1356,9 +1545,9 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                   </div>
                 </section>
                 <section className="flex gap-3">
-                  <svg className="h-5 w-5 flex-shrink-0 mt-0.5 text-teal-700 dark:text-teal-300" viewBox="0 0 20 20" fill="currentColor"><path d="M11 3a1 1 0 100 2h2.586l-6.293 6.293a1 1 0 101.414 1.414L15 6.414V9a1 1 0 102 0V4a1 1 0 00-1-1h-5z" /><path d="M5 5a2 2 0 00-2 2v8a2 2 0 002 2h8a2 2 0 002-2v-3a1 1 0 10-2 0v3H5V7h3a1 1 0 000-2H5z" /></svg>
+                  <svg className="h-5 w-5 flex-shrink-0 mt-0.5 text-accent-700 dark:text-accent-300" viewBox="0 0 20 20" fill="currentColor"><path d="M11 3a1 1 0 100 2h2.586l-6.293 6.293a1 1 0 101.414 1.414L15 6.414V9a1 1 0 102 0V4a1 1 0 00-1-1h-5z" /><path d="M5 5a2 2 0 00-2 2v8a2 2 0 002 2h8a2 2 0 002-2v-3a1 1 0 10-2 0v3H5V7h3a1 1 0 000-2H5z" /></svg>
                   <div>
-                    <h3 className="font-semibold text-teal-700 dark:text-teal-300 mb-1">Režim Kowalski / Analýza!</h3>
+                    <h3 className="font-semibold text-accent-700 dark:text-accent-300 mb-1">Režim Kowalski / Analýza!</h3>
                     <p>
                       Tlačítko <b>autofind</b> bylo přejmenováno na <b>Kowalski</b>. V klidovém
                       režimu (Kowalski) kliknutí na hit v MSA přehledu rovnou otevře NCBI modal
@@ -1369,9 +1558,9 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                   </div>
                 </section>
                 <section className="flex gap-3">
-                  <svg className="h-5 w-5 flex-shrink-0 mt-0.5 text-teal-700 dark:text-teal-300" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M3 5a2 2 0 012-2h10a2 2 0 012 2v10a2 2 0 01-2 2H5a2 2 0 01-2-2V5zm3.293 1.293a1 1 0 011.414 0L10 8.586l2.293-2.293a1 1 0 111.414 1.414L11.414 10l2.293 2.293a1 1 0 01-1.414 1.414L10 11.414l-2.293 2.293a1 1 0 01-1.414-1.414L8.586 10 6.293 7.707a1 1 0 010-1.414z" clipRule="evenodd" /></svg>
+                  <svg className="h-5 w-5 flex-shrink-0 mt-0.5 text-accent-700 dark:text-accent-300" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M3 5a2 2 0 012-2h10a2 2 0 012 2v10a2 2 0 01-2 2H5a2 2 0 01-2-2V5zm3.293 1.293a1 1 0 011.414 0L10 8.586l2.293-2.293a1 1 0 111.414 1.414L11.414 10l2.293 2.293a1 1 0 01-1.414 1.414L10 11.414l-2.293 2.293a1 1 0 01-1.414-1.414L8.586 10 6.293 7.707a1 1 0 010-1.414z" clipRule="evenodd" /></svg>
                   <div>
-                    <h3 className="font-semibold text-teal-700 dark:text-teal-300 mb-1">Oprava IDT prokvenance u flanking primerů</h3>
+                    <h3 className="font-semibold text-accent-700 dark:text-accent-300 mb-1">Oprava IDT prokvenance u flanking primerů</h3>
                     <p>
                       V panelu flanking primerů se nyní IDT ΔG a Tm zobrazují správně pro
                       hairpiny, dříve chyběly, protože IDT vrací hodnoty pod různými názvy
@@ -1382,9 +1571,9 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                   </div>
                 </section>
                 <section className="flex gap-3">
-                  <svg className="h-5 w-5 flex-shrink-0 mt-0.5 text-teal-700 dark:text-teal-300" viewBox="0 0 20 20" fill="currentColor"><path d="M2 10a8 8 0 1116 0 8 8 0 01-16 0zm6.5-3a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0zM10 12a3 3 0 00-2.83 2h5.66A3 3 0 0010 12z" /></svg>
+                  <svg className="h-5 w-5 flex-shrink-0 mt-0.5 text-accent-700 dark:text-accent-300" viewBox="0 0 20 20" fill="currentColor"><path d="M2 10a8 8 0 1116 0 8 8 0 01-16 0zm6.5-3a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0zM10 12a3 3 0 00-2.83 2h5.66A3 3 0 0010 12z" /></svg>
                   <div>
-                    <h3 className="font-semibold text-teal-700 dark:text-teal-300 mb-1">Top-2 hairpiny a top-5 self-dimery</h3>
+                    <h3 className="font-semibold text-accent-700 dark:text-accent-300 mb-1">Top-2 hairpiny a top-5 self-dimery</h3>
                     <p>
                       V panelu flanking primerů se u každého primeru zobrazuje top-5 hairpinů
                       a top-5 self-dimerů s individuální prokvenancí (IDT ΔG, Strider ΔG,
@@ -1394,9 +1583,9 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                   </div>
                 </section>
                 <section className="flex gap-3">
-                  <svg className="h-5 w-5 flex-shrink-0 mt-0.5 text-teal-700 dark:text-teal-300" viewBox="0 0 20 20" fill="currentColor"><path d="M4 4a2 2 0 012-2h8a2 2 0 012 2v12a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm3 2a1 1 0 000 2h6a1 1 0 100-2H7zm0 4a1 1 0 100 2h6a1 1 0 100-2H7zm0 4a1 1 0 100 2h3a1 1 0 100-2H7z" /></svg>
+                  <svg className="h-5 w-5 flex-shrink-0 mt-0.5 text-accent-700 dark:text-accent-300" viewBox="0 0 20 20" fill="currentColor"><path d="M4 4a2 2 0 012-2h8a2 2 0 012 2v12a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm3 2a1 1 0 000 2h6a1 1 0 100-2H7zm0 4a1 1 0 100 2h6a1 1 0 100-2H7zm0 4a1 1 0 100 2h3a1 1 0 100-2H7z" /></svg>
                   <div>
-                    <h3 className="font-semibold text-teal-700 dark:text-teal-300 mb-1">Loga Kowalski v reportu a patičce</h3>
+                    <h3 className="font-semibold text-accent-700 dark:text-accent-300 mb-1">Loga Kowalski v reportu a patičce</h3>
                     <p>
                       Do patičky aplikace i do reportového dialogu byla přidána loga Kowalski
                       (králík a sýkora). Report má nově také vlastní záhlaví s datem a názvem
@@ -1405,9 +1594,9 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                   </div>
                 </section>
                 <section className="flex gap-3">
-                  <svg className="h-5 w-5 flex-shrink-0 mt-0.5 text-teal-700 dark:text-teal-300" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M3 4a1 1 0 011-1h12a1 1 0 011 1v2a1 1 0 01-.293.707L12 11.414V15a1 1 0 01-.293.707l-2 2A1 1 0 018 17v-5.586L3.293 6.707A1 1 0 013 6V4z" clipRule="evenodd" /></svg>
+                  <svg className="h-5 w-5 flex-shrink-0 mt-0.5 text-accent-700 dark:text-accent-300" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M3 4a1 1 0 011-1h12a1 1 0 011 1v2a1 1 0 01-.293.707L12 11.414V15a1 1 0 01-.293.707l-2 2A1 1 0 018 17v-5.586L3.293 6.707A1 1 0 013 6V4z" clipRule="evenodd" /></svg>
                   <div>
-                    <h3 className="font-semibold text-teal-700 dark:text-teal-300 mb-1">Minimap vždy viditelná</h3>
+                    <h3 className="font-semibold text-accent-700 dark:text-accent-300 mb-1">Minimap vždy viditelná</h3>
                     <p>
                       Přehledová lišta (minimapa) v MSA přehledu je nyní trvale zapnutá,
                       tlačítko pro její skrytí bylo odstraněno. Minimapa je klíčová pro
@@ -1416,9 +1605,9 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                   </div>
                 </section>
                 <section className="flex gap-3">
-                  <svg className="h-5 w-5 flex-shrink-0 mt-0.5 text-teal-700 dark:text-teal-300" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M4.083 9h1.754c.319-1.824.853-3.247 1.5-4.246A8.001 8.001 0 002 9c.083.386.197.755.339 1.108.572-.386 1.213-.69 1.744-.108zM10 2a8 8 0 100 16 8 8 0 000-16zm0 4c.99 0 1.683.763 2.072 1.5a8.46 8.46 0 01.43 1H7.498c.12-.34.265-.67.43-1C8.317 6.763 9.01 6 10 6zm-2.5 5a8.46 8.46 0 00.43 1c.389.737 1.082 1.5 2.07 1.5.988 0 1.681-.763 2.07-1.5a8.46 8.46 0 00.43-1h-5z" clipRule="evenodd" /></svg>
+                  <svg className="h-5 w-5 flex-shrink-0 mt-0.5 text-accent-700 dark:text-accent-300" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M4.083 9h1.754c.319-1.824.853-3.247 1.5-4.246A8.001 8.001 0 002 9c.083.386.197.755.339 1.108.572-.386 1.213-.69 1.744-.108zM10 2a8 8 0 100 16 8 8 0 000-16zm0 4c.99 0 1.683.763 2.072 1.5a8.46 8.46 0 01.43 1H7.498c.12-.34.265-.67.43-1C8.317 6.763 9.01 6 10 6zm-2.5 5a8.46 8.46 0 00.43 1c.389.737 1.082 1.5 2.07 1.5.988 0 1.681-.763 2.07-1.5a8.46 8.46 0 00.43-1h-5z" clipRule="evenodd" /></svg>
                   <div>
-                    <h3 className="font-semibold text-teal-700 dark:text-teal-300 mb-1">Oprava NCBI odkazů</h3>
+                    <h3 className="font-semibold text-accent-700 dark:text-accent-300 mb-1">Oprava NCBI odkazů</h3>
                     <p>
                       Odkazy z NCBI modalu (Whole genome / Coding region) už nekončí chybou 500
                       při načtení uložené relace. Parametry <code>RID</code> a <code>blast_rank</code>
@@ -1428,9 +1617,9 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                   </div>
                 </section>
                 <section className="flex gap-3">
-                  <svg className="h-5 w-5 flex-shrink-0 mt-0.5 text-teal-700 dark:text-teal-300" viewBox="0 0 20 20" fill="currentColor"><path d="M5 2a1 1 0 011 1v1h1a1 1 0 010 2H6v1a1 1 0 01-2 0V6H3a1 1 0 010-2h1V3a1 1 0 011-1zm0 10a1 1 0 011 1v1h1a1 1 0 110 2H6v1a1 1 0 11-2 0v-1H3a1 1 0 110-2h1v-1a1 1 0 011-1zM12 2a1 1 0 01.967.744L14.146 7.2A1 1 0 0114 8a1 1 0 01-2 0l-.073-.257H10.073L10 8a1 1 0 11-2 0l1.033-5.256A1 1 0 0110 2h2z" /></svg>
+                  <svg className="h-5 w-5 flex-shrink-0 mt-0.5 text-accent-700 dark:text-accent-300" viewBox="0 0 20 20" fill="currentColor"><path d="M5 2a1 1 0 011 1v1h1a1 1 0 010 2H6v1a1 1 0 01-2 0V6H3a1 1 0 010-2h1V3a1 1 0 011-1zm0 10a1 1 0 011 1v1h1a1 1 0 110 2H6v1a1 1 0 11-2 0v-1H3a1 1 0 110-2h1v-1a1 1 0 011-1zM12 2a1 1 0 01.967.744L14.146 7.2A1 1 0 0114 8a1 1 0 01-2 0l-.073-.257H10.073L10 8a1 1 0 11-2 0l1.033-5.256A1 1 0 0110 2h2z" /></svg>
                   <div>
-                    <h3 className="font-semibold text-teal-700 dark:text-teal-300 mb-1">Velká písmena ve flanking primerech</h3>
+                    <h3 className="font-semibold text-accent-700 dark:text-accent-300 mb-1">Velká písmena ve flanking primerech</h3>
                     <p>
                       Sekvence flanking primerů zůstávají při přesunu nebo změně velikosti
                       vždy velkými písmeny, místo aby se náhodně přepnuly na malá.
@@ -1438,9 +1627,9 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                   </div>
                 </section>
                 <section className="flex gap-3">
-                  <svg className="h-5 w-5 flex-shrink-0 mt-0.5 text-teal-700 dark:text-teal-300" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z" clipRule="evenodd" /></svg>
+                  <svg className="h-5 w-5 flex-shrink-0 mt-0.5 text-accent-700 dark:text-accent-300" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z" clipRule="evenodd" /></svg>
                   <div>
-                    <h3 className="font-semibold text-teal-700 dark:text-teal-300 mb-1">Přepínač vyhledávacího enginu Primer3 / Strider</h3>
+                    <h3 className="font-semibold text-accent-700 dark:text-accent-300 mb-1">Přepínač vyhledávacího enginu Primer3 / Strider</h3>
                     <p>
                       V nastavení (ozubené kolo) je nový přepínač <b>Search engine</b>:
                       <b>Primer3</b> (výchozí) nebo <b>Strider</b>. Vybraný engine řídí MOLigo
@@ -1470,7 +1659,7 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
             <div className="card shadow-xl max-w-md w-full p-6" onClick={e => e.stopPropagation()}>
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">Restore session?</h2>
-                <button onClick={rejectPendingSession} className="text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-200 text-xl leading-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700 dark:focus-visible:outline-teal-300">&times;</button>
+                <button onClick={rejectPendingSession} className="text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-200 text-xl leading-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-700 dark:focus-visible:outline-accent-300">&times;</button>
               </div>
               <div className="space-y-3 text-sm text-zinc-700 dark:text-zinc-300">
                 <div className="flex justify-between border-b border-zinc-200 dark:border-zinc-800 pb-2">
@@ -1545,7 +1734,7 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
             <span className="text-sm text-zinc-500 dark:text-zinc-400">Session reset.</span>
             <button
               onClick={handleUndo}
-              className="text-sm font-medium text-teal-700 dark:text-teal-300 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700 dark:focus-visible:outline-teal-300"
+              className="text-sm font-medium text-accent-700 dark:text-accent-300 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-700 dark:focus-visible:outline-accent-300"
             >
               Undo
             </button>
@@ -1559,14 +1748,14 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
           </p>
           <p>
             Contact:{' '}
-            <a href="mailto:rejtarv@gmail.com" className="text-teal-700 dark:text-teal-300 hover:underline">rejtarv@gmail.com</a>
+            <a href="mailto:rejtarv@gmail.com" className="text-accent-700 dark:text-accent-300 hover:underline">rejtarv@gmail.com</a>
             {' | '}
-            <a href="mailto:rejtarv@sci.muni.cz" className="text-teal-700 dark:text-teal-300 hover:underline">rejtarv@sci.muni.cz</a>
+            <a href="mailto:rejtarv@sci.muni.cz" className="text-accent-700 dark:text-accent-300 hover:underline">rejtarv@sci.muni.cz</a>
           </p>
           <p>In case of bugs or errors, please contact the author.</p>
           <p className="pt-1">
             Licensed under the{' '}
-            <a href="https://www.gnu.org/licenses/gpl-3.0.html" target="_blank" rel="noopener noreferrer" className="text-teal-700 dark:text-teal-300 hover:underline">
+            <a href="https://www.gnu.org/licenses/gpl-3.0.html" target="_blank" rel="noopener noreferrer" className="text-accent-700 dark:text-accent-300 hover:underline">
               GNU General Public License v3.0
             </a>.
           </p>

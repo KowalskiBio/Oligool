@@ -745,7 +745,7 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
             if (flankingPrimersA.rev) {
                 const rx = MINIMAP_LABEL_W + (flankingPrimersA.rev.start / anchorLen) * mmSeqW;
                 const rw = Math.max(2, ((flankingPrimersA.rev.end - flankingPrimersA.rev.start) / anchorLen) * mmSeqW);
-                ctx.fillStyle = '#14b8a6'; // teal-500
+                ctx.fillStyle = '#14b8a6'; // accent-500
                 ctx.fillRect(rx, mmRulerY, rw, 3);
             }
         }
@@ -1924,7 +1924,7 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
                                 targetScrollRef.current = 0;
                             }}
                             className={`px-3 py-1 text-xs font-medium transition-colors ${viewMode === 'bars'
-                                ? 'bg-teal-700/10 dark:bg-teal-300/10 text-teal-800 dark:text-teal-200'
+                                ? 'bg-accent-700/10 dark:bg-accent-300/10 text-accent-800 dark:text-accent-200'
                                 : 'bg-white dark:bg-zinc-900 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-700'
                                 }`}
                         >
@@ -1950,7 +1950,7 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
                                 targetScrollRef.current = clampedSL;
                             }}
                             className={`px-3 py-1 text-xs font-medium transition-colors border-l border-zinc-300 dark:border-zinc-800 ${viewMode === 'letters'
-                                ? 'bg-teal-700/10 dark:bg-teal-300/10 text-teal-800 dark:text-teal-200'
+                                ? 'bg-accent-700/10 dark:bg-accent-300/10 text-accent-800 dark:text-accent-200'
                                 : 'bg-white dark:bg-zinc-900 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-700'
                                 }`}
                         >
@@ -1975,7 +1975,7 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
                                 // Anchor to the left edge so the slider does not teleport the view.
                                 applyZoom(factor, 0);
                             }}
-                            className="w-24 h-1.5 accent-teal-700 dark:accent-teal-300"
+                            className="w-24 h-1.5 accent-accent-700 dark:accent-accent-300"
                             style={{ direction: 'rtl' }}
                         />
                         <button
@@ -2004,7 +2004,7 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
                             type="checkbox"
                             checked={autofindTreatIndelsAsMismatches}
                             onChange={(e) => onAutofindTreatIndelsAsMismatchesChange?.(e.target.checked)}
-                            className="rounded border-zinc-300 dark:border-zinc-700 text-teal-700 focus:ring-teal-700"
+                            className="rounded border-zinc-300 dark:border-zinc-700 text-accent-700 focus:ring-accent-700"
                         />
                         <span className="text-xs text-zinc-600 dark:text-zinc-400">
                             Count insertions/deletions as mismatches
@@ -2021,7 +2021,7 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
                                     key={`${region.start}-${region.end}`}
                                     data-testid="clean-region-pill"
                                     onClick={() => onAutofindRegionSelect?.(region.start, region.end)}
-                                    className="px-2.5 py-1 text-xs font-mono tabular-nums rounded-md border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 hover:border-teal-700/50 dark:hover:border-teal-300/50 hover:text-teal-800 dark:hover:text-teal-200 transition-colors"
+                                    className="px-2.5 py-1 text-xs font-mono tabular-nums rounded-md border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 hover:border-accent-700/50 dark:hover:border-accent-300/50 hover:text-accent-800 dark:hover:text-accent-200 transition-colors"
                                     title={`Jump to columns ${region.start + 1}–${region.end + 1}`}
                                 >
                                     {region.start + 1}–{region.end + 1}
@@ -2104,7 +2104,7 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
                     className="flex-1 h-1.5 bg-zinc-100 dark:bg-zinc-800 rounded-full overflow-hidden cursor-pointer relative"
                 >
                     <div
-                        className={`h-full bg-teal-600/60 dark:bg-teal-300/50 rounded-full transition-all ${isBarDragging ? 'duration-0' : 'duration-75'}`}
+                        className={`h-full bg-accent-600/60 dark:bg-accent-300/50 rounded-full transition-all ${isBarDragging ? 'duration-0' : 'duration-75'}`}
                         style={{ marginLeft: `${startFrac * 100}%`, width: `${viewFraction * 100}%` }}
                     />
                 </div>
@@ -2145,7 +2145,7 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
                     {/* ── Resizable Handle ── */}
                     <div
                         onMouseDown={handleResizeMouseDown}
-                        className={`absolute top-0 bottom-0 z-[30] w-1.5 cursor-col-resize hover:bg-teal-600/30 transition-colors ${isResizingLabel ? 'bg-teal-600/50' : 'bg-transparent'}`}
+                        className={`absolute top-0 bottom-0 z-[30] w-1.5 cursor-col-resize hover:bg-accent-600/30 transition-colors ${isResizingLabel ? 'bg-accent-600/50' : 'bg-transparent'}`}
                         style={{ left: `${labelWidth - 3}px` }}
                     />
                 </div>
