@@ -719,7 +719,7 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
 
         {/* NCBI API Key Settings */}
         {showSettings && (
-          <div className="mb-6 card">
+          <div id="uizze-credentials-section" className="mb-6 card">
             <div className="panel-header flex justify-between items-center rounded-t-lg">
               <h3 className="text-sm font-semibold text-zinc-700 dark:text-zinc-300">API Credentials</h3>
               <label className="flex items-center gap-2 cursor-pointer group">
@@ -739,7 +739,7 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                 </span>
               </label>
             </div>
-            <div id="uizze-credentials-section" className="p-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-3">
                 <div className="flex items-center gap-3">
                   <label className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider w-24">

@@ -16,6 +16,9 @@
 @variant dark (&:where(.dark, .dark *));
 
 @layer base {
+  html {
+    scroll-padding-top: 96px;
+  }
   body {
     @apply font-sans bg-zinc-100 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100 antialiased;
   }
