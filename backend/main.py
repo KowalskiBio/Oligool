@@ -292,6 +292,32 @@ except Exception as _exc:
     _strider_melting_temperature = None
 
 
+class _ResultCache:
+    """In-memory per-engine result memoization for ThermoEngine.mfe/pfunc.
+
+    The engine's own ``cache`` parameter (engine.py) is duck-typed: the public
+    mfe/pfunc methods call ``self.cache.get(key)`` / ``self.cache.set(key, result)``
+    when ``self.cache`` is truthy.  This dict-backed wrapper satisfies that
+    interface.  Because ``_thermo_engine_cached`` is itself lru_cached on
+    (material, celsius, sodium, magnesium, parameter_set, dangles), the same
+    engine instance (and its cache) is reused across requests for the same
+    conditions, so repeated analyses of the same primer sequence are instant.
+    A different paramset/salt/T yields a different engine and a fresh cache.
+    """
+
+    def __init__(self):
+        self._store: dict[str, object] = {}
+
+    def __bool__(self) -> bool:
+        return True
+
+    def get(self, key: str):
+        return self._store.get(key)
+
+    def set(self, key: str, value) -> None:
+        self._store[key] = value
+
+
 @lru_cache(maxsize=32)
 def _thermo_engine_cached(material: str, celsius: float, sodium_m: float, magnesium_m: float,
                          parameter_set_name: str = "native", dangles: int = 2):
@@ -301,15 +327,20 @@ def _thermo_engine_cached(material: str, celsius: float, sodium_m: float, magnes
     ``parameter_set_name`` selects the thermodynamic parameter set:
       "native"        — SantaLucia 2004 DNA parameters (strider's default)
       "mathews2004-dna" — Mathews 2004 DNA parameters (matches IDT/ViennaRNA)
+
+    The engine carries an in-memory ``_ResultCache`` so repeated mfe/pfunc calls
+    on the same sequence under the same conditions are memoized across requests
+    (e.g. the Mathews/SantaLucia toggle round-trip).
     """
     from strider import ThermoEngine
+    cache = _ResultCache()
     if parameter_set_name == "native":
         return ThermoEngine(material=material, celsius=celsius, sodium=sodium_m,
-                            magnesium=magnesium_m, dangles=dangles)
+                            magnesium=magnesium_m, dangles=dangles, cache=cache)
     from strider.thermo.parameters import load_parameters
     ps = load_parameters(parameter_set_name)
     return ThermoEngine(material=material, celsius=celsius, sodium=sodium_m,
-                        magnesium=magnesium_m, parameter_set=ps, dangles=dangles)
+                        magnesium=magnesium_m, parameter_set=ps, dangles=dangles, cache=cache)
 
 
 def strider_duplex_tm(seq, *, mv_conc, dv_conc, dntp_conc, dna_conc):
@@ -763,7 +794,7 @@ def _is_single_stem(structure: str) -> bool:
 
 def _run_strider_analysis(
     p1_seq: str,
-    p2_seq: str,
+    p2_seq: str | None,
     mv_conc: float,
     mg_conc: float,
     dntp_conc: float,
@@ -784,6 +815,9 @@ def _run_strider_analysis(
     Local_Tm, Local_DotBracket).  When real IDT data is passed, both IDT and
     Strider fields are enriched.  Returns the {m1, m2, pairwise} response shape
     used by both /idt/analyze and /strider/analyze.
+
+    When p2_seq is None, only m1 (hairpin + self-dimer) is computed; m2,
+    pairwise, and competition_m2 are returned as null.
     """
     # Use strider-dna for Mg2+-aware dot-bracket structure, local ΔG, and Tm
     try:
@@ -873,7 +907,7 @@ def _run_strider_analysis(
                         try:
                             # Ensemble math always uses native SantaLucia (eng_native), not the
                             # `parameter_set` toggle — same rule as the MFE dimer ΔG above.
-                            dimer_pfunc = eng_native.pfunc(seq1, seq2)
+                            dimer_pfunc = eng_native.pfunc(seq1, seq2, pair_probs=False)
                             # pfunc's ensemble ΔG keeps the ~1.96 kcal/mol duplex-init/association
                             # term (same convention as res.dH/res.dS) — this is the physically
                             # complete ΔG and is what solve_equilibrium (Part C) must use, since
@@ -953,7 +987,7 @@ def _run_strider_analysis(
                     viz_struct_raw = raw_mfe
                     viz_dg = round(float(mfe_result.energy), 2)
                     try:
-                        hairpin_pfunc = eng.pfunc(seq1)
+                        hairpin_pfunc = eng.pfunc(seq1, pair_probs=False)
                         ensemble_dg = round(float(hairpin_pfunc.free_energy), 2)
                         # eng.mfe() defaults to dangles=2 but pfunc() is always dangle-free, so
                         # the two independently-computed energies can occasionally disagree and
@@ -1092,9 +1126,12 @@ def _run_strider_analysis(
 
         m1_hairpin = add_strider_analysis(p1_seq, idt_m1_hairpin if idt_m1_hairpin is not None else [{}])
         m1_selfdimer = add_strider_analysis(p1_seq, idt_m1_selfdimer if idt_m1_selfdimer is not None else [{}], seq2=p1_seq)
-        m2_hairpin = add_strider_analysis(p2_seq, idt_m2_hairpin if idt_m2_hairpin is not None else [{}])
-        m2_selfdimer = add_strider_analysis(p2_seq, idt_m2_selfdimer if idt_m2_selfdimer is not None else [{}], seq2=p2_seq)
-        hetero = add_strider_analysis(p1_seq, idt_hetero if idt_hetero is not None else [{}], seq2=p2_seq)
+        if p2_seq is not None:
+            m2_hairpin = add_strider_analysis(p2_seq, idt_m2_hairpin if idt_m2_hairpin is not None else [{}])
+            m2_selfdimer = add_strider_analysis(p2_seq, idt_m2_selfdimer if idt_m2_selfdimer is not None else [{}], seq2=p2_seq)
+            hetero = add_strider_analysis(p1_seq, idt_hetero if idt_hetero is not None else [{}], seq2=p2_seq)
+        else:
+            m2_hairpin, m2_selfdimer, hetero = [{}], [{}], [{}]
     except Exception:
         logging.exception("strider-dna optimization error")
         # Fall back to raw IDT data (or empty) if Strider fails entirely.
@@ -1187,14 +1224,14 @@ def _run_strider_analysis(
             return None
         try:
             from strider.equilibrium import solve_equilibrium
-            monomer_a = eng_native.pfunc(seq_a).free_energy
+            monomer_a = eng_native.pfunc(seq_a, pair_probs=False).free_energy
             complexes = {
                 "A": (["A"], monomer_a),
                 "AA": (["A", "A"], selfdimer_dg),
             }
             totals = {"A": oligo_conc_m}
             if has_hetero and hetero_dg is not None:
-                monomer_b = eng_native.pfunc(seq_b).free_energy
+                monomer_b = eng_native.pfunc(seq_b, pair_probs=False).free_energy
                 complexes["B"] = (["B"], monomer_b)
                 complexes["AB"] = (["A", "B"], hetero_dg)
                 totals["B"] = oligo_conc_m
@@ -1222,16 +1259,19 @@ def _run_strider_analysis(
     # Ensemble_DeltaG_Native (association-term-kept) — not Ensemble_DeltaG
     # (the display-only, IDT-stripped value) — is what the mass-action solve
     # in _competition needs; see the dimer branch of add_strider_analysis.
-    _has_hetero = p1_seq != p2_seq
+    _has_hetero = p2_seq is not None and p1_seq != p2_seq
     _hetero_ens_dg = _first_field(hetero, "Ensemble_DeltaG_Native")
     competition_m1 = _competition(
         p1_seq, p2_seq, _first_field(m1_selfdimer, "Ensemble_DeltaG_Native"), _hetero_ens_dg, _has_hetero,
         _first_field(m1_hairpin, "Population_Fraction"),
     )
-    competition_m2 = _competition(
-        p2_seq, p1_seq, _first_field(m2_selfdimer, "Ensemble_DeltaG_Native"), _hetero_ens_dg, _has_hetero,
-        _first_field(m2_hairpin, "Population_Fraction"),
-    )
+    if p2_seq is not None:
+        competition_m2 = _competition(
+            p2_seq, p1_seq, _first_field(m2_selfdimer, "Ensemble_DeltaG_Native"), _hetero_ens_dg, _has_hetero,
+            _first_field(m2_hairpin, "Population_Fraction"),
+        )
+    else:
+        competition_m2 = None
 
     return {
         "m1": {
@@ -1423,10 +1463,9 @@ def analyze_strider_oligos(request: StriderAnalyzeRequest):
     and only Strider fields (Local_DeltaG, Local_Tm, Local_DotBracket) populated.
     When p2_seq is omitted, only m1 (hairpin + self-dimer) is computed.
     """
-    p2 = request.p2_seq or request.p1_seq  # self-pair fallback so m2 is always valid
     return _run_strider_analysis(
         p1_seq=request.p1_seq,
-        p2_seq=p2,
+        p2_seq=request.p2_seq,
         mv_conc=request.mv_conc,
         mg_conc=request.mg_conc,
         dntp_conc=request.dntp_conc,
