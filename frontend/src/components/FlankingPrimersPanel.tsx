@@ -497,7 +497,7 @@ export default function FlankingPrimersPanel({
         } finally {
             if (runId === striderPairRunRef.current) setIsAnalyzingStriderPair(false);
         }
-    }, [dvConc, mvConc, dntpConc, dnaConc]);
+    }, [dvConc, mvConc, dntpConc, dnaConc, idtCredentials?.parameterSet]);
 
     const [idtResultsIndiv, setIdtResultsIndiv] = useState<Record<string, any>>(restoredState?.idtResultsIndiv ?? {});
     const [analyzingIndiv, setAnalyzingIndiv] = useState<Record<string, boolean>>({});
@@ -607,7 +607,11 @@ export default function FlankingPrimersPanel({
                 setAnalyzingStriderIndiv(prev => ({ ...prev, [seq]: true }));
                 analyzeStriderIndividual(seq);
             });
+            if (selFwdSeq && selRevSeq) {
+                runStriderPairAnalysis(selFwdSeq, selRevSeq);
+            }
         }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [idtCredentials?.parameterSet]);
 
     // Primitive keys: primer3 salt params (mvConc, dvConc, dntpConc, dnaConc)
