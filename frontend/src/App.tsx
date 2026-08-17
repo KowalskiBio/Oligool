@@ -56,6 +56,7 @@ function App() {
     () => localStorage.getItem('search_engine') === 'strider' ? 'strider' : 'primer3'
   );
   const [showSettings, setShowSettings] = useState(false);
+  const [settingsTab, setSettingsTab] = useState<'account' | 'engine' | 'theme'>('account');
   const [maxHitsPreset, setMaxHitsPreset] = useState(() => localStorage.getItem('max_hits_preset') || '50');
   const [customHits, setCustomHits] = useState(() => localStorage.getItem('custom_hits') || '');
   const [organism, setOrganism] = useState(() => localStorage.getItem('organism') || '');
@@ -738,311 +739,333 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                 </svg>
               )}
             </button>
-            <div
-              className="flex items-center rounded-md border border-zinc-300 dark:border-zinc-700 overflow-hidden"
-              role="group"
-              aria-label="Account settings"
+            <button
+              onClick={() => setShowSettings(!showSettings)}
+              aria-label="Settings"
+              title="Settings"
+              className="icon-btn"
             >
-              <button
-                type="button"
-                onClick={() => { setShowSettings(true); requestAnimationFrame(() => document.getElementById('uizze-credentials-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' })); }}
-                title="Account & credentials (NCBI, IDT)"
-                className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent-700 dark:focus-visible:outline-accent-300"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                </svg>
-                Account
-              </button>
-              <button
-                type="button"
-                onClick={() => { setShowSettings(true); requestAnimationFrame(() => document.getElementById('uizze-searchengine-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' })); }}
-                title="Search engine (Primer3 / Strider)"
-                className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium border-l border-zinc-300 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent-700 dark:focus-visible:outline-accent-300"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-4.35-4.35M17 11a6 6 0 11-12 0 6 6 0 0112 0z" />
-                </svg>
-                Engine
-              </button>
-            </div>
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+            </button>
           </div>
         </header>
 
-        {/* NCBI API Key Settings */}
+        {/* Settings Dialog */}
         {showSettings && (
-          <div id="uizze-credentials-section" className="mb-6 card">
-            <div className="panel-header flex justify-between items-center rounded-t-lg">
-              <h3 className="text-sm font-semibold text-zinc-700 dark:text-zinc-300">API Credentials</h3>
-              <label className="flex items-center gap-2 cursor-pointer group">
-                <div className="relative">
-                  <input
-                    type="checkbox"
-                    className="sr-only"
-                    checked={showSecrets}
-                    onChange={(e) => setShowSecrets(e.target.checked)}
-                    aria-label="Show Secrets"
-                  />
-                  <div className={`block w-8 h-4 rounded-full transition-colors ${showSecrets ? 'bg-accent-700' : 'bg-zinc-300 dark:bg-zinc-700'}`}></div>
-                  <div className={`absolute left-0.5 top-0.5 bg-white w-3 h-3 rounded-full transition-transform ${showSecrets ? 'tranzinc-x-4' : ''}`}></div>
-                </div>
-                <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400 group-hover:text-zinc-700 dark:group-hover:text-zinc-300 transition-colors">
-                  Show Passwords
-                </span>
-              </label>
-            </div>
-            <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-3">
-                <div className="flex items-center gap-3">
-                  <label className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider w-24">
-                    NCBI Key
-                  </label>
-                  <input
-                    type={showSecrets ? "text" : "password"}
-                    value={apiKey}
-                    onChange={(e) => handleApiKeyChange(e.target.value)}
-                    placeholder="NCBI API key"
-                    className="input text-xs p-2 font-mono"
-                  />
-                </div>
-                <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
-                  Increases BLAST rate limit (3 → 10 req/s). Get from <a href="https://www.ncbi.nlm.nih.gov/account/settings/" target="_blank" rel="noopener noreferrer" className="text-accent-700 underline">NCBI Settings</a>.
-                </p>
-              </div>
-
-              <div className="space-y-3">
-                <div className="flex items-center gap-3">
-                  <label className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider w-24">
-                    IDT Client ID
-                  </label>
-                  <input
-                    type={showSecrets ? "text" : "password"}
-                    value={idtClientId}
-                    onChange={(e) => handleIdtIdChange(e.target.value)}
-                    placeholder="OligoAnalyzer Client ID"
-                    className="input text-xs p-2 font-mono"
-                  />
-                </div>
-                <div className="flex items-center gap-3">
-                  <label className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider w-24">
-                    IDT Secret
-                  </label>
-                  <input
-                    type={showSecrets ? "text" : "password"}
-                    value={idtClientSecret}
-                    onChange={(e) => handleIdtSecretChange(e.target.value)}
-                    placeholder="OligoAnalyzer Client Secret"
-                    className="input text-xs p-2 font-mono"
-                  />
-                </div>
-                <div className="flex items-center gap-3">
-                  <label className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider w-24">
-                    IDT User
-                  </label>
-                  <input
-                    type="text"
-                    value={idtUsername}
-                    onChange={(e) => handleIdtUsernameChange(e.target.value)}
-                    placeholder="IDT Username"
-                    className="input text-xs p-2 font-mono"
-                  />
-                </div>
-                <div className="flex items-center gap-3">
-                  <label className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider w-24">
-                    IDT Pass
-                  </label>
-                  <input
-                    type={showSecrets ? "text" : "password"}
-                    value={idtPassword}
-                    onChange={(e) => handleIdtPasswordChange(e.target.value)}
-                    placeholder="IDT Account Password"
-                    className="input text-xs p-2 font-mono"
-                  />
-                </div>
-                <div className="flex items-center gap-3">
-                  <label className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider w-24">
-                    IDT Region
-                  </label>
-                  <select
-                    value={idtRegion}
-                    onChange={(e) => handleIdtRegionChange(e.target.value as 'us' | 'eu')}
-                    className="input text-xs p-2 font-mono"
-                  >
-                    <option value="eu">EU (eu.idtdna.com)</option>
-                    <option value="us">US (www.idtdna.com)</option>
-                  </select>
-                </div>
-                <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
-                  Required for IDT OligoAnalyzer features. Obtain from <a href="https://www.idtdna.com/pages/scitools/plus-api" target="_blank" rel="noopener noreferrer" className="text-accent-700 underline">IDT SciTools Plus API</a>. US and EU accounts use separate IDT regions.
-                </p>
-              </div>
-            </div>
-            <div id="uizze-searchengine-section" className="border-t border-zinc-200 dark:border-zinc-800 p-4">
-              <div className="flex items-center gap-3 flex-wrap">
-                <label className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider w-24">
-                  Search engine
-                </label>
-                <div
-                  className="flex items-center rounded-md border border-zinc-300 dark:border-zinc-700 overflow-hidden"
-                  title="Engine for MOLigo quick search and flanking primer picking. Tm and picks follow the chosen engine's model; Primer3 is the default"
-                >
+          <div className="modal-overlay" onClick={() => setShowSettings(false)}>
+            <div
+              className="card max-w-2xl w-full h-[55vh] flex flex-col"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="panel-header flex items-center justify-between rounded-t-lg">
+                <div className="flex items-center gap-1">
                   {([
-                    ['primer3', 'Primer3'],
-                    ['strider', 'Strider'],
-                  ] as const).map(([value, label], idx) => (
+                    ['account', 'Account'],
+                    ['engine', 'Engine'],
+                    ['theme', 'Theme'],
+                  ] as const).map(([key, label]) => (
                     <button
-                      key={value}
-                      onClick={() => setSearchEngine(value)}
-                      className={`px-2.5 py-1 text-xs font-medium transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent-700 dark:focus-visible:outline-accent-300 ${idx > 0 ? 'border-l border-zinc-300 dark:border-zinc-700 ' : ''}${
-                        searchEngine === value
-                          ? 'bg-accent-700/10 dark:bg-accent-300/10 text-accent-800 dark:text-accent-200'
-                          : 'bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700'
-                      }`}
+                      key={key}
+                      onClick={() => setSettingsTab(key)}
+                      className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${settingsTab === key ? 'bg-accent-700/10 dark:bg-accent-300/10 text-accent-800 dark:text-accent-200' : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300'}`}
                     >
                       {label}
                     </button>
                   ))}
                 </div>
-                <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
-                  Tm and oligo picks follow the selected engine's model
-                </p>
-              </div>
-            </div>
-            <div id="uizze-theme-section" className="border-t border-zinc-200 dark:border-zinc-800 p-4">
-              <h3 className="text-sm font-semibold text-zinc-700 dark:text-zinc-300 mb-3">Theme</h3>
-              <div className="space-y-4">
-                <div>
-                  <label className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">
-                    Wallpaper
-                  </label>
-                  <div className="grid grid-cols-6 sm:grid-cols-9 gap-2 mt-2">
-                    <button
-                      onClick={() => setWallpaperUrl('')}
-                      className={`h-12 rounded-md border-2 flex items-center justify-center text-[10px] text-zinc-400 transition-colors ${!wallpaperUrl ? 'border-accent-600 dark:border-accent-300' : 'border-zinc-200 dark:border-zinc-700 hover:border-zinc-300 dark:hover:border-zinc-600'}`}
-                    >
-                      None
-                    </button>
-                    {WALLPAPERS.map((wp) => (
-                      <button
-                        key={wp}
-                        onClick={() => setWallpaperUrl(`/wallpapers/${wp}`)}
-                        className={`h-12 rounded-md border-2 overflow-hidden transition-all ${wallpaperUrl === `/wallpapers/${wp}` ? 'border-accent-600 dark:border-accent-300 ring-1 ring-accent-600 dark:ring-accent-300' : 'border-zinc-200 dark:border-zinc-700 hover:border-zinc-300 dark:hover:border-zinc-600'}`}
-                      >
-                        <img src={`/wallpapers/${wp}`} alt={wp} className="w-full h-full object-cover" loading="lazy" />
-                      </button>
-                    ))}
-                    <label
-                      className={`h-12 rounded-md border-2 flex items-center justify-center cursor-pointer transition-colors ${wallpaperUrl.startsWith('data:') ? 'border-accent-600 dark:border-accent-300' : 'border-zinc-200 dark:border-zinc-700 hover:border-zinc-300 dark:hover:border-zinc-600'}`}
-                    >
-                      <input
-                        type="file"
-                        accept="image/*"
-                        className="hidden"
-                        onChange={(e) => {
-                          const file = e.target.files?.[0];
-                          if (!file) return;
-                          const reader = new FileReader();
-                          reader.onload = () => {
-                            const url = reader.result as string;
-                            try { localStorage.setItem('wallpaper_url', url); }
-                            catch { localStorage.removeItem('wallpaper_url'); }
-                            setWallpaperUrl(url);
-                          };
-                          reader.readAsDataURL(file);
-                        }}
-                      />
-                      <svg className="w-4 h-4 text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
-                    </label>
-                  </div>
-                  {wallpaperUrl && (
-                    <div className="flex items-center gap-3 mt-3">
-                      <label className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider w-20">
-                        Opacity
-                      </label>
-                      <input
-                        type="range"
-                        min="0"
-                        max="100"
-                        value={wallpaperOpacity}
-                        onChange={(e) => setWallpaperOpacity(parseInt(e.target.value, 10))}
-                        className="flex-1 accent-accent-600 dark:accent-accent-300"
-                      />
-                      <span className="text-xs text-zinc-500 dark:text-zinc-400 w-10 text-right tabular-nums">{wallpaperOpacity}%</span>
-                    </div>
-                  )}
-                </div>
-                <div>
-                  <label className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">
-                    Accent color
-                  </label>
-                  <div className="flex items-center gap-2 mt-2">
-                    {Object.entries(ACCENT_PRESETS).map(([name, palette]) => (
-                      <button
-                        key={name}
-                        onClick={() => setAccentPreset(name)}
-                        className={`w-7 h-7 rounded-full border-2 transition-transform hover:scale-110 ${accentPreset === name ? 'border-zinc-900 dark:border-zinc-100 scale-110' : 'border-zinc-200 dark:border-zinc-700'}`}
-                        style={{ backgroundColor: palette['600'] }}
-                        title={name}
-                      />
-                    ))}
-                    <label
-                      className={`w-7 h-7 rounded-full border-2 flex items-center justify-center cursor-pointer transition-transform hover:scale-110 ${accentPreset === 'custom' ? 'border-zinc-900 dark:border-zinc-100 scale-110' : 'border-zinc-200 dark:border-zinc-700'}`}
-                      title="Custom color"
-                    >
-                      <input
-                        type="color"
-                        value={customAccentColor}
-                        onChange={(e) => { setCustomAccentColor(e.target.value); setAccentPreset('custom'); }}
-                        className="w-4 h-4 rounded-full cursor-pointer"
-                        style={{ appearance: 'none', border: 'none', background: 'transparent' }}
-                      />
-                    </label>
-                  </div>
-                </div>
-                <div>
-                  <label className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">
-                    Neutral palette
-                  </label>
-                  <div className="flex items-center gap-2 mt-2">
-                    {Object.entries(NEUTRAL_PRESETS).map(([name, palette]) => (
-                      <button
-                        key={name}
-                        onClick={() => setNeutralPreset(name)}
-                        className={`w-7 h-7 rounded-full border-2 transition-transform hover:scale-110 ${neutralPreset === name ? 'border-zinc-900 dark:border-zinc-100 scale-110' : 'border-zinc-200 dark:border-zinc-700'}`}
-                        style={{ backgroundColor: palette['500'] }}
-                        title={name}
-                      />
-                    ))}
-                    <label
-                      className={`w-7 h-7 rounded-full border-2 flex items-center justify-center cursor-pointer transition-transform hover:scale-110 ${neutralPreset === 'custom' ? 'border-zinc-900 dark:border-zinc-100 scale-110' : 'border-zinc-200 dark:border-zinc-700'}`}
-                      title="Custom color"
-                    >
-                      <input
-                        type="color"
-                        value={customNeutralColor}
-                        onChange={(e) => { setCustomNeutralColor(e.target.value); setNeutralPreset('custom'); }}
-                        className="w-4 h-4 rounded-full cursor-pointer"
-                        style={{ appearance: 'none', border: 'none', background: 'transparent' }}
-                      />
-                    </label>
-                  </div>
-                </div>
                 <button
-                  onClick={() => {
-                    setWallpaperUrl('');
-                    setWallpaperOpacity(20);
-                    setAccentPreset('teal');
-                    setNeutralPreset('zinc');
-                    setCustomAccentColor('#0d9488');
-                    setCustomNeutralColor('#71717a');
-                    clearThemeOverrides();
-                    localStorage.removeItem('custom_accent_color');
-                    localStorage.removeItem('custom_neutral_color');
-                  }}
-                  className="btn-secondary"
+                  onClick={() => setShowSettings(false)}
+                  className="icon-btn"
+                  aria-label="Close settings"
                 >
-                  Reset to defaults
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
                 </button>
+              </div>
+              <div className="overflow-y-auto p-4">
+                {settingsTab === 'account' && (
+                  <div id="uizze-credentials-section">
+                    <div className="flex items-center justify-between mb-3">
+                      <h3 className="text-sm font-semibold text-zinc-700 dark:text-zinc-300">API Credentials</h3>
+                      <label className="flex items-center gap-2 cursor-pointer group">
+                        <div className="relative">
+                          <input
+                            type="checkbox"
+                            className="sr-only"
+                            checked={showSecrets}
+                            onChange={(e) => setShowSecrets(e.target.checked)}
+                            aria-label="Show Secrets"
+                          />
+                          <div className={`block w-8 h-4 rounded-full transition-colors ${showSecrets ? 'bg-accent-700' : 'bg-zinc-300 dark:bg-zinc-700'}`}></div>
+                          <div className={`absolute left-0.5 top-0.5 bg-white w-3 h-3 rounded-full transition-transform ${showSecrets ? 'tranzinc-x-4' : ''}`}></div>
+                        </div>
+                        <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400 group-hover:text-zinc-700 dark:group-hover:text-zinc-300 transition-colors">
+                          Show Passwords
+                        </span>
+                      </label>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-3">
+                        <div className="flex items-center gap-3">
+                          <label className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider w-24">
+                            NCBI Key
+                          </label>
+                          <input
+                            type={showSecrets ? "text" : "password"}
+                            value={apiKey}
+                            onChange={(e) => handleApiKeyChange(e.target.value)}
+                            placeholder="NCBI API key"
+                            className="input text-xs p-2 font-mono"
+                          />
+                        </div>
+                        <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                          Increases BLAST rate limit (3 → 10 req/s). Get from <a href="https://www.ncbi.nlm.nih.gov/account/settings/" target="_blank" rel="noopener noreferrer" className="text-accent-700 underline">NCBI Settings</a>.
+                        </p>
+                      </div>
+                      <div className="space-y-3">
+                        <div className="flex items-center gap-3">
+                          <label className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider w-24">
+                            IDT Client ID
+                          </label>
+                          <input
+                            type={showSecrets ? "text" : "password"}
+                            value={idtClientId}
+                            onChange={(e) => handleIdtIdChange(e.target.value)}
+                            placeholder="OligoAnalyzer Client ID"
+                            className="input text-xs p-2 font-mono"
+                          />
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <label className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider w-24">
+                            IDT Secret
+                          </label>
+                          <input
+                            type={showSecrets ? "text" : "password"}
+                            value={idtClientSecret}
+                            onChange={(e) => handleIdtSecretChange(e.target.value)}
+                            placeholder="OligoAnalyzer Client Secret"
+                            className="input text-xs p-2 font-mono"
+                          />
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <label className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider w-24">
+                            IDT User
+                          </label>
+                          <input
+                            type="text"
+                            value={idtUsername}
+                            onChange={(e) => handleIdtUsernameChange(e.target.value)}
+                            placeholder="IDT Username"
+                            className="input text-xs p-2 font-mono"
+                          />
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <label className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider w-24">
+                            IDT Pass
+                          </label>
+                          <input
+                            type={showSecrets ? "text" : "password"}
+                            value={idtPassword}
+                            onChange={(e) => handleIdtPasswordChange(e.target.value)}
+                            placeholder="IDT Account Password"
+                            className="input text-xs p-2 font-mono"
+                          />
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <label className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider w-24">
+                            IDT Region
+                          </label>
+                          <select
+                            value={idtRegion}
+                            onChange={(e) => handleIdtRegionChange(e.target.value as 'us' | 'eu')}
+                            className="input text-xs p-2 font-mono"
+                          >
+                            <option value="eu">EU (eu.idtdna.com)</option>
+                            <option value="us">US (www.idtdna.com)</option>
+                          </select>
+                        </div>
+                        <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                          Required for IDT OligoAnalyzer features. Obtain from <a href="https://www.idtdna.com/pages/scitools/plus-api" target="_blank" rel="noopener noreferrer" className="text-accent-700 underline">IDT SciTools Plus API</a>. US and EU accounts use separate IDT regions.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+                {settingsTab === 'engine' && (
+                  <div id="uizze-searchengine-section">
+                    <h3 className="text-sm font-semibold text-zinc-700 dark:text-zinc-300 mb-3">Search Engine</h3>
+                    <div className="flex items-center gap-3 flex-wrap">
+                      <label className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider w-24">
+                        Engine
+                      </label>
+                      <div
+                        className="flex items-center rounded-md border border-zinc-300 dark:border-zinc-700 overflow-hidden"
+                        title="Engine for MOLigo quick search and flanking primer picking. Tm and picks follow the chosen engine's model; Primer3 is the default"
+                      >
+                        {([
+                          ['primer3', 'Primer3'],
+                          ['strider', 'Strider'],
+                        ] as const).map(([value, label], idx) => (
+                          <button
+                            key={value}
+                            onClick={() => setSearchEngine(value)}
+                            className={`px-2.5 py-1 text-xs font-medium transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent-700 dark:focus-visible:outline-accent-300 ${idx > 0 ? 'border-l border-zinc-300 dark:border-zinc-700 ' : ''}${
+                              searchEngine === value
+                                ? 'bg-accent-700/10 dark:bg-accent-300/10 text-accent-800 dark:text-accent-200'
+                                : 'bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700'
+                            }`}
+                          >
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+                      <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                        Tm and oligo picks follow the selected engine's model
+                      </p>
+                    </div>
+                  </div>
+                )}
+                {settingsTab === 'theme' && (
+                  <div id="uizze-theme-section">
+                    <h3 className="text-sm font-semibold text-zinc-700 dark:text-zinc-300 mb-3">Theme</h3>
+                    <div className="space-y-4">
+                      <div>
+                        <label className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">
+                          Wallpaper
+                        </label>
+                        <div className="grid grid-cols-6 sm:grid-cols-9 gap-2 mt-2">
+                          <button
+                            onClick={() => setWallpaperUrl('')}
+                            className={`h-12 rounded-md border-2 flex items-center justify-center text-[10px] text-zinc-400 transition-colors ${!wallpaperUrl ? 'border-accent-600 dark:border-accent-300' : 'border-zinc-200 dark:border-zinc-700 hover:border-zinc-300 dark:hover:border-zinc-600'}`}
+                          >
+                            None
+                          </button>
+                          {WALLPAPERS.map((wp) => (
+                            <button
+                              key={wp}
+                              onClick={() => setWallpaperUrl(`/wallpapers/${wp}`)}
+                              className={`h-12 rounded-md border-2 overflow-hidden transition-all ${wallpaperUrl === `/wallpapers/${wp}` ? 'border-accent-600 dark:border-accent-300 ring-1 ring-accent-600 dark:ring-accent-300' : 'border-zinc-200 dark:border-zinc-700 hover:border-zinc-300 dark:hover:border-zinc-600'}`}
+                            >
+                              <img src={`/wallpapers/${wp}`} alt={wp} className="w-full h-full object-cover" loading="lazy" />
+                            </button>
+                          ))}
+                          <label
+                            className={`h-12 rounded-md border-2 flex items-center justify-center cursor-pointer transition-colors ${wallpaperUrl.startsWith('data:') ? 'border-accent-600 dark:border-accent-300' : 'border-zinc-200 dark:border-zinc-700 hover:border-zinc-300 dark:hover:border-zinc-600'}`}
+                          >
+                            <input
+                              type="file"
+                              accept="image/*"
+                              className="hidden"
+                              onChange={(e) => {
+                                const file = e.target.files?.[0];
+                                if (!file) return;
+                                const reader = new FileReader();
+                                reader.onload = () => {
+                                  const url = reader.result as string;
+                                  try { localStorage.setItem('wallpaper_url', url); }
+                                  catch { localStorage.removeItem('wallpaper_url'); }
+                                  setWallpaperUrl(url);
+                                };
+                                reader.readAsDataURL(file);
+                              }}
+                            />
+                            <svg className="w-4 h-4 text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
+                          </label>
+                        </div>
+                        {wallpaperUrl && (
+                          <div className="flex items-center gap-3 mt-3">
+                            <label className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider w-20">
+                              Opacity
+                            </label>
+                            <input
+                              type="range"
+                              min="0"
+                              max="100"
+                              value={wallpaperOpacity}
+                              onChange={(e) => setWallpaperOpacity(parseInt(e.target.value, 10))}
+                              className="flex-1 accent-accent-600 dark:accent-accent-300"
+                            />
+                            <span className="text-xs text-zinc-500 dark:text-zinc-400 w-10 text-right tabular-nums">{wallpaperOpacity}%</span>
+                          </div>
+                        )}
+                      </div>
+                      <div>
+                        <label className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">
+                          Accent color
+                        </label>
+                        <div className="flex items-center gap-2 mt-2">
+                          {Object.entries(ACCENT_PRESETS).map(([name, palette]) => (
+                            <button
+                              key={name}
+                              onClick={() => setAccentPreset(name)}
+                              className={`w-7 h-7 rounded-full border-2 transition-transform hover:scale-110 ${accentPreset === name ? 'border-zinc-900 dark:border-zinc-100 scale-110' : 'border-zinc-200 dark:border-zinc-700'}`}
+                              style={{ backgroundColor: palette['600'] }}
+                              title={name}
+                            />
+                          ))}
+                          <label
+                            className={`w-7 h-7 rounded-full border-2 flex items-center justify-center cursor-pointer transition-transform hover:scale-110 ${accentPreset === 'custom' ? 'border-zinc-900 dark:border-zinc-100 scale-110' : 'border-zinc-200 dark:border-zinc-700'}`}
+                            title="Custom color"
+                          >
+                            <input
+                              type="color"
+                              value={customAccentColor}
+                              onChange={(e) => { setCustomAccentColor(e.target.value); setAccentPreset('custom'); }}
+                              className="w-4 h-4 rounded-full cursor-pointer"
+                              style={{ appearance: 'none', border: 'none', background: 'transparent' }}
+                            />
+                          </label>
+                        </div>
+                      </div>
+                      <div>
+                        <label className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">
+                          Neutral palette
+                        </label>
+                        <div className="flex items-center gap-2 mt-2">
+                          {Object.entries(NEUTRAL_PRESETS).map(([name, palette]) => (
+                            <button
+                              key={name}
+                              onClick={() => setNeutralPreset(name)}
+                              className={`w-7 h-7 rounded-full border-2 transition-transform hover:scale-110 ${neutralPreset === name ? 'border-zinc-900 dark:border-zinc-100 scale-110' : 'border-zinc-200 dark:border-zinc-700'}`}
+                              style={{ backgroundColor: palette['500'] }}
+                              title={name}
+                            />
+                          ))}
+                          <label
+                            className={`w-7 h-7 rounded-full border-2 flex items-center justify-center cursor-pointer transition-transform hover:scale-110 ${neutralPreset === 'custom' ? 'border-zinc-900 dark:border-zinc-100 scale-110' : 'border-zinc-200 dark:border-zinc-700'}`}
+                            title="Custom color"
+                          >
+                            <input
+                              type="color"
+                              value={customNeutralColor}
+                              onChange={(e) => { setCustomNeutralColor(e.target.value); setNeutralPreset('custom'); }}
+                              className="w-4 h-4 rounded-full cursor-pointer"
+                              style={{ appearance: 'none', border: 'none', background: 'transparent' }}
+                            />
+                          </label>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => {
+                          setWallpaperUrl('');
+                          setWallpaperOpacity(20);
+                          setAccentPreset('teal');
+                          setNeutralPreset('zinc');
+                          setCustomAccentColor('#0d9488');
+                          setCustomNeutralColor('#71717a');
+                          clearThemeOverrides();
+                          localStorage.removeItem('custom_accent_color');
+                          localStorage.removeItem('custom_neutral_color');
+                        }}
+                        className="btn-secondary"
+                      >
+                        Reset to defaults
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </div>
