@@ -68,6 +68,10 @@ frontend_dir = get_frontend_dir()
 if os.path.exists(os.path.join(frontend_dir, "assets")):
     app.mount("/assets", StaticFiles(directory=os.path.join(frontend_dir, "assets")), name="assets")
 
+    wallpapers_dir = os.path.join(frontend_dir, "wallpapers")
+    if os.path.exists(wallpapers_dir):
+        app.mount("/wallpapers", StaticFiles(directory=wallpapers_dir), name="wallpapers")
+
     @app.get("/")
     def serve_index():
         return FileResponse(os.path.join(frontend_dir, "index.html"))
