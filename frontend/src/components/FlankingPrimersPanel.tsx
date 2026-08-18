@@ -1549,11 +1549,11 @@ export default function FlankingPrimersPanel({
                                                     {renderResultCard("Right Primer Stability (Hairpin/Self)", (idtResults || striderPairResults).m2.hairpin)}
                                                     {renderResultCard("HeteroDimer Pairwise", (idtResults || striderPairResults).pairwise)}
                                                 </div>
-                                                {idtCredentials && !idtResults && !isAnalyzing && (
+                                                {idtCredentials && !isAnalyzing && (
                                                     <div className="mt-4 flex justify-center">
                                                         <button onClick={() => runProductAnalysis(selFwdSeq!, selRevSeq!)}
-                                                            className="text-xs px-3 py-1.5 rounded-md border border-blue-600/40 text-blue-700 dark:text-blue-300 hover:bg-blue-700/10 dark:hover:bg-blue-300/10 font-bold transition-all">
-                                                            Run IDT Pair Analysis
+                                                            className={`text-xs px-3 py-1.5 rounded-md border font-bold transition-all ${idtResults ? 'border-blue-600 dark:border-blue-400 text-blue-600 dark:text-blue-400 bg-blue-600/10 dark:bg-blue-400/10' : 'border-blue-600/40 text-blue-700 dark:text-blue-300 hover:bg-blue-700/10 dark:hover:bg-blue-300/10'}`}>
+                                                            {idtResults ? '↻ Re-run IDT Pair Analysis' : 'Run IDT Pair Analysis'}
                                                         </button>
                                                     </div>
                                                 )}
