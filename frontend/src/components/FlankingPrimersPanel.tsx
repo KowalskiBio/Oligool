@@ -41,6 +41,8 @@ interface Props {
     onPanelStateChange?: (state: FlankingPanelState) => void;
     searchEngine?: 'primer3' | 'strider';
     onParameterSetChange?: (value: string) => void;
+    /** Bumped by the parent when the user explicitly asks for a fresh design ("Proceed with the Design"). */
+    redesignNonce?: number;
 }
 
 const API = ((import.meta.env.VITE_API_BASE as string) || '');
@@ -67,7 +69,7 @@ export default function FlankingPrimersPanel({
     p1Start, p1End, p2Start, p2End,
     alignment, oligoPrimers, navigateTarget, isDarkMode,
     idtCredentials, gappedData, onFlankingPrimersUpdate,
-    restoredState, onPanelStateChange, searchEngine, onParameterSetChange
+    restoredState, onPanelStateChange, searchEngine, onParameterSetChange, redesignNonce
 }: Props) {
     // Primer3 params : initialized from a restored session when present
     const rp = restoredState?.params ?? FLANKING_PANEL_DEFAULTS.params;
@@ -161,7 +163,45 @@ export default function FlankingPrimersPanel({
         }
     };
 
-    const design = async (signal?: AbortSignal) => {
+    type ManualRegionCoords = {
+        leftStart: number | null; leftEnd: number | null;
+        rightStart: number | null; rightEnd: number | null;
+    };
+
+    // A manual region is stale once the oligo overlaps it (the oligo moved after the
+    // user picked the region), because the backend anchors the design to manual
+    // coordinates whenever they are present and would ignore the new oligo position.
+    // Returns the post-clear coordinates so callers need not wait for state to settle.
+    const [staleManualNote, setStaleManualNote] = useState(false);
+    const staleNoteTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const clearStaleManualRegions = (oStart: number, oEnd: number): ManualRegionCoords => {
+        const manual: ManualRegionCoords = {
+            leftStart: manualLeftStart, leftEnd: manualLeftEnd,
+            rightStart: manualRightStart, rightEnd: manualRightEnd,
+        };
+        let cleared = false;
+        if (manualLeftStart !== null && manualLeftEnd !== null && manualLeftEnd > oStart) {
+            setManualLeftStart(null); setManualLeftEnd(null);
+            manual.leftStart = null; manual.leftEnd = null;
+            cleared = true;
+        }
+        if (manualRightStart !== null && manualRightEnd !== null && manualRightStart < oEnd) {
+            setManualRightStart(null); setManualRightEnd(null);
+            manual.rightStart = null; manual.rightEnd = null;
+            cleared = true;
+        }
+        if (cleared) {
+            setStaleManualNote(true);
+            if (staleNoteTimeoutRef.current !== null) clearTimeout(staleNoteTimeoutRef.current);
+            staleNoteTimeoutRef.current = setTimeout(() => setStaleManualNote(false), 8000);
+        }
+        return manual;
+    };
+
+    const design = async (signal?: AbortSignal, manual: ManualRegionCoords = {
+        leftStart: manualLeftStart, leftEnd: manualLeftEnd,
+        rightStart: manualRightStart, rightEnd: manualRightEnd,
+    }) => {
         setLoading(true); setError(''); setResult(null); setSelFwd(null); setSelRev(null);
         try {
             const res = await fetch(API + '/flanking_primers/design', {
@@ -176,8 +216,8 @@ export default function FlankingPrimersPanel({
                     opt_tm: optTm, min_tm: minTm, max_tm: maxTm,
                     min_gc: minGc, max_gc: maxGc, num_return: numReturn,
                     mv_conc: mvConc, dv_conc: dvConc, dntp_conc: dntpConc, dna_conc: dnaConc,
-                    manual_left_start: manualLeftStart, manual_left_end: manualLeftEnd,
-                    manual_right_start: manualRightStart, manual_right_end: manualRightEnd,
+                    manual_left_start: manual.leftStart, manual_left_end: manual.leftEnd,
+                    manual_right_start: manual.rightStart, manual_right_end: manual.rightEnd,
                 }),
             });
             if (!res.ok) { const e = await res.json(); throw new Error(e.detail || 'Design failed'); }
@@ -199,23 +239,47 @@ export default function FlankingPrimersPanel({
         const oligoChanged = prevOligoRef.current.start !== oligoStart || prevOligoRef.current.end !== oligoEnd;
         const engineChanged = prevEngineRef.current !== searchEngine;
         if (!oligoChanged && !engineChanged) return;
+        const manual = clearStaleManualRegions(oligoStart, oligoEnd);
+        if (manual.leftStart !== null || manual.rightStart !== null) {
+            // The prev refs stay behind on purpose: when the user later clears the
+            // manual regions, this effect re-runs and the pending change designs.
+            return;
+        }
         prevOligoRef.current = { start: oligoStart, end: oligoEnd };
         prevEngineRef.current = searchEngine;
-        if (manualLeftStart !== null || manualRightStart !== null) return;
         if (designDebounceRef.current !== null) clearTimeout(designDebounceRef.current);
         designDebounceRef.current = setTimeout(() => {
             designDebounceRef.current = null;
             designAbortRef.current?.abort();
             const ac = new AbortController();
             designAbortRef.current = ac;
-            design(ac.signal);
+            design(ac.signal, manual);
         }, 300);
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [oligoStart, oligoEnd, searchEngine]);
+    }, [oligoStart, oligoEnd, searchEngine, manualLeftStart, manualLeftEnd, manualRightStart, manualRightEnd]);
+
+    // "Proceed with the Design" bumps redesignNonce: that click means "recalculate
+    // around the oligo now", so it runs one design even when the bounds did not
+    // change (the panel may have been closed while the oligo moved).
+    const lastHandledNonceRef = useRef<number | null>(null);
+    useEffect(() => {
+        if (!redesignNonce || lastHandledNonceRef.current === redesignNonce) return;
+        lastHandledNonceRef.current = redesignNonce;
+        const manual = clearStaleManualRegions(oligoStart, oligoEnd);
+        prevOligoRef.current = { start: oligoStart, end: oligoEnd };
+        prevEngineRef.current = searchEngine;
+        if (designDebounceRef.current !== null) { clearTimeout(designDebounceRef.current); designDebounceRef.current = null; }
+        designAbortRef.current?.abort();
+        const ac = new AbortController();
+        designAbortRef.current = ac;
+        design(ac.signal, manual);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [redesignNonce]);
 
     // Tear down pending auto-design work on unmount
     useEffect(() => () => {
         if (designDebounceRef.current !== null) clearTimeout(designDebounceRef.current);
+        if (staleNoteTimeoutRef.current !== null) clearTimeout(staleNoteTimeoutRef.current);
         designAbortRef.current?.abort();
     }, []);
 
@@ -1376,6 +1440,14 @@ export default function FlankingPrimersPanel({
                             </div>
                         )}
                     </div>
+                    {staleManualNote && (
+                        <div className="px-4 py-1.5 bg-amber-50 dark:bg-amber-900/20 border-b border-amber-200 dark:border-amber-800 flex items-center justify-between gap-2">
+                            <span className="text-[11px] font-medium text-amber-700 dark:text-amber-300">
+                                Manual regions cleared: they no longer flank the oligo after it moved.
+                            </span>
+                            <button onClick={() => setStaleManualNote(false)} className="text-amber-400 hover:text-amber-600 dark:hover:text-amber-200 text-xs px-1">✕</button>
+                        </div>
+                    )}
                     
                     <div
                         ref={containerRef}

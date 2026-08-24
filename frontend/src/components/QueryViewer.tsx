@@ -243,6 +243,7 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
     const [searchOligo2Seq, setSearchOligo2Seq] = useState('');
     const [searchOligoError, setSearchOligoError] = useState<string | null>(null);
     const [showFlankingPrimers, setShowFlankingPrimers] = useState(false);
+    const [flankDesignNonce, setFlankDesignNonce] = useState(0);
     const [flankingPrimersData, setFlankingPrimersData] = useState<{
         fwd: { start: number; end: number } | null;
         rev: { start: number; end: number } | null;
@@ -656,6 +657,7 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
         setRevPrimer(s.revPrimer);
         setSavedPositions(s.savedPositions || []);
         setInteractiveFlankWindow(s.interactiveFlankWindow);
+        setFlankDesignNonce(0);
         setShowFlankingPrimers(s.showFlankingPrimers);
         lastShiftsApplied.current = { s1: s.moligo1Shift, s2: s.moligo2Shift };
         if (s.currentOligo) {
@@ -1654,7 +1656,7 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
         // Extract DG and Visual from the structure { DeltaG, all_DeltaG, raw }
         let raw = data.raw;
         // Summary line shows Ensemble ΔG (the full competing-structure-pool
-        // strength), not the single best structure's IDT ΔG — more representative
+        // strength), not the single best structure's IDT ΔG. It's more representative
         // than any one candidate. Covers both response shapes: a plain dict has
         // Ensemble_DeltaG directly, an array response carries it as the first
         // (best) entry of all_Ensemble_DeltaG.
@@ -1832,7 +1834,7 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
         if (!competition) return null;
         // P_Hairpin is a *subset* of P_Free (the fraction of the non-dimerized
         // population that happens to be in the MFE hairpin fold), not a disjoint
-        // category — subtract it out here so the bar's segments are mutually
+        // category; subtract it out here so the bar's segments are mutually
         // exclusive and actually sum to ~100% instead of double-counting it.
         const pHairpin = competition.P_Hairpin ?? 0;
         const pFreeOpen = Math.max(0, (competition.P_Free ?? 0) - pHairpin);
@@ -1846,8 +1848,8 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
         if (shown.length === 0) return null;
         // Distinguish "computed but negligible" (a real number that just rounds
         // to ~0%, e.g. two oligos barely form a heterodimer at this concentration)
-        // from "not applicable" (P_HeteroDimer is null/undefined — single-oligo
-        // mode, or no pairing was found at all) — otherwise a genuinely-tiny-but
+        // from "not applicable" (P_HeteroDimer is null/undefined: single-oligo
+        // mode, or no pairing was found at all), otherwise a genuinely-tiny-but
         // -real value looks identical to n/a and this exact question comes up.
         const wasComputed: Record<string, boolean> = {
             Hairpin: competition.P_Hairpin !== null && competition.P_Hairpin !== undefined,
@@ -1878,7 +1880,7 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                     ))}
                 </div>
                 {competition.Converged === false && (
-                    <div className="text-[9px] text-amber-500 mt-0.5 italic">Equilibrium solve did not fully converge — treat as approximate.</div>
+                    <div className="text-[9px] text-amber-500 mt-0.5 italic">Equilibrium solve did not fully converge, treat as approximate.</div>
                 )}
             </div>
         );
@@ -2877,6 +2879,7 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                                 if (!fixedAbsCoords) {
                                     toggleFixPosition();
                                 }
+                                setFlankDesignNonce(n => n + 1);
                                 setShowFlankingPrimers(true);
                                 setTimeout(() => {
                                     document.getElementById('flanking-primers-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -2942,6 +2945,7 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                     onPanelStateChange={onFlankingPanelStateChange}
                     searchEngine={searchEngine}
                     onParameterSetChange={onParameterSetChange}
+                    redesignNonce={flankDesignNonce}
                 />
             </div>
         )}
