@@ -1319,8 +1319,8 @@ export default function FlankingPrimersPanel({
     // ── Primer result card ───────────────────────────────────────────────────
     const renderCard = (p: DesignedPrimer, side: 'fwd' | 'rev', idx: number) => {
         const isSelected = side === 'fwd' ? selFwd?.sequence === p.sequence : selRev?.sequence === p.sequence;
-        const statusDg = (dg: number | null) => {
-            if (dg === null) return 'text-zinc-400';
+        const statusDg = (dg: number | null | undefined) => {
+            if (dg == null) return 'text-zinc-400';
             if (dg < -6) return 'text-red-500';
             if (dg < -3) return 'text-amber-500';
             return 'text-emerald-500';
@@ -1393,9 +1393,12 @@ export default function FlankingPrimersPanel({
                         const isStrider = searchEngine === 'strider';
                         const tmStrider = p.hairpin?.tm_strider;
                         const tmP3 = p.primer3?.hairpin_th ?? p.hairpin?.tm;
-                        const found = isStrider ? tmStrider != null : p.hairpin.structure_found;
-                        const tm = isStrider ? tmStrider : tmP3;
-                        return <span className={`font-mono tabular-nums font-medium ${found ? 'text-amber-500' : 'text-emerald-500'}`}>{found && tm != null ? `${tm}°C` : 'None'}</span>;
+                        const hasStructure = p.hairpin?.structure_found || (p.hairpin?.dg != null && p.hairpin.dg < 0);
+                        const indivHairpinTm = indivResult?.hairpin?.Local_Tm ?? null;
+                        const tm = isStrider ? (tmStrider ?? indivHairpinTm) : tmP3;
+                        const validTm = tm != null && tm !== 0;
+                        const showTm = hasStructure && validTm;
+                        return <span className={`font-mono tabular-nums font-medium ${showTm ? 'text-amber-500' : 'text-emerald-500'}`}>{showTm ? `${tm}°C` : 'None'}</span>;
                     })()}</div>
                     <div><span className="text-zinc-600 dark:text-zinc-300">Self-dimer</span><br /><span className={`font-mono tabular-nums font-medium ${statusDg(searchEngine === 'strider' ? p.strider?.homodimer_dg : p.homodimer?.dg)}`}>{searchEngine === 'strider' ? (p.strider?.homodimer_dg != null ? `${p.strider.homodimer_dg} kcal` : 'OK') : (p.homodimer?.dg !== null && p.homodimer?.dg !== undefined ? `${p.homodimer.dg} kcal` : 'OK')}</span></div>
                 </div>
