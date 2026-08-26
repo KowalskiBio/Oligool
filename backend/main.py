@@ -373,6 +373,32 @@ def strider_duplex_tm(seq, *, mv_conc, dv_conc, dntp_conc, dna_conc):
     return round(tm, 1)
 
 
+def strider_hairpin_tm(seq, *, mv_conc, dv_conc, dntp_conc):
+    """Hairpin Tm (°C) from strider's unimolecular two-state model.
+
+    Folds the sequence to find the MFE hairpin structure, then computes Tm
+    via hairpin_thermo (Mg2+-aware, concentration-independent). Returns None
+    when strider is unavailable or no stable hairpin structure exists.
+    """
+    if _strider_melting_temperature is None or not seq:
+        return None
+    try:
+        from strider.thermo.hairpin import hairpin_thermo
+        mv_m = float(mv_conc) / 1000.0
+        mg_m = max(0.0, float(dv_conc) - float(dntp_conc)) / 1000.0
+        eng = _thermo_engine_cached('dna', 25.0, mv_m, mg_m)
+        mfe = eng.mfe(seq)
+        if '(' not in mfe.structure:
+            return None
+        res = hairpin_thermo(seq, sodium_M=mv_m, magnesium_M=mg_m,
+                             structure=mfe.structure, dangles=2)
+        t = res.tm_celsius
+        return round(t, 1) if t and t > 1.0 else None
+    except Exception:
+        logging.exception("strider hairpin_tm failed for %s", seq)
+        return None
+
+
 class MoligizeRequest(BaseModel):
     sequence: str
     moligo1_shift: int = 0
@@ -1685,7 +1711,7 @@ def design_flanking_primers(req: FlankingPrimerParams):
             "gc_percent": _round(_gc(s), 1),
             "tm":         _round(tm, 1),
             "tm_strider": strider_duplex_tm(s, **kwargs),
-            "hairpin":  {"structure_found": bool(getattr(hp, "structure_found", False)), "tm": _round(getattr(hp, "tm", None), 1), "dg": _round((getattr(hp, "dg", None) or 0) / 1000, 2)},
+            "hairpin":  {"structure_found": bool(getattr(hp, "structure_found", False)), "tm": _round(getattr(hp, "tm", None), 1), "dg": _round((getattr(hp, "dg", None) or 0) / 1000, 2), "tm_strider": strider_hairpin_tm(s, mv_conc=kwargs["mv_conc"], dv_conc=kwargs["dv_conc"], dntp_conc=kwargs["dntp_conc"])},
             "homodimer":{"structure_found": bool(getattr(hd, "structure_found", False)), "tm": _round(getattr(hd, "tm", None), 1), "dg": _round((getattr(hd, "dg", None) or 0) / 1000, 2)},
         }
 
