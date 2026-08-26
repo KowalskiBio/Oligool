@@ -786,7 +786,7 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
               </div>
               <div className="overflow-y-auto p-4">
                 {settingsTab === 'account' && (
-                  <div id="uizze-credentials-section">
+                  <div>
                     <div className="flex items-center justify-between mb-3">
                       <h3 className="text-sm font-semibold text-zinc-700 dark:text-zinc-300">API Credentials</h3>
                       <label className="flex items-center gap-2 cursor-pointer group">
@@ -894,7 +894,7 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                   </div>
                 )}
                 {settingsTab === 'engine' && (
-                  <div id="uizze-searchengine-section">
+                  <div>
                     <h3 className="text-sm font-semibold text-zinc-700 dark:text-zinc-300 mb-3">Search Engine</h3>
                     <div className="flex items-center gap-3 flex-wrap">
                       <label className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider w-24">
@@ -928,7 +928,7 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                   </div>
                 )}
                 {settingsTab === 'theme' && (
-                  <div id="uizze-theme-section">
+                  <div>
                     <h3 className="text-sm font-semibold text-zinc-700 dark:text-zinc-300 mb-3">Theme</h3>
                     <div className="space-y-4">
                       <div>
