@@ -1384,14 +1384,20 @@ export default function FlankingPrimersPanel({
                         </button>
                     </div>
                 </div>
-                <div className="grid grid-cols-7 gap-1 text-xs text-zinc-500 dark:text-zinc-400">
+                <div className="grid grid-cols-6 gap-1 text-xs text-zinc-500 dark:text-zinc-400">
                     <div><span className="text-zinc-600 dark:text-zinc-300">Len</span><br /><span className="font-mono tabular-nums font-medium">{p.length} bp</span></div>
-                    <div><span className="text-zinc-600 dark:text-zinc-300">P3 Tm</span><br /><span className="font-mono tabular-nums font-medium">{p.tm ?? p.primer3?.tm ?? '–'}°C</span></div>
+                    <div><span className="text-zinc-600 dark:text-zinc-300" title={searchEngine === 'strider' ? 'Strider duplex Tm' : 'Primer3 Tm'}>Tm</span><br /><span className="font-mono tabular-nums font-medium">{searchEngine === 'strider' ? (p.tm_strider != null ? `${p.tm_strider.toFixed(1)}` : '–') : (p.tm != null ? `${p.tm}` : (p.primer3?.tm ?? '–'))}°C</span></div>
                     <div><span className="text-zinc-600 dark:text-zinc-300" title="IDT Tm">IDT Tm</span><br /><span className="font-mono tabular-nums font-medium">{idtResult?.analyze ? (extractTm(idtResult.analyze)?.toFixed(1) || 'N/A') + '°C' : '–'}</span></div>
-                    <div><span className="text-zinc-600 dark:text-zinc-300" title="Strider duplex Tm">Strider Tm</span><br /><span className="font-mono tabular-nums font-medium">{p.tm_strider != null ? `${p.tm_strider.toFixed(1)}°C` : '–'}</span></div>
                     <div><span className="text-zinc-600 dark:text-zinc-300">GC</span><br /><span className="font-mono tabular-nums font-medium">{p.gc_percent ?? p.primer3?.gc_percent ?? '–'}%</span></div>
-                    <div><span className="text-zinc-600 dark:text-zinc-300">Hairpin Tm</span><br /><span className={`font-mono tabular-nums font-medium ${p.hairpin.structure_found ? 'text-amber-500' : 'text-emerald-500'}`}>{p.hairpin.structure_found ? `${p.primer3?.hairpin_th ?? '–'}°C` : 'None'}</span></div>
-                    <div><span className="text-zinc-600 dark:text-zinc-300">Self-dimer</span><br /><span className={`font-mono tabular-nums font-medium ${statusDg(p.homodimer?.dg)}`}>{p.homodimer?.dg !== null ? `${p.homodimer.dg} kcal` : 'OK'}</span></div>
+                    <div><span className="text-zinc-600 dark:text-zinc-300">Hairpin Tm</span><br />{(() => {
+                        const isStrider = searchEngine === 'strider';
+                        const tmStrider = p.hairpin?.tm_strider;
+                        const tmP3 = p.primer3?.hairpin_th ?? p.hairpin?.tm;
+                        const found = isStrider ? tmStrider != null : p.hairpin.structure_found;
+                        const tm = isStrider ? tmStrider : tmP3;
+                        return <span className={`font-mono tabular-nums font-medium ${found ? 'text-amber-500' : 'text-emerald-500'}`}>{found && tm != null ? `${tm}°C` : 'None'}</span>;
+                    })()}</div>
+                    <div><span className="text-zinc-600 dark:text-zinc-300">Self-dimer</span><br /><span className={`font-mono tabular-nums font-medium ${statusDg(searchEngine === 'strider' ? p.strider?.homodimer_dg : p.homodimer?.dg)}`}>{searchEngine === 'strider' ? (p.strider?.homodimer_dg != null ? `${p.strider.homodimer_dg} kcal` : 'OK') : (p.homodimer?.dg !== null && p.homodimer?.dg !== undefined ? `${p.homodimer.dg} kcal` : 'OK')}</span></div>
                 </div>
 
                 {isSelected && (
