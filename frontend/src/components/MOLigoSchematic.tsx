@@ -204,8 +204,8 @@ export default function MOLigoSchematic({
                 </svg>
             </div>
 
-            <div className={`mt-5 px-3 mb-2 flex flex-col gap-y-4 text-sm text-zinc-600 ${dk('dark:text-zinc-300')}`}>
-                <div className="flex flex-wrap gap-x-6 gap-y-3 justify-center">
+            <div className={`mt-3 px-3 mb-1 flex flex-col gap-y-2 text-sm text-zinc-600 ${dk('dark:text-zinc-300')}`}>
+                <div className="flex flex-wrap gap-x-5 gap-y-2 justify-center">
                     {revLen > 0 && (
                         <div className="flex items-center gap-2">
                             <div className="w-4 h-4 rounded-sm" style={{ backgroundColor: C.revP }} />

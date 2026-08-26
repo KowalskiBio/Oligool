@@ -138,8 +138,8 @@ export default function MOLigoPanel(props: MOLigoProps) {
             )}
 
             {/* ── Sequence Inputs & TAG Picker ── */}
-            <div className="mt-8 pt-8">
-                <div className="max-w-[85rem] mx-auto px-2 md:px-6 grid grid-cols-1 lg:grid-cols-3 gap-6 md:gap-8">
+            <div className="mt-4">
+                <div className="max-w-[85rem] mx-auto px-2 md:px-6 grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-5">
 
                     {/* Reverse Primer Input Box */}
                     <div className="card p-3 flex flex-col h-full">
@@ -148,11 +148,11 @@ export default function MOLigoPanel(props: MOLigoProps) {
                                 <span className="status-dot bg-purple-500" />
                                 Universal Reverse Primer
                             </div>
-                            <span className="text-[10px] font-mono tabular-nums text-zinc-400">{revLen}nt</span>
+                            <span className="text-xs font-mono tabular-nums text-zinc-400">{revLen}nt</span>
                         </div>
                         <div className="flex-1 bg-zinc-50 dark:bg-zinc-800/60 p-2 rounded-md border border-zinc-200 dark:border-zinc-700">
                             <textarea
-                                className="w-full h-full min-h-[4rem] text-sm font-mono bg-transparent border-none outline-none resize-none text-zinc-700 dark:text-zinc-300 p-0 focus:ring-0"
+                                className="w-full h-full min-h-[2.5rem] text-sm font-mono bg-transparent border-none outline-none resize-none text-zinc-700 dark:text-zinc-300 p-0 focus:ring-0"
                                 value={revPrimer || ""}
                                 onChange={(e) => onRevChange?.(e.target.value.toUpperCase().replace(/[^ATCGUatcgu]/g, ''))}
                                 placeholder="Enter reverse primer..."
@@ -168,12 +168,12 @@ export default function MOLigoPanel(props: MOLigoProps) {
                                 <span className="status-dot bg-red-500" />
                                 TAG Sequence
                             </div>
-                            <span className="text-[10px] font-mono tabular-nums text-zinc-400">{tagLen}nt</span>
+                            <span className="text-xs font-mono tabular-nums text-zinc-400">{tagLen}nt</span>
                         </div>
 
                         <div className="flex flex-col gap-2 flex-1">
                             <select
-                                className="input text-[10px] p-1.5"
+                                className="input text-xs p-1.5"
                                 onChange={(e) => {
                                     const tag = TAG_DATABASE.find(t => t.partNumber === e.target.value);
                                     if (tag) onTagChange?.(tag.antiTag);
@@ -190,7 +190,7 @@ export default function MOLigoPanel(props: MOLigoProps) {
 
                             <div className="flex-1 bg-zinc-50 dark:bg-zinc-800/60 p-2 rounded-md border border-zinc-200 dark:border-zinc-700 flex flex-col">
                                 <textarea
-                                    className="w-full flex-1 min-h-[4rem] text-sm font-mono bg-transparent border-none outline-none resize-none text-zinc-700 dark:text-zinc-300 p-0 focus:ring-0"
+                                    className="w-full flex-1 min-h-[2.5rem] text-sm font-mono bg-transparent border-none outline-none resize-none text-zinc-700 dark:text-zinc-300 p-0 focus:ring-0"
                                     value={tagSeq || ""}
                                     onChange={(e) => onTagChange?.(e.target.value.toUpperCase().replace(/[^ATCGUatcgu]/g, ''))}
                                     placeholder="Manual entry..."
@@ -207,11 +207,11 @@ export default function MOLigoPanel(props: MOLigoProps) {
                                 <span className="status-dot bg-pink-500" />
                                 Universal Forward Primer
                             </div>
-                            <span className="text-[10px] font-mono tabular-nums text-zinc-400">{fwdLen}nt</span>
+                            <span className="text-xs font-mono tabular-nums text-zinc-400">{fwdLen}nt</span>
                         </div>
                         <div className="flex-1 bg-zinc-50 dark:bg-zinc-800/60 p-2 rounded-md border border-zinc-200 dark:border-zinc-700 flex flex-col">
                             <textarea
-                                className="w-full flex-1 min-h-[4rem] text-sm font-mono bg-transparent border-none outline-none resize-none text-zinc-700 dark:text-zinc-300 p-0 focus:ring-0"
+                                className="w-full flex-1 min-h-[2.5rem] text-sm font-mono bg-transparent border-none outline-none resize-none text-zinc-700 dark:text-zinc-300 p-0 focus:ring-0"
                                 value={fwdPrimer || ""}
                                 onChange={(e) => onFwdChange?.(e.target.value.toUpperCase().replace(/[^ATCGUatcgu]/g, ''))}
                                 placeholder="Enter forward primer..."
@@ -220,7 +220,7 @@ export default function MOLigoPanel(props: MOLigoProps) {
                         </div>
                         {fwdLen > 0 && (
                             <div className="mt-3 border-t border-zinc-100 dark:border-zinc-700 pt-2 flex items-center justify-between">
-                                <span className="text-[10px] text-zinc-500 font-mono truncate">
+                                <span className="text-xs text-zinc-500 font-mono truncate">
                                     RC: {fwdRCSeq}
                                 </span>
                             </div>
@@ -229,7 +229,7 @@ export default function MOLigoPanel(props: MOLigoProps) {
                 </div>
 
                 {/* ── Copyable Final Oligos ── */}
-                <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-4 max-w-[85rem] mx-auto px-2 md:px-6">
+                <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3 max-w-[85rem] mx-auto px-2 md:px-6">
                     <div className="bg-white dark:bg-zinc-800 rounded-lg border border-zinc-200 dark:border-zinc-700 p-3 shadow-sm">
                         <div className="flex items-center justify-between mb-2">
                             <div className="flex items-center gap-2 text-xs font-bold text-zinc-500 uppercase tracking-wider">
@@ -237,7 +237,7 @@ export default function MOLigoPanel(props: MOLigoProps) {
                                 <span className="w-2 h-2 rounded-full bg-amber-400" />
                                 <span>Left Oligo</span>
                             </div>
-                            <span className="text-[10px] font-mono text-zinc-400 font-bold">{leftOligoSeq.length}nt</span>
+                            <span className="text-xs font-mono text-zinc-400 font-bold">{leftOligoSeq.length}nt</span>
                         </div>
                         <div className="relative">
                             <div className="bg-zinc-50 dark:bg-zinc-900/50 p-2.5 pb-8 rounded border border-zinc-200 dark:border-zinc-700 font-mono text-xs text-zinc-700 dark:text-zinc-300 break-all">
@@ -246,7 +246,7 @@ export default function MOLigoPanel(props: MOLigoProps) {
                             <button
                                 onClick={() => copyToClipboard(leftOligoSeq, 'left')}
                                 disabled={!leftOligoSeq}
-                                className="absolute right-1.5 bottom-1.5 btn-secondary text-[10px] px-2 py-1"
+                                className="absolute right-1.5 bottom-1.5 btn-secondary text-xs px-2 py-1"
                             >
                                 {copiedLabel === 'left' ? 'Copied!' : 'Copy'}
                             </button>
@@ -261,7 +261,7 @@ export default function MOLigoPanel(props: MOLigoProps) {
                                 <span className="w-2 h-2 rounded-full bg-pink-400" />
                                 <span>Right Oligo</span>
                             </div>
-                            <span className="text-[10px] font-mono text-zinc-400 font-bold">{rightOligoSeq.length}nt</span>
+                            <span className="text-xs font-mono text-zinc-400 font-bold">{rightOligoSeq.length}nt</span>
                         </div>
                         <div className="relative">
                             <div className="bg-zinc-50 dark:bg-zinc-900/50 p-2.5 pb-8 rounded border border-zinc-200 dark:border-zinc-700 font-mono text-xs text-zinc-700 dark:text-zinc-300 break-all">
@@ -270,7 +270,7 @@ export default function MOLigoPanel(props: MOLigoProps) {
                             <button
                                 onClick={() => copyToClipboard(rightOligoSeq, 'right')}
                                 disabled={!rightOligoSeq}
-                                className="absolute right-1.5 bottom-1.5 btn-secondary text-[10px] px-2 py-1"
+                                className="absolute right-1.5 bottom-1.5 btn-secondary text-xs px-2 py-1"
                             >
                                 {copiedLabel === 'right' ? 'Copied!' : 'Copy'}
                             </button>
@@ -279,7 +279,7 @@ export default function MOLigoPanel(props: MOLigoProps) {
                 </div>
 
                 {/* ── Proceed Action ── */}
-                <div className="mt-8 mb-6 flex justify-center items-center gap-4 flex-wrap">
+                <div className="mt-5 mb-4 flex justify-center items-center gap-4 flex-wrap">
                     <button
                         id="btn-proceed-design"
                         onClick={onProceed}
