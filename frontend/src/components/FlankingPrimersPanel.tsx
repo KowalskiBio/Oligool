@@ -240,6 +240,11 @@ export default function FlankingPrimersPanel({
         const oligoChanged = prevOligoRef.current.start !== oligoStart || prevOligoRef.current.end !== oligoEnd;
         const engineChanged = prevEngineRef.current !== searchEngine;
         if (!oligoChanged && !engineChanged) return;
+        if (engineChanged) {
+            setStriderResultsIndiv({});
+            setIdtResultsIndiv({});
+            setStriderPairResults(null);
+        }
         const manual = clearStaleManualRegions(oligoStart, oligoEnd);
         if (manual.leftStart !== null || manual.rightStart !== null) {
             // The prev refs stay behind on purpose: when the user later clears the
@@ -667,7 +672,7 @@ export default function FlankingPrimersPanel({
     useEffect(() => {
         if (prevParamSetRef.current !== idtCredentials?.parameterSet) {
             prevParamSetRef.current = idtCredentials?.parameterSet;
-            const seqs = Object.keys(striderResultsIndiv);
+            const seqs = new Set([...Object.keys(striderResultsIndiv), ...Object.keys(idtResultsIndiv)]);
             seqs.forEach(seq => {
                 setAnalyzingStriderIndiv(prev => ({ ...prev, [seq]: true }));
                 analyzeStriderIndividual(seq);
@@ -1330,7 +1335,31 @@ export default function FlankingPrimersPanel({
 
         const striderResult = striderResultsIndiv[p.sequence];
         const idtResult = idtResultsIndiv[p.sequence];
-        const indivResult = idtResult || striderResult;
+        const indivResult = (() => {
+            if (!idtResult) return striderResult;
+            if (!striderResult) return idtResult;
+            const idtItems = (Array.isArray(idtResult.hairpin?.raw) ? idtResult.hairpin.raw : [idtResult.hairpin?.raw]).filter(Boolean);
+            const striderItems = (Array.isArray(striderResult.hairpin?.raw) ? striderResult.hairpin.raw : [striderResult.hairpin?.raw]).filter(Boolean);
+            const mergedHairpinRaw = idtItems.map((item: any, i: number) => {
+                const sItem = striderItems[i];
+                if (!sItem) return item;
+                return { ...item, Local_DeltaG: sItem.Local_DeltaG, Local_Tm: sItem.Local_Tm, Local_DotBracket: sItem.Local_DotBracket ?? sItem.DotBracket };
+            });
+            const mergedSelfDimerRaw = (() => {
+                const idtDimerItems = (Array.isArray(idtResult.self_dimer?.raw) ? idtResult.self_dimer.raw : [idtResult.self_dimer?.raw]).filter(Boolean);
+                const striderDimerItems = (Array.isArray(striderResult.self_dimer?.raw) ? striderResult.self_dimer.raw : [striderResult.self_dimer?.raw]).filter(Boolean);
+                return idtDimerItems.map((item: any, i: number) => {
+                    const sItem = striderDimerItems[i];
+                    if (!sItem) return item;
+                    return { ...item, Local_DeltaG: sItem.Local_DeltaG, Local_Tm: sItem.Local_Tm, Local_DotBracket: sItem.Local_DotBracket ?? sItem.DotBracket };
+                });
+            })();
+            return {
+                ...idtResult,
+                hairpin: { ...idtResult.hairpin, raw: mergedHairpinRaw.length > 0 ? mergedHairpinRaw : idtResult.hairpin?.raw },
+                self_dimer: { ...idtResult.self_dimer, raw: mergedSelfDimerRaw.length > 0 ? mergedSelfDimerRaw : idtResult.self_dimer?.raw },
+            };
+        })();
         const isAnalStrider = analyzingStriderIndiv[p.sequence];
         const isAnalIdt = analyzingIndiv[p.sequence];
 
