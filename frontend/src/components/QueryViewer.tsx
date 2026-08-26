@@ -117,6 +117,33 @@ interface OligizeResponse {
     param_warnings?: string[];
 }
 
+function EditableOligoName({ value, onChange, className, editing, onEditingChange }: { value: string; onChange: (v: string) => void; className: string; editing: boolean; onEditingChange: (v: boolean) => void }) {
+    if (!editing) {
+        return (
+            <button
+                type="button"
+                onClick={() => onEditingChange(true)}
+                title="Click to rename"
+                className={`${className} text-left cursor-text hover:underline decoration-dotted underline-offset-4 decoration-current/50`}
+            >
+                {value}
+            </button>
+        );
+    }
+    return (
+        <input
+            autoFocus
+            type="text"
+            value={value}
+            onChange={e => onChange(e.target.value)}
+            onFocus={e => e.currentTarget.select()}
+            onBlur={() => onEditingChange(false)}
+            onKeyDown={e => { if (e.key === 'Enter' || e.key === 'Escape') onEditingChange(false); }}
+            className={`${className} flex-1 min-w-0 mr-2 bg-white/50 dark:bg-zinc-800/50 border-b border-current/40 outline-none rounded-sm px-1 -ml-1`}
+        />
+    );
+}
+
 const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function QueryViewer({ data, jobName, genbankHeader, onGenbankHeaderChange, onPrimersUpdate, onFlankingPrimersUpdate, flankingPanelState, onFlankingPanelStateChange, onNavigateTo, oligoRegion, autofindRegion, idtCredentials, onParameterSetChange, searchEngine, alignment, navigateTarget, isDarkMode, importedSession, onSaveSession }, ref) {
     const API_BASE = ((import.meta.env.VITE_API_BASE as string) || '');
     const [copyFeedback, setCopyFeedback] = useState('');
@@ -141,6 +168,7 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
     // Oligo name state
     const [oligo1Name, setOligo1Name] = useState(() => localStorage.getItem('oligo1_name') || 'Oligo 1 (Right / 3\')');
     const [oligo2Name, setOligo2Name] = useState(() => localStorage.getItem('oligo2_name') || 'Oligo 2 (Left / 5\')');
+    const [renamingOligo, setRenamingOligo] = useState<'oligo1' | 'oligo2' | null>(null);
 
     // Interactive Sequence Table Drag State
     const [dragState, setDragState] = useState<{ id: 'p1' | 'p2', type: 'move' | 'left' | 'right', startX: number, deltaChars: number, initShift1: number, initShift2: number, initLen: number } | null>(null);
@@ -153,8 +181,8 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
         if (!el) return;
         const ro = new ResizeObserver(entries => {
             for (const entry of entries) {
-                // ~72px for the position column + padding; ~7.2px per char for text-xs mono
-                const chars = Math.floor((entry.contentRect.width - 72) / 7.2);
+                // ~72px for the position column + padding; ~7.8px per char for text-[13px] mono
+                const chars = Math.floor((entry.contentRect.width - 80) / 7.8);
                 setSeqLineLength(Math.max(40, Math.min(300, chars)));
             }
         });
@@ -1442,7 +1470,7 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
         }
 
         return (
-            <div ref={containerRef} className="font-mono text-xs leading-relaxed space-y-1" style={{ cursor: dragState ? 'grabbing' : 'auto' }}>
+            <div className="font-mono text-[13px] leading-relaxed space-y-1" style={{ cursor: dragState ? 'grabbing' : 'auto' }}>
                 {lines.map((lineStr, lineIdx) => {
                     const lineAbsStart = viewStart + lineIdx * seqLineLength;
                     const posStr = String(lineAbsStart + 1).padStart(6, ' '); // 1-indexed
@@ -1698,9 +1726,9 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
 
             return (
                 <div key={idx} className="border-t border-zinc-200 dark:border-zinc-700 pt-2 mt-2 first:mt-0 first:border-0 first:pt-0">
-                    <div className="flex flex-col gap-1 text-[11px] text-zinc-400 mb-1">
+                    <div className="flex flex-col gap-1 text-[13px] text-zinc-400 mb-1">
                         <div className="flex justify-between items-center">
-                            <span className="text-xs">{title} {idx + 1}:</span>
+                            <span className="text-[13px]">{title} {idx + 1}:</span>
                             <div className="flex gap-3">
                                 {itemDg !== undefined && itemDg !== null && (
                                     <span>IDT ΔG: <span className={`font-mono tabular-nums ${getIdtStatusColor(itemDg)}`}>{itemDg.toFixed(2)}</span></span>
@@ -1710,7 +1738,7 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                                 )}
                             </div>
                         </div>
-                        <div className="flex justify-end gap-3 text-[10px] opacity-80">
+                        <div className="flex justify-end gap-3 text-[13px] opacity-80">
                             {itemIdtTmVal !== undefined && itemIdtTmVal !== null && (
                                 <span>IDT Tm: <span className={`font-mono tabular-nums ${getTmColor(itemIdtTmVal)}`}>{Number(itemIdtTmVal).toFixed(1)}°C</span></span>
                             )}
@@ -1719,7 +1747,7 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                             )}
                         </div>
                         {itemPopFrac !== undefined && itemPopFrac !== null && (
-                            <div className="flex justify-end gap-3 text-[10px] opacity-80">
+                            <div className="flex justify-end gap-3 text-[13px] opacity-80">
                                 <span title="Share of the full structural ensemble this MFE structure represents"><span className="font-mono tabular-nums text-blue-500 dark:text-blue-400">{(itemPopFrac * 100).toFixed(itemPopFrac < 0.01 ? 2 : 0)}%</span> of Ensemble</span>
                             </div>
                         )}
@@ -1734,17 +1762,17 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                         </div>
                     )}
                     {hairpinDotBracket && (!hairpinSeq || hairpinSeq.length === 0) && (
-                        <div className="mt-1 text-[10px] text-zinc-400 italic">Structure found but sequence unavailable for SVG</div>
+                        <div className="mt-1 text-[13px] text-zinc-400 italic">Structure found but sequence unavailable for SVG</div>
                     )}
                     {asciiStructure && !hairpinDotBracket && (
-                        <div className="mt-1 w-full overflow-x-auto overflow-y-auto max-h-32 bg-zinc-100 dark:bg-zinc-800 rounded p-2 text-xs">
+                        <div className="mt-1 w-full overflow-x-auto overflow-y-auto max-h-32 bg-zinc-100 dark:bg-zinc-800 rounded p-2 text-[13px]">
                             <pre className="font-mono text-zinc-700 dark:text-zinc-300 whitespace-pre leading-[1.15] tracking-tighter">
                                 {asciiStructure}
                             </pre>
                         </div>
                     )}
                     {!hairpinDotBracket && !asciiStructure && (
-                        <div className="mt-1 text-[10px] text-zinc-400 italic">No secondary structure predicted</div>
+                        <div className="mt-1 text-[13px] text-zinc-400 italic">No secondary structure predicted</div>
                     )}
                 </div>
             );
@@ -1767,7 +1795,7 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
 
         return (
             <div className="flex flex-col gap-1 mb-2">
-                <div className="flex justify-between items-center text-xs border-b border-zinc-200 dark:border-zinc-700 pb-1 mb-1">
+                <div className="flex justify-between items-center text-base border-b border-zinc-200 dark:border-zinc-700 pb-1 mb-1">
                     <span className="text-zinc-600 dark:text-zinc-300">Summary {title}:</span>
                     <span className={getIdtStatusColor(summaryEnsembleDg)}>
                         {summaryEnsembleDg !== undefined && summaryEnsembleDg !== null
@@ -1865,7 +1893,7 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                         <div key={s.label} className={s.className} style={{ width: `${s.value * 100}%` }} title={`${s.label}: ${(s.value * 100).toFixed(1)}%`} />
                     ))}
                 </div>
-                <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1 text-[9px] text-zinc-500 dark:text-zinc-400">
+                <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1 text-[13px] text-zinc-500 dark:text-zinc-400">
                     {shown.map(s => (
                         <span key={s.label} className="flex items-center gap-1">
                             <span className={`inline-block w-1.5 h-1.5 rounded-full ${s.className}`} />
@@ -1880,7 +1908,7 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                     ))}
                 </div>
                 {competition.Converged === false && (
-                    <div className="text-[9px] text-amber-500 mt-0.5 italic">Equilibrium solve did not fully converge, treat as approximate.</div>
+                    <div className="text-[13px] text-amber-500 mt-0.5 italic">Equilibrium solve did not fully converge, treat as approximate.</div>
                 )}
             </div>
         );
@@ -1889,23 +1917,23 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
     const renderStabilityGrid = (results: IdtData, seqs: { p1: string; p2: string } | null, isLoading: boolean) => (
         <div className={`grid grid-cols-1 md:grid-cols-3 gap-3 transition-opacity duration-200 ${isLoading ? 'opacity-40' : 'opacity-100'}`}>
             <div className="bg-zinc-50 dark:bg-zinc-900/40 p-3 rounded border border-zinc-100 dark:border-zinc-800">
-                <div className="text-xs font-bold text-zinc-500 uppercase mb-1">Oligo 2 Stability</div>
+                <div className="text-[13px] font-bold text-zinc-500 uppercase mb-1">Oligo 2 Stability</div>
                 {renderCompetitionStrip(results.m2.competition)}
                 {renderIdtCard("Hairpin ΔG", results.m2.hairpin, seqs?.p2 ?? primers?.p2.seq)}
                 {renderIdtCard("Self-Dimer ΔG", results.m2.self_dimer, seqs?.p2 ?? primers?.p2.seq)}
-                <div className="text-[10px] text-zinc-400 mt-1 italic">kcal/mol</div>
+                <div className="text-[13px] text-zinc-400 mt-1 italic">kcal/mol</div>
             </div>
             <div className="bg-zinc-50 dark:bg-zinc-900/40 p-3 rounded border border-zinc-100 dark:border-zinc-800">
-                <div className="text-xs font-bold text-zinc-500 uppercase mb-1">Oligo 1 Stability</div>
+                <div className="text-[13px] font-bold text-zinc-500 uppercase mb-1">Oligo 1 Stability</div>
                 {renderCompetitionStrip(results.m1.competition)}
                 {renderIdtCard("Hairpin ΔG", results.m1.hairpin, seqs?.p1 ?? primers?.p1.seq)}
                 {renderIdtCard("Self-Dimer ΔG", results.m1.self_dimer, seqs?.p1 ?? primers?.p1.seq)}
-                <div className="text-[10px] text-zinc-400 mt-1 italic">kcal/mol</div>
+                <div className="text-[13px] text-zinc-400 mt-1 italic">kcal/mol</div>
             </div>
             <div className="bg-accent-700/5 dark:bg-accent-300/5 p-3 rounded border border-accent-700/15 dark:border-accent-300/15">
-                <div className="text-xs font-bold text-accent-800 dark:text-accent-300 uppercase mb-1">Cross-Dimer Pairwise</div>
+                <div className="text-[13px] font-bold text-accent-800 dark:text-accent-300 uppercase mb-1">Cross-Dimer Pairwise</div>
                 {renderIdtCard("Hetero-Dimer ΔG", results.pairwise, seqs?.p1 ?? primers?.p1.seq, seqs?.p2 ?? primers?.p2.seq)}
-                <div className="text-[10px] text-zinc-400 mt-1 italic">kcal/mol</div>
+                <div className="text-[13px] text-zinc-400 mt-1 italic">kcal/mol</div>
             </div>
         </div>
     );
@@ -2014,7 +2042,7 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                 </div>
                 <div className="flex items-center gap-3">
                     {copyFeedback && (
-                        <span className="text-xs text-emerald-600 dark:text-emerald-400 font-medium animate-pulse">{copyFeedback}</span>
+                        <span className="text-[13px] text-emerald-600 dark:text-emerald-400 font-medium animate-pulse">{copyFeedback}</span>
                     )}
                     <button
                         onClick={() => handleCopy(rawSeq)}
@@ -2029,84 +2057,84 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                 <div className="bg-zinc-50 dark:bg-zinc-800/40 border-b border-zinc-200 dark:border-zinc-800 p-4 relative">
                     <div className="flex justify-between items-center mb-2">
                         <div className="flex items-center gap-2">
-                            <h3 className="eyebrow">Oligo Selection Parameters</h3>
+                            <h3 className="eyebrow text-[13px]">Oligo Selection Parameters</h3>
                             {searchEngine === 'strider' && (
-                                <span className="text-[10px] font-medium uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Engine: Strider</span>
+                                <span className="text-[13px] font-medium uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Engine: Strider</span>
                             )}
                         </div>
                         <button
                             onClick={() => setShowAdvanced(!showAdvanced)}
-                            className="text-[11px] font-medium text-accent-700 dark:text-accent-300 hover:text-accent-800 dark:hover:text-accent-200 uppercase tracking-wider flex items-center gap-1"
+                            className="text-[13px] font-medium text-accent-700 dark:text-accent-300 hover:text-accent-800 dark:hover:text-accent-200 uppercase tracking-wider flex items-center gap-1"
                         >
                             {showAdvanced ? 'Hide Advanced' : 'Show Advanced'}
                             <span>{showAdvanced ? '▴' : '▾'}</span>
                         </button>
                     </div>
-                    <div className="mb-4 p-3 card grid grid-cols-2 lg:grid-cols-7 gap-3">
+                    <div className="mb-4 p-3 card grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2">
                         <div className="flex flex-col gap-1">
-                            <label className="text-[10px] font-bold text-zinc-400 uppercase">Min Len</label>
+                            <label className="text-[13px] font-bold text-zinc-400 uppercase whitespace-nowrap">Min Len</label>
                             <input
                                 type="number"
                                 value={searchParams.min_len || 15}
                                 onChange={e => setSearchParams({ ...searchParams, min_len: parseInt(e.target.value) })}
-                                className="input px-2 py-1 text-xs font-mono tabular-nums"
+                                className="input px-2 py-1 text-sm font-mono tabular-nums"
                             />
                         </div>
                         <div className="flex flex-col gap-1">
-                            <label className="text-[10px] font-bold text-zinc-400 uppercase">Max Len</label>
+                            <label className="text-[13px] font-bold text-zinc-400 uppercase whitespace-nowrap">Max Len</label>
                             <input
                                 type="number"
                                 value={searchParams.max_l || 35}
                                 onChange={e => setSearchParams({ ...searchParams, max_l: parseInt(e.target.value) })}
-                                className="input px-2 py-1 text-xs font-mono tabular-nums"
+                                className="input px-2 py-1 text-sm font-mono tabular-nums"
                             />
                         </div>
                         <div className="flex flex-col gap-1">
-                            <label className="text-[10px] font-bold text-zinc-400 uppercase">Tm Min</label>
+                            <label className="text-[13px] font-bold text-zinc-400 uppercase whitespace-nowrap">Tm Min</label>
                             <input
                                 type="number"
                                 step="0.1"
                                 value={searchParams.tm_min || 60.0}
                                 onChange={e => setSearchParams({ ...searchParams, tm_min: parseFloat(e.target.value) })}
-                                className="input px-2 py-1 text-xs font-mono tabular-nums"
+                                className="input px-2 py-1 text-sm font-mono tabular-nums"
                             />
                         </div>
                         <div className="flex flex-col gap-1">
-                            <label className="text-[10px] font-bold text-zinc-400 uppercase">Tm Max</label>
+                            <label className="text-[13px] font-bold text-zinc-400 uppercase whitespace-nowrap">Tm Max</label>
                             <input
                                 type="number"
                                 step="0.1"
                                 value={searchParams.tm_max || 63.0}
                                 onChange={e => setSearchParams({ ...searchParams, tm_max: parseFloat(e.target.value) })}
-                                className="input px-2 py-1 text-xs font-mono tabular-nums"
+                                className="input px-2 py-1 text-sm font-mono tabular-nums"
                             />
                         </div>
                         <div className="flex flex-col gap-1">
-                            <label className="text-[10px] font-bold text-zinc-400 uppercase">Tm Diff</label>
+                            <label className="text-[13px] font-bold text-zinc-400 uppercase whitespace-nowrap">Tm Diff</label>
                             <input
                                 type="number"
                                 step="0.1"
                                 value={searchParams.tm_diff || 1.5}
                                 onChange={e => setSearchParams({ ...searchParams, tm_diff: parseFloat(e.target.value) })}
-                                className="input px-2 py-1 text-xs font-mono tabular-nums"
+                                className="input px-2 py-1 text-sm font-mono tabular-nums"
                             />
                         </div>
                         <div className="flex flex-col gap-1">
-                            <label className="text-[10px] font-bold text-zinc-400 uppercase">GC Min</label>
+                            <label className="text-[13px] font-bold text-zinc-400 uppercase whitespace-nowrap">GC Min</label>
                             <input
                                 type="number"
                                 value={searchParams.gc_min || 30}
                                 onChange={e => setSearchParams({ ...searchParams, gc_min: parseInt(e.target.value) })}
-                                className="input px-2 py-1 text-xs font-mono tabular-nums"
+                                className="input px-2 py-1 text-sm font-mono tabular-nums"
                             />
                         </div>
                         <div className="flex flex-col gap-1">
-                            <label className="text-[10px] font-bold text-zinc-400 uppercase">GC Max</label>
+                            <label className="text-[13px] font-bold text-zinc-400 uppercase whitespace-nowrap">GC Max</label>
                             <input
                                 type="number"
                                 value={searchParams.gc_max || 80}
                                 onChange={e => setSearchParams({ ...searchParams, gc_max: parseInt(e.target.value) })}
-                                className="input px-2 py-1 text-xs font-mono tabular-nums"
+                                className="input px-2 py-1 text-sm font-mono tabular-nums"
                             />
                         </div>
                     </div>
@@ -2118,11 +2146,11 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                                 <div>
                                     <div className="flex items-center gap-2 mb-3">
                                         <div className="w-1.5 h-4 bg-zinc-400 dark:bg-zinc-600 rounded-full"></div>
-                                        <h3 className="eyebrow">Local (Primer3 / Thermo)</h3>
+                                        <h3 className="eyebrow text-[13px]">Local (Primer3 / Thermo)</h3>
                                     </div>
                                     <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-2 xl:grid-cols-4 gap-3">
                                         <div className="flex flex-col gap-1">
-                                            <label className="text-[10px] font-bold text-zinc-400 uppercase">Na+ (mM)</label>
+                                            <label className="text-[13px] font-bold text-zinc-400 uppercase whitespace-nowrap">Na+ (mM)</label>
                                             <input
                                                 type="number" step="0.1"
                                                 value={advancedParams.salt_mono}
@@ -2131,11 +2159,11 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                                                     setAdvancedParams(next);
                                                     localStorage.setItem('oligo_advanced_params', JSON.stringify(next));
                                                 }}
-                                                className="input px-2 py-1 text-xs font-mono tabular-nums"
+                                                className="input px-2 py-1 text-sm font-mono tabular-nums"
                                             />
                                         </div>
                                         <div className="flex flex-col gap-1">
-                                            <label className="text-[10px] font-bold text-zinc-400 uppercase">Mg²⁺ (mM)</label>
+                                            <label className="text-[13px] font-bold text-zinc-400 uppercase whitespace-nowrap">Mg²⁺ (mM)</label>
                                             <input
                                                 type="number" step="0.1"
                                                 value={advancedParams.salt_div}
@@ -2144,11 +2172,11 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                                                     setAdvancedParams(next);
                                                     localStorage.setItem('oligo_advanced_params', JSON.stringify(next));
                                                 }}
-                                                className="input px-2 py-1 text-xs font-mono tabular-nums"
+                                                className="input px-2 py-1 text-sm font-mono tabular-nums"
                                             />
                                         </div>
                                         <div className="flex flex-col gap-1">
-                                            <label className="text-[10px] font-bold text-zinc-400 uppercase">dNTP (mM)</label>
+                                            <label className="text-[13px] font-bold text-zinc-400 uppercase whitespace-nowrap">dNTP (mM)</label>
                                             <input
                                                 type="number" step="0.1"
                                                 value={advancedParams.dntp_conc}
@@ -2157,11 +2185,11 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                                                     setAdvancedParams(next);
                                                     localStorage.setItem('oligo_advanced_params', JSON.stringify(next));
                                                 }}
-                                                className="input px-2 py-1 text-xs font-mono tabular-nums"
+                                                className="input px-2 py-1 text-sm font-mono tabular-nums"
                                             />
                                         </div>
                                         <div className="flex flex-col gap-1">
-                                            <label className="text-[10px] font-bold text-zinc-400 uppercase">DNA (nM)</label>
+                                            <label className="text-[13px] font-bold text-zinc-400 uppercase whitespace-nowrap">DNA (nM)</label>
                                             <input
                                                 type="number" step="10"
                                                 value={advancedParams.dna_conc}
@@ -2170,15 +2198,15 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                                                     setAdvancedParams(next);
                                                     localStorage.setItem('oligo_advanced_params', JSON.stringify(next));
                                                 }}
-                                                className="input px-2 py-1 text-xs font-mono tabular-nums"
+                                                className="input px-2 py-1 text-sm font-mono tabular-nums"
                                             />
                                         </div>
                                         <div className="flex flex-col gap-1">
-                                            <label className="text-[10px] font-bold text-zinc-400 uppercase">Thermo Params</label>
+                                            <label className="text-[13px] font-bold text-zinc-400 uppercase whitespace-nowrap">Thermo Params</label>
                                             <select
                                                 value={idtCredentials?.parameterSet || 'mathews2004-dna'}
                                                 onChange={e => onParameterSetChange?.(e.target.value)}
-                                                className="input px-2 py-1 text-xs font-mono"
+                                                className="input px-2 py-1 text-sm font-mono"
                                             >
                                                 <option value="mathews2004-dna">Mathews 2004 (matches IDT)</option>
                                                 <option value="native">SantaLucia 2004</option>
@@ -2191,11 +2219,11 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                                 <div className="lg:border-l lg:border-zinc-200 dark:lg:border-zinc-700 lg:pl-6">
                                     <div className="flex items-center gap-2 mb-3">
                                         <div className="w-1.5 h-4 bg-zinc-400 dark:bg-zinc-600 rounded-full"></div>
-                                        <h3 className="eyebrow">IDT OligoAnalyzer</h3>
+                                        <h3 className="eyebrow text-[13px]">IDT OligoAnalyzer</h3>
                                     </div>
                                     <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-2 xl:grid-cols-4 gap-3">
                                         <div className="flex flex-col gap-1">
-                                            <label className="text-[10px] font-bold text-zinc-400 uppercase">Na+ (mM)</label>
+                                            <label className="text-[13px] font-bold text-zinc-400 uppercase whitespace-nowrap">Na+ (mM)</label>
                                             <input
                                                 type="number" step="0.1"
                                                 value={idtAdvancedParams.mv_conc}
@@ -2204,11 +2232,11 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                                                     setIdtAdvancedParams(next);
                                                     localStorage.setItem('idt_advanced_params', JSON.stringify(next));
                                                 }}
-                                                className="input px-2 py-1 text-xs font-mono tabular-nums"
+                                                className="input px-2 py-1 text-sm font-mono tabular-nums"
                                             />
                                         </div>
                                         <div className="flex flex-col gap-1">
-                                            <label className="text-[10px] font-bold text-zinc-400 uppercase">Mg²⁺ (mM)</label>
+                                            <label className="text-[13px] font-bold text-zinc-400 uppercase whitespace-nowrap">Mg²⁺ (mM)</label>
                                             <input
                                                 type="number" step="0.1"
                                                 value={idtAdvancedParams.mg_conc}
@@ -2217,11 +2245,11 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                                                     setIdtAdvancedParams(next);
                                                     localStorage.setItem('idt_advanced_params', JSON.stringify(next));
                                                 }}
-                                                className="input px-2 py-1 text-xs font-mono tabular-nums"
+                                                className="input px-2 py-1 text-sm font-mono tabular-nums"
                                             />
                                         </div>
                                         <div className="flex flex-col gap-1">
-                                            <label className="text-[10px] font-bold text-zinc-400 uppercase">dNTP (mM)</label>
+                                            <label className="text-[13px] font-bold text-zinc-400 uppercase whitespace-nowrap">dNTP (mM)</label>
                                             <input
                                                 type="number" step="0.05"
                                                 value={idtAdvancedParams.dntp_conc}
@@ -2230,11 +2258,11 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                                                     setIdtAdvancedParams(next);
                                                     localStorage.setItem('idt_advanced_params', JSON.stringify(next));
                                                 }}
-                                                className="input px-2 py-1 text-xs font-mono tabular-nums"
+                                                className="input px-2 py-1 text-sm font-mono tabular-nums"
                                             />
                                         </div>
                                         <div className="flex flex-col gap-1">
-                                            <label className="text-[10px] font-bold text-zinc-400 uppercase">Oligo (µM)</label>
+                                            <label className="text-[13px] font-bold text-zinc-400 uppercase whitespace-nowrap">Oligo (µM)</label>
                                             <input
                                                 type="number" step="0.05"
                                                 value={idtAdvancedParams.oligo_conc}
@@ -2243,7 +2271,7 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                                                     setIdtAdvancedParams(next);
                                                     localStorage.setItem('idt_advanced_params', JSON.stringify(next));
                                                 }}
-                                                className="input px-2 py-1 text-xs font-mono tabular-nums"
+                                                className="input px-2 py-1 text-sm font-mono tabular-nums"
                                             />
                                         </div>
                                     </div>
@@ -2255,12 +2283,12 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                     {/* Primer3 parameter warning (kept for future use, hidden in UI).
                         To re-enable: replace this comment block with the JSX below.
                         {paramsNotMet && primers?.param_warnings && primers.param_warnings.length > 0 && (
-                            <div className="mb-4 px-3 py-2 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/50 rounded-md text-amber-700 dark:text-amber-400 text-xs flex flex-col gap-1">
+                            <div className="mb-4 px-3 py-2 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/50 rounded-md text-amber-700 dark:text-amber-400 text-[13px] flex flex-col gap-1">
                                 <div className="flex items-center gap-2 font-bold">
                                     <span className="text-sm">⚠️</span>
                                     Oligos outside search parameters:
                                 </div>
-                                <ul className="ml-5 list-disc text-[11px] space-y-0.5">
+                                <ul className="ml-5 list-disc text-[13px] space-y-0.5">
                                     {primers.param_warnings.map((w, i) => <li key={i}>{w}</li>)}
                                 </ul>
                             </div>
@@ -2274,18 +2302,26 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                             <div className="bg-white dark:bg-zinc-800 rounded-lg border border-amber-200 dark:border-amber-900/30 p-3 relative group flex flex-col justify-between">
                                 <div>
                                     <div className="flex justify-between items-start mb-2">
-                                        <div className="text-xs font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wider">{oligo2Name}</div>
-                                        <button
-                                            onClick={() => handleCopy(primers.p2.seq)}
-                                            className="btn-secondary px-2 py-0.5 text-[11px]"
-                                        >
-                                            Copy
-                                        </button>
+                                        <EditableOligoName value={oligo2Name} onChange={setOligo2Name} className="text-[13px] font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wider" editing={renamingOligo === 'oligo2'} onEditingChange={v => setRenamingOligo(v ? 'oligo2' : null)} />
+                                        <div className="flex gap-1.5 shrink-0">
+                                            <button
+                                                onClick={() => setRenamingOligo('oligo2')}
+                                                className="btn-secondary px-2 py-0.5 text-[13px]"
+                                            >
+                                                Rename
+                                            </button>
+                                            <button
+                                                onClick={() => handleCopy(primers.p2.seq)}
+                                                className="btn-secondary px-2 py-0.5 text-[13px]"
+                                            >
+                                                Copy
+                                            </button>
+                                        </div>
                                     </div>
                                     <div className="font-mono text-sm text-zinc-700 dark:text-zinc-300 break-all bg-amber-50/50 dark:bg-amber-900/10 p-2 rounded line-clamp-2 min-h-[3rem] flex items-center">{primers.p2.seq}</div>
                                 </div>
                                 <div className="mt-3 flex items-center justify-between border-t border-zinc-100 dark:border-zinc-700 pt-2">
-                                    <div className="flex gap-3 text-xs text-zinc-500 dark:text-zinc-400 items-center">
+                                    <div className="flex gap-3 text-sm text-zinc-500 dark:text-zinc-400 items-center">
                                         <span>Len: <b className={`font-mono tabular-nums ${primers.p2.len_ok === false ? "text-red-500 font-bold" : "text-emerald-500 font-bold"}`}>{primers.p2.len}</b></span>
                                         <span>GC: <b className={`font-mono tabular-nums ${primers.p2.gc_ok === false ? "text-red-500 font-bold" : "text-emerald-500 font-bold"}`}>{primers.p2.gc != null ? primers.p2.gc.toFixed(1) : ((primers.p2.seq.match(/[GCgc]/g) || []).length / primers.p2.seq.length * 100).toFixed(1)}%</b></span>
                                         <span title="Primer3 Tm">P3 Tm: <b className={`font-mono tabular-nums ${primers.p2.tm_ok === false ? "text-red-500 font-bold" : "text-emerald-500 font-bold"}`}>{primers.p2.tm}°C</b></span>
@@ -2297,7 +2333,7 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                                                 <span>IDT Tm</span><b className="font-bold">{extractTm(idtResults.m2.analyze)?.toFixed(1) || 'N/A'}°C</b>
                                             </span>
                                         )}
-                                        <span title="Tm Difference" className="text-[10px] opacity-80 flex items-center gap-1">
+                                        <span title="Tm Difference" className="text-[13px] opacity-80 flex items-center gap-1">
                                             ΔTm: <b className={`font-mono tabular-nums ${primers.tm_diff_ok === false ? "text-red-500 font-bold" : "text-emerald-500 font-bold"}`}>{Math.abs(primers.p1.tm - primers.p2.tm).toFixed(1)}°C</b>
                                         </span>
                                     </div>
@@ -2319,18 +2355,26 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                             <div className="bg-white dark:bg-zinc-800 rounded-lg border border-green-200 dark:border-green-900/30 p-3 relative group flex flex-col justify-between">
                                 <div>
                                     <div className="flex justify-between items-start mb-2">
-                                        <div className="text-xs font-bold text-green-600 dark:text-green-400 uppercase tracking-wider">{oligo1Name}</div>
-                                        <button
-                                            onClick={() => handleCopy(primers.p1.seq)}
-                                            className="btn-secondary px-2 py-0.5 text-[11px]"
-                                        >
-                                            Copy
-                                        </button>
+                                        <EditableOligoName value={oligo1Name} onChange={setOligo1Name} className="text-[13px] font-bold text-green-600 dark:text-green-400 uppercase tracking-wider" editing={renamingOligo === 'oligo1'} onEditingChange={v => setRenamingOligo(v ? 'oligo1' : null)} />
+                                        <div className="flex gap-1.5 shrink-0">
+                                            <button
+                                                onClick={() => setRenamingOligo('oligo1')}
+                                                className="btn-secondary px-2 py-0.5 text-[13px]"
+                                            >
+                                                Rename
+                                            </button>
+                                            <button
+                                                onClick={() => handleCopy(primers.p1.seq)}
+                                                className="btn-secondary px-2 py-0.5 text-[13px]"
+                                            >
+                                                Copy
+                                            </button>
+                                        </div>
                                     </div>
                                     <div className="font-mono text-sm text-zinc-700 dark:text-zinc-300 break-all bg-green-50/50 dark:bg-green-900/10 p-2 rounded line-clamp-2 min-h-[3rem] flex items-center">{primers.p1.seq}</div>
                                 </div>
                                 <div className="mt-3 flex items-center justify-between border-t border-zinc-100 dark:border-zinc-700 pt-2">
-                                    <div className="flex gap-3 text-xs text-zinc-500 dark:text-zinc-400 items-center">
+                                    <div className="flex gap-3 text-sm text-zinc-500 dark:text-zinc-400 items-center">
                                         <span>Len: <b className={`font-mono tabular-nums ${primers.p1.len_ok === false ? "text-red-500 font-bold" : "text-emerald-500 font-bold"}`}>{primers.p1.len}</b></span>
                                         <span>GC: <b className={`font-mono tabular-nums ${primers.p1.gc_ok === false ? "text-red-500 font-bold" : "text-emerald-500 font-bold"}`}>{primers.p1.gc != null ? primers.p1.gc.toFixed(1) : ((primers.p1.seq.match(/[GCgc]/g) || []).length / primers.p1.seq.length * 100).toFixed(1)}%</b></span>
                                         <span title="Primer3 Tm">P3 Tm: <b className={`font-mono tabular-nums ${primers.p1.tm_ok === false ? "text-red-500 font-bold" : "text-emerald-500 font-bold"}`}>{primers.p1.tm}°C</b></span>
@@ -2342,7 +2386,7 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                                                 <span>IDT Tm</span><b className="font-bold">{extractTm(idtResults.m1.analyze)?.toFixed(1) || 'N/A'}°C</b>
                                             </span>
                                         )}
-                                        <span title="Tm Difference" className="text-[10px] opacity-80 flex items-center gap-1">
+                                        <span title="Tm Difference" className="text-[13px] opacity-80 flex items-center gap-1">
                                             ΔTm: <b className={`font-mono tabular-nums ${primers.tm_diff_ok === false ? "text-red-500 font-bold" : "text-emerald-500 font-bold"}`}>{Math.abs(primers.p1.tm - primers.p2.tm).toFixed(1)}°C</b>
                                         </span>
                                     </div>
@@ -2370,7 +2414,7 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                     <div className="mt-4 p-5 bg-zinc-50 dark:bg-zinc-800/40 rounded-lg border border-zinc-200 dark:border-zinc-700">
                         <div className="flex justify-between items-center mb-2 gap-4">
                             <div className="flex items-center gap-3 flex-wrap">
-                                <span className="text-xs font-bold text-zinc-500 uppercase">Context Viewer</span>
+                                <span className="text-[13px] font-bold text-zinc-500 uppercase">Context Viewer</span>
                                 <div className="flex items-center gap-1">
                                     <input
                                         type="text"
@@ -2378,7 +2422,7 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                                         onChange={e => { setSearchOligo2Seq(e.target.value); setSearchOligoError(null); }}
                                         onKeyDown={e => { if (e.key === 'Enter') handleSearchOligos(); }}
                                         placeholder="Oligo 2…"
-                                        className="input w-56 px-2 py-1 text-xs font-mono"
+                                        className="input w-56 px-2 py-1 text-[13px] font-mono"
                                     />
                                     <input
                                         type="text"
@@ -2386,7 +2430,7 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                                         onChange={e => { setSearchOligo1Seq(e.target.value); setSearchOligoError(null); }}
                                         onKeyDown={e => { if (e.key === 'Enter') handleSearchOligos(); }}
                                         placeholder="Oligo 1…"
-                                        className="input w-56 px-2 py-1 text-xs font-mono"
+                                        className="input w-56 px-2 py-1 text-[13px] font-mono"
                                     />
                                     <button
                                         onClick={handleSearchOligos}
@@ -2399,27 +2443,27 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                                     </button>
                                 </div>
                                 {searchOligoError && (
-                                    <span className="text-[10px] text-red-500 font-medium">{searchOligoError}</span>
+                                    <span className="text-[13px] text-red-500 font-medium">{searchOligoError}</span>
                                 )}
                             </div>
                             <div className="flex items-center gap-2 shrink-0">
-                                <label className="text-[10px] font-bold text-zinc-400 uppercase">Flank Window (bp)</label>
+                                <label className="text-[13px] font-bold text-zinc-400 uppercase whitespace-nowrap">Flank Window (bp)</label>
                                 <input
                                     type="number"
                                     value={interactiveFlankWindow}
                                     onChange={e => setInteractiveFlankWindow(Math.max(0, parseInt(e.target.value) || 0))}
-                                    className="input w-20 px-2 py-1 text-xs font-mono tabular-nums"
+                                    className="input w-20 px-2 py-1 text-[13px] font-mono tabular-nums"
                                 />
                             </div>
                         </div>
                         <div
                             ref={containerRef}
-                            className="font-mono text-xs text-zinc-600 dark:text-zinc-400 leading-relaxed overflow-y-auto p-4 bg-white dark:bg-zinc-950 rounded-lg border border-zinc-200 dark:border-zinc-800"
+                            className="font-mono text-[13px] text-zinc-600 dark:text-zinc-400 leading-relaxed overflow-y-auto p-4 bg-white dark:bg-zinc-950 rounded-lg border border-zinc-200 dark:border-zinc-800"
                         >
                             {renderSequence()}
                         </div>
                         {primers && (
-                            <div className="text-[10px] text-zinc-400 text-center mt-2 font-medium flex justify-center gap-4">
+                            <div className="text-[13px] text-zinc-400 text-center mt-2 font-medium flex justify-center gap-4">
                                 <span><span className="inline-block w-2 h-2 bg-amber-400 rounded-sm mr-1"></span><span className="inline-block w-2 h-2 bg-green-400 rounded-sm mr-1"></span> Drag center string to shift</span>
                                 <span> Drag edges to resize</span>
                             </div>
@@ -2438,10 +2482,10 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                                     <svg className={`w-4 h-4 text-zinc-400 group-hover:text-zinc-600 transition-transform duration-200 ${isSavedPosOpen ? 'rotate-90' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                                     </svg>
-                                    <span className="text-xs font-bold text-zinc-500 uppercase tracking-widest group-hover:text-zinc-700 dark:group-hover:text-zinc-300 transition-colors">
+                                    <span className="text-[13px] font-bold text-zinc-500 uppercase tracking-widest group-hover:text-zinc-700 dark:group-hover:text-zinc-300 transition-colors">
                                         Saved Positions
                                     </span>
-                                    <span className="text-[10px] font-semibold bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 rounded-full px-2 py-0.5 tabular-nums">
+                                    <span className="text-[13px] font-semibold bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 rounded-full px-2 py-0.5 tabular-nums">
                                         {savedPositions.length}
                                     </span>
                                 </div>
@@ -2459,26 +2503,26 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                                             value={positionSearch}
                                             onChange={e => setPositionSearch(e.target.value)}
                                             placeholder="Search labels, notes, seq or range (e.g. 10-50)"
-                                            className="input pl-8 text-xs"
+                                            className="input pl-8 text-[13px]"
                                         />
                                     </div>
                                     <button
                                         onClick={() => exportPositionsCSV(filteredPositions, jobName)}
-                                        className="btn-secondary text-[10px] px-2.5 py-1.5"
+                                        className="btn-secondary text-[13px] px-2.5 py-1.5"
                                         title="Export as CSV"
                                     >
                                         CSV
                                     </button>
                                     <button
                                         onClick={() => exportPositionsTSV(filteredPositions, jobName)}
-                                        className="btn-secondary text-[10px] px-2.5 py-1.5"
+                                        className="btn-secondary text-[13px] px-2.5 py-1.5"
                                         title="Export as TSV"
                                     >
                                         TSV
                                     </button>
                                     <button
                                         onClick={clearAllPositions}
-                                        className="text-[10px] font-bold text-zinc-400 hover:text-red-500 transition-colors uppercase tracking-wider px-2.5 py-1.5 rounded border border-transparent hover:border-red-100 dark:hover:border-red-900/30 hover:bg-red-50 dark:hover:bg-red-900/20"
+                                        className="text-[13px] font-bold text-zinc-400 hover:text-red-500 transition-colors uppercase tracking-wider px-2.5 py-1.5 rounded border border-transparent hover:border-red-100 dark:hover:border-red-900/30 hover:bg-red-50 dark:hover:bg-red-900/20"
                                         title="Clear all saved positions"
                                     >
                                         Clear all
@@ -2489,12 +2533,12 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                             {/* Undo toast */}
                             {lastDeleted && (
                                 <div className="mb-3 flex items-center justify-between gap-3 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 px-3 py-2 ">
-                                    <span className="text-xs text-zinc-600 dark:text-zinc-300">
+                                    <span className="text-[13px] text-zinc-600 dark:text-zinc-300">
                                         Deleted <b className="text-zinc-800 dark:text-zinc-100">{lastDeleted.position.label}</b>
                                     </span>
                                     <button
                                         onClick={undoDelete}
-                                        className="text-xs font-bold text-accent-700 dark:text-accent-300 hover:text-accent-800 dark:hover:text-accent-200 px-2 py-1 rounded hover:bg-zinc-100 dark:hover:bg-zinc-700 transition-colors"
+                                        className="text-[13px] font-bold text-accent-700 dark:text-accent-300 hover:text-accent-800 dark:hover:text-accent-200 px-2 py-1 rounded hover:bg-zinc-100 dark:hover:bg-zinc-700 transition-colors"
                                     >
                                         Undo
                                     </button>
@@ -2522,12 +2566,12 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                                                             if (e.key === 'Enter') commitLabelEdit(pos.id);
                                                             if (e.key === 'Escape') setEditingLabelId(null);
                                                         }}
-                                                        className="input flex-1 text-xs font-bold px-1.5 py-0.5"
+                                                        className="input flex-1 text-[13px] font-bold px-1.5 py-0.5"
                                                     />
                                                 ) : (
                                                     <button
                                                         onClick={() => { setEditingLabelId(pos.id); setEditingLabelText(pos.label); }}
-                                                        className="flex items-center gap-1 text-xs font-bold text-accent-700 dark:text-accent-300 hover:text-accent-800 dark:hover:text-accent-200 transition-colors group/label min-w-0"
+                                                        className="flex items-center gap-1 text-[13px] font-bold text-accent-700 dark:text-accent-300 hover:text-accent-800 dark:hover:text-accent-200 transition-colors group/label min-w-0"
                                                         title="Click to rename"
                                                     >
                                                         <span className="truncate">{pos.label}</span>
@@ -2546,17 +2590,17 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                                                             style={{ backgroundColor: c.value }}
                                                         />
                                                     ))}
-                                                    <span className="text-[9px] text-zinc-400 font-medium ml-1">{relativeTime(pos.createdAt)}</span>
+                                                    <span className="text-[13px] text-zinc-400 font-medium ml-1">{relativeTime(pos.createdAt)}</span>
                                                 </div>
                                             </div>
 
                                             {/* Coordinate rows */}
                                             <div className="px-3 py-2 flex flex-col gap-1.5 flex-1 w-full max-w-full">
                                                 <div className="flex items-start gap-1.5 flex-1 w-full max-w-full min-w-0">
-                                                    <span className="text-[9px] font-bold text-amber-500 uppercase tracking-wider w-12 shrink-0 pt-0.5">Oligo 2</span>
+                                                    <span className="text-[13px] font-bold text-amber-500 uppercase tracking-wider w-12 shrink-0 pt-0.5">Oligo 2</span>
                                                     <div className="flex flex-col gap-1 w-full min-w-0">
                                                         <div className="flex justify-between items-center bg-zinc-50 dark:bg-zinc-800/50 rounded px-1.5 py-0.5 border border-zinc-100 dark:border-zinc-700 w-full">
-                                                            <span className="font-mono text-[9px] text-zinc-600 dark:text-zinc-300 truncate font-semibold select-all" title={pos.p2.seq}>{pos.p2.seq}</span>
+                                                            <span className="font-mono text-[13px] text-zinc-600 dark:text-zinc-300 truncate font-semibold select-all" title={pos.p2.seq}>{pos.p2.seq}</span>
                                                             <button 
                                                                 onClick={() => handleCopy(pos.p2.seq)}
                                                                 title="Copy sequence"
@@ -2565,18 +2609,18 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                                                                 <svg className="w-2.5 h-2.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" /></svg>
                                                             </button>
                                                         </div>
-                                                        <div className="flex gap-2 text-[9px] text-zinc-400">
-                                                            <span className="font-mono text-[9px] text-zinc-500 shrink-0">bp {pos.p2AbsStart}–{pos.p2AbsEnd}</span>
+                                                        <div className="flex gap-2 text-[13px] text-zinc-400">
+                                                            <span className="font-mono text-[13px] text-zinc-500 shrink-0">bp {pos.p2AbsStart}–{pos.p2AbsEnd}</span>
                                                             <span className="ml-auto">GC: <b className="font-mono tabular-nums text-zinc-500">{pos.p2.gc.toFixed(1)}%</b></span>
                                                             <span>Tm: <b className="font-mono tabular-nums text-zinc-500">{pos.p2.tm.toFixed(1)}°C</b></span>
                                                         </div>
                                                     </div>
                                                 </div>
                                                 <div className="flex items-start gap-1.5 flex-1 w-full max-w-full min-w-0">
-                                                    <span className="text-[9px] font-bold text-emerald-500 uppercase tracking-wider w-12 shrink-0 pt-0.5">Oligo 1</span>
+                                                    <span className="text-[13px] font-bold text-emerald-500 uppercase tracking-wider w-12 shrink-0 pt-0.5">Oligo 1</span>
                                                     <div className="flex flex-col gap-1 w-full min-w-0">
                                                         <div className="flex justify-between items-center bg-zinc-50 dark:bg-zinc-800/50 rounded px-1.5 py-0.5 border border-zinc-100 dark:border-zinc-700 w-full">
-                                                            <span className="font-mono text-[9px] text-zinc-600 dark:text-zinc-300 truncate font-semibold select-all" title={pos.p1.seq}>{pos.p1.seq}</span>
+                                                            <span className="font-mono text-[13px] text-zinc-600 dark:text-zinc-300 truncate font-semibold select-all" title={pos.p1.seq}>{pos.p1.seq}</span>
                                                             <button 
                                                                 onClick={() => handleCopy(pos.p1.seq)}
                                                                 title="Copy sequence"
@@ -2585,8 +2629,8 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                                                                 <svg className="w-2.5 h-2.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" /></svg>
                                                             </button>
                                                         </div>
-                                                        <div className="flex gap-2 text-[9px] text-zinc-400">
-                                                            <span className="font-mono text-[9px] text-zinc-500 shrink-0">bp {pos.p1AbsStart}–{pos.p1AbsEnd}</span>
+                                                        <div className="flex gap-2 text-[13px] text-zinc-400">
+                                                            <span className="font-mono text-[13px] text-zinc-500 shrink-0">bp {pos.p1AbsStart}–{pos.p1AbsEnd}</span>
                                                             <span className="ml-auto">GC: <b className="font-mono tabular-nums text-zinc-500">{pos.p1.gc.toFixed(1)}%</b></span>
                                                             <span>Tm: <b className="font-mono tabular-nums text-zinc-500">{pos.p1.tm.toFixed(1)}°C</b></span>
                                                         </div>
@@ -2601,7 +2645,7 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                                                     onChange={e => updatePositionNotes(pos.id, e.target.value)}
                                                     placeholder="Notes..."
                                                     rows={2}
-                                                    className="input text-[10px] p-1.5 resize-none"
+                                                    className="input text-[13px] p-1.5 resize-none"
                                                 />
                                             </div>
 
@@ -2609,7 +2653,7 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                                             <div className="flex border-t border-zinc-100 dark:border-zinc-700">
                                                 <button
                                                     onClick={() => restorePosition(pos)}
-                                                    className="flex-1 flex items-center justify-center gap-1 py-2 text-[10px] font-bold text-accent-700 dark:text-accent-300 hover:bg-zinc-100 dark:hover:bg-zinc-700 transition-colors border-r border-zinc-100 dark:border-zinc-700"
+                                                    className="flex-1 flex items-center justify-center gap-1 py-2 text-[13px] font-bold text-accent-700 dark:text-accent-300 hover:bg-zinc-100 dark:hover:bg-zinc-700 transition-colors border-r border-zinc-100 dark:border-zinc-700"
                                                     title="Restore this position and navigate MSA"
                                                 >
                                                     <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -2629,7 +2673,7 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                                                             setCompareBaseId(pos.id);
                                                         }
                                                     }}
-                                                    className={`flex-1 flex items-center justify-center gap-1 py-2 text-[10px] font-bold transition-colors border-r border-zinc-100 dark:border-zinc-700 ${compareBaseId === pos.id ? 'text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20' : 'text-zinc-500 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-700'}`}
+                                                    className={`flex-1 flex items-center justify-center gap-1 py-2 text-[13px] font-bold transition-colors border-r border-zinc-100 dark:border-zinc-700 ${compareBaseId === pos.id ? 'text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20' : 'text-zinc-500 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-700'}`}
                                                     title={compareBaseId === pos.id ? 'Click another card to compare' : 'Select for comparison'}
                                                 >
                                                     <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -2639,7 +2683,7 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                                                 </button>
                                                 <button
                                                     onClick={() => deletePosition(pos.id)}
-                                                    className="px-3 py-2 text-[10px] font-bold text-zinc-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                                                    className="px-3 py-2 text-[13px] font-bold text-zinc-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
                                                     title="Delete this saved position"
                                                 >
                                                     <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -2694,11 +2738,11 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                                                      {/* Base position */}
                                                      <div className="bg-zinc-50 dark:bg-zinc-900/20 rounded-lg border border-zinc-200 dark:border-zinc-700 p-4">
                                                          <div className="flex items-center gap-2 mb-3">
-                                                             <span className="text-xs font-bold text-zinc-500 uppercase tracking-wider">{base.label}</span>
+                                                             <span className="text-[13px] font-bold text-zinc-500 uppercase tracking-wider">{base.label}</span>
                                                              {getColorDot(base.color)}
                                                          </div>
                                                          {base.notes && (
-                                                             <div className="text-[10px] text-zinc-500 dark:text-zinc-400 italic mb-2 line-clamp-2">{base.notes}</div>
+                                                             <div className="text-[13px] text-zinc-500 dark:text-zinc-400 italic mb-2 line-clamp-2">{base.notes}</div>
                                                          )}
                                                          <div className="flex items-center justify-between bg-white dark:bg-zinc-800 rounded p-2 mb-2">
                                                              <code className="font-mono text-sm text-zinc-700 dark:text-zinc-200 break-all flex-1">{baseOligo.seq}</code>
@@ -2712,7 +2756,7 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                                                                  </svg>
                                                              </button>
                                                          </div>
-                                                         <div className="flex flex-wrap gap-2 text-[10px] text-zinc-500 dark:text-zinc-400">
+                                                         <div className="flex flex-wrap gap-2 text-[13px] text-zinc-500 dark:text-zinc-400">
                                                              <span className="font-mono">bp {base[`${oligoKey}AbsStart`]}–{base[`${oligoKey}AbsEnd`]}</span>
                                                              <span>GC: <b className="font-mono tabular-nums text-zinc-600 dark:text-zinc-300">{baseOligo.gc.toFixed(1)}%</b></span>
                                                              <span>Tm: <b className="font-mono tabular-nums text-zinc-600 dark:text-zinc-300">{baseOligo.tm.toFixed(1)}°C</b></span>
@@ -2722,11 +2766,11 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                                                      {/* Target position */}
                                                      <div className="bg-zinc-50 dark:bg-zinc-900/20 rounded-lg border border-zinc-200 dark:border-zinc-700 p-4">
                                                           <div className="flex items-center gap-2 mb-3">
-                                                              <span className="text-xs font-bold text-zinc-500 uppercase tracking-wider">{target.label}</span>
+                                                              <span className="text-[13px] font-bold text-zinc-500 uppercase tracking-wider">{target.label}</span>
                                                               {getColorDot(target.color)}
                                                           </div>
                                                           {target.notes && (
-                                                              <div className="text-[10px] text-zinc-500 dark:text-zinc-400 italic mb-2 line-clamp-2">{target.notes}</div>
+                                                              <div className="text-[13px] text-zinc-500 dark:text-zinc-400 italic mb-2 line-clamp-2">{target.notes}</div>
                                                           )}
                                                          <div className="flex items-center justify-between bg-white dark:bg-zinc-800 rounded p-2 mb-2">
                                                              <code className="font-mono text-sm break-all flex-1">
@@ -2742,7 +2786,7 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                                                                  </svg>
                                                              </button>
                                                          </div>
-                                                         <div className="flex flex-wrap gap-2 text-[10px] text-zinc-500 dark:text-zinc-400">
+                                                         <div className="flex flex-wrap gap-2 text-[13px] text-zinc-500 dark:text-zinc-400">
                                                               <span className="font-mono">bp {target[`${oligoKey}AbsStart`]}–{target[`${oligoKey}AbsEnd`]}</span>
                                                              <span>GC: <b className="font-mono tabular-nums text-zinc-600 dark:text-zinc-300">{targetOligo.gc.toFixed(1)}%</b></span>
                                                              <span>Tm: <b className="font-mono tabular-nums text-zinc-600 dark:text-zinc-300">{targetOligo.tm.toFixed(1)}°C</b></span>
@@ -2793,7 +2837,7 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                                             <button
                                                 key={value}
                                                 onClick={() => onParameterSetChange?.(value)}
-                                                className={`relative px-2.5 py-2 text-xs font-medium text-center transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent-700 dark:focus-visible:outline-accent-300 ${idx > 0 ? 'border-l border-zinc-300 dark:border-zinc-700' : ''} ${
+                                                className={`relative px-2.5 py-2 text-[13px] font-medium text-center transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent-700 dark:focus-visible:outline-accent-300 ${idx > 0 ? 'border-l border-zinc-300 dark:border-zinc-700' : ''} ${
                                                     (idtCredentials?.parameterSet || 'mathews2004-dna') === value
                                                         ? 'text-accent-800 dark:text-accent-200'
                                                         : 'text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700'
@@ -2808,16 +2852,16 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                                             {striderResults ? '↻ Re-run Structural Analysis' : 'Run Structural Analysis'}
                                         </button>
                                     )}
-                                    {isStriderLoading && <div className="animate-pulse text-xs text-emerald-700 dark:text-emerald-400 font-medium">Analyzing via Strider...</div>}
+                                    {isStriderLoading && <div className="animate-pulse text-[13px] text-emerald-700 dark:text-emerald-400 font-medium">Analyzing via Strider...</div>}
                                     {idtCredentials && !isIdtLoading && (
                                         <button onClick={() => { setIdtError(null); setTimeout(runIdtAnalysis, 0); }} className={`btn-secondary transition-colors ${idtResults ? 'border-blue-600 dark:border-blue-400 text-blue-600 dark:text-blue-400 bg-blue-600/10 dark:bg-blue-400/10' : ''}`}>
                                             {idtResults ? '↻ Re-run IDT' : 'Run IDT'}
                                         </button>
                                     )}
-                                    {isIdtLoading && <div className="animate-pulse text-xs text-blue-700 dark:text-blue-400 font-medium">Analyzing with IDT API...</div>}
+                                    {isIdtLoading && <div className="animate-pulse text-[13px] text-blue-700 dark:text-blue-400 font-medium">Analyzing with IDT API...</div>}
                                 </div>
                             </div>
-                            {idtError && <div className="text-xs text-red-500 bg-red-50 dark:bg-red-900/20 p-2 rounded mb-3 border border-red-100 dark:border-red-900/30">Error: {idtError}</div>}
+                            {idtError && <div className="text-[13px] text-red-500 bg-red-50 dark:bg-red-900/20 p-2 rounded mb-3 border border-red-100 dark:border-red-900/30">Error: {idtError}</div>}
                             {(() => {
                                 const merged = mergeStability(striderResults, idtResults);
                                 if (!merged) return null;
@@ -2827,38 +2871,6 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                         </div>
                     )}
                 </div>
-
-                {/* ── Rename Oligos Panel ─────────────────────────── */}
-                {primers && (
-                    <div className="mt-4 border-t border-zinc-100 dark:border-zinc-700 pt-4 px-5">
-                        <div className="flex items-center gap-2 mb-3">
-                            <div className="w-1.5 h-4 bg-zinc-400 rounded-full"></div>
-                            <h4 className="text-xs font-bold text-zinc-400 uppercase tracking-widest">Rename Oligos</h4>
-                        </div>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                            <div className="flex flex-col gap-1">
-                                <label className="text-[10px] font-bold text-amber-500 uppercase tracking-wider">Oligo 2 (Left / 5') Label</label>
-                                <input
-                                    type="text"
-                                    value={oligo2Name}
-                                    onChange={e => setOligo2Name(e.target.value)}
-                                    placeholder="Oligo 2 (Left / 5')"
-                                    className="input text-xs"
-                                />
-                            </div>
-                            <div className="flex flex-col gap-1">
-                                <label className="text-[10px] font-bold text-emerald-500 uppercase tracking-wider">Oligo 1 (Right / 3') Label</label>
-                                <input
-                                    type="text"
-                                    value={oligo1Name}
-                                    onChange={e => setOligo1Name(e.target.value)}
-                                    placeholder="Oligo 1 (Right / 3')"
-                                    className="input text-xs"
-                                />
-                            </div>
-                        </div>
-                    </div>
-                )}
 
                 {/* ── MOLigo Provenance Panel ────────────────────── */}
                 {primers && (
@@ -2909,7 +2921,7 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                         <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Flanking Primers Provenance</span>
                     </div>
                     <button onClick={() => setShowFlankingPrimers(false)}
-                        className="text-xs text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 px-2 py-1 rounded hover:bg-zinc-100 dark:hover:bg-zinc-700 transition-colors">
+                        className="text-[13px] text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 px-2 py-1 rounded hover:bg-zinc-100 dark:hover:bg-zinc-700 transition-colors">
                         ✕ Close
                     </button>
                 </div>
@@ -3013,10 +3025,10 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                             value={genbankHeader ?? ''}
                             onChange={(e) => { onGenbankHeaderChange?.(e.target.value); if (e.target.value.trim()) setHeaderError(null); }}
                             placeholder={"LOCUS       PD166130                 981 bp    DNA     linear   PAT 29-JAN-2025\nDEFINITION  ...\nVERSION     ..."}
-                            className="input font-mono text-xs resize-y"
+                            className="input font-mono text-[13px] resize-y"
                         />
                         {headerError && (
-                            <p className="mt-1 text-xs text-red-600 dark:text-red-400">{headerError}</p>
+                            <p className="mt-1 text-[13px] text-red-600 dark:text-red-400">{headerError}</p>
                         )}
                     </div>
 
