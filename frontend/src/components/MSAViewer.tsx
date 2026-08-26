@@ -1144,29 +1144,31 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
                     if (ch === '-' && !isInternalDeletion) continue;
 
                     const x = Math.floor(labelWidth + a * cellW - scrollLeft);
+                    const w = Math.min(barW, labelWidth + seqAreaW - x);
+                    if (w <= 0) continue;
 
                     if (isInternalDeletion) {
                         ctx.fillStyle = '#9333ea';
-                        ctx.fillRect(x, y + 2, barW, ROW_HEIGHT - 4);
+                        ctx.fillRect(x, y + 2, w, ROW_HEIGHT - 4);
                     } else if (!isQuery && ch !== qch) {
                         ctx.fillStyle = '#dc2626';
-                        ctx.fillRect(x, y + 2, barW, ROW_HEIGHT - 4);
+                        ctx.fillRect(x, y + 2, w, ROW_HEIGHT - 4);
                     } else if (isQuery) {
                         if (restoredA && a >= restoredA.start && a < restoredA.end) {
                             ctx.fillStyle = isDark ? '#6366f1' : '#818cf8';
-                            ctx.fillRect(x, y + 2, barW, ROW_HEIGHT - 4);
+                            ctx.fillRect(x, y + 2, w, ROW_HEIGHT - 4);
                         } else if (primersA && a >= primersA.p1.start && a < primersA.p1.end) {
                             ctx.fillStyle = '#22c55e';
-                            ctx.fillRect(x, y + 2, barW, ROW_HEIGHT - 4);
+                            ctx.fillRect(x, y + 2, w, ROW_HEIGHT - 4);
                         } else if (primersA && a >= primersA.p2.start && a < primersA.p2.end) {
                             ctx.fillStyle = '#facc15';
-                            ctx.fillRect(x, y + 2, barW, ROW_HEIGHT - 4);
+                            ctx.fillRect(x, y + 2, w, ROW_HEIGHT - 4);
                         } else if (flankingPrimersA?.fwd && a >= flankingPrimersA.fwd.start && a < flankingPrimersA.fwd.end) {
                             ctx.fillStyle = '#10b981';
-                            ctx.fillRect(x, y + 2, barW, ROW_HEIGHT - 4);
+                            ctx.fillRect(x, y + 2, w, ROW_HEIGHT - 4);
                         } else if (flankingPrimersA?.rev && a >= flankingPrimersA.rev.start && a < flankingPrimersA.rev.end) {
                             ctx.fillStyle = '#14b8a6';
-                            ctx.fillRect(x, y + 2, barW, ROW_HEIGHT - 4);
+                            ctx.fillRect(x, y + 2, w, ROW_HEIGHT - 4);
                         }
                     }
                 }
@@ -1215,13 +1217,15 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
         const gcBarW = Math.max(1, Math.ceil(cellW));
         for (let a = firstCol; a <= lastCol; a++) {
             const x = Math.floor(labelWidth + a * cellW - scrollLeft);
+            const w = Math.min(gcBarW, labelWidth + seqAreaW - x);
+            if (w <= 0) continue;
             const gc = gcContent[anchorCols[a]] || 0;
             const r = Math.round(255 - gc * 150);
             const g = Math.round(180 + gc * 60);
             const b = Math.round(50 + gc * 100);
             ctx.fillStyle = `rgb(${r},${g},${b})`;
             const barH = gc * MAIN_GC_TRACK_H;
-            ctx.fillRect(x, stickyY + MAIN_GC_TRACK_H - barH, gcBarW, barH);
+            ctx.fillRect(x, stickyY + MAIN_GC_TRACK_H - barH, w, barH);
         }
         ctx.fillStyle = isDark ? '#334155' : '#e2e8f0';
         ctx.fillRect(labelWidth, stickyY + MAIN_GC_TRACK_H - 0.5, availableWidth - labelWidth, 0.5);
@@ -1276,7 +1280,7 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
             ctx.fillStyle = wantIndel ? '#9333ea' : '#dc2626';
             for (const r of sampled) {
                 if (r.isQuery) continue;
-                for (let x = 0; x < availableWidth - labelWidth; x++) {
+                for (let x = 0; x < seqW; x++) {
                     const aBase = Math.floor(((x + scrollLeft) / seqW) * anchorLen * viewFraction);
                     if (aBase < 0 || aBase >= anchorLen) continue;
                     const sampleA = [aBase];
@@ -1359,6 +1363,7 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
         for (let a = firstCol; a <= lastCol; a++) {
             if ((a + 1) % tickInterval === 0) {
                 const x = labelWidth + a * cellW - scrollLeft;
+                if (x < labelWidth || x > labelWidth + seqAreaW) continue;
                 ctx.fillStyle = isDark ? '#334155' : '#cbd5e1';
                 ctx.fillRect(x, rulerY + RULER_HEIGHT - 6, 1, 6);
                 ctx.fillStyle = '#94a3b8';
@@ -1370,13 +1375,13 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
         if (primersA) {
             const p1x = labelWidth + primersA.p1.start * cellW - scrollLeft;
             const p1w = (primersA.p1.end - primersA.p1.start) * cellW;
-            ctx.fillStyle = '#22c55e';
-            ctx.fillRect(p1x, rulerY + RULER_HEIGHT - 4, p1w, 4);
+            const p1wC = Math.min(p1w, labelWidth + seqAreaW - p1x);
+            if (p1wC > 0) { ctx.fillStyle = '#22c55e'; ctx.fillRect(p1x, rulerY + RULER_HEIGHT - 4, p1wC, 4); }
 
             const p2x = labelWidth + primersA.p2.start * cellW - scrollLeft;
             const p2w = (primersA.p2.end - primersA.p2.start) * cellW;
-            ctx.fillStyle = '#facc15';
-            ctx.fillRect(p2x, rulerY + RULER_HEIGHT - 4, p2w, 4);
+            const p2wC = Math.min(p2w, labelWidth + seqAreaW - p2x);
+            if (p2wC > 0) { ctx.fillStyle = '#facc15'; ctx.fillRect(p2x, rulerY + RULER_HEIGHT - 4, p2wC, 4); }
         }
 
         /* ── Flanking primer markers in main ruler ── */
@@ -1384,34 +1389,40 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
             if (flankingPrimersA.fwd) {
                 const fx = labelWidth + flankingPrimersA.fwd.start * cellW - scrollLeft;
                 const fw = Math.max(3, (flankingPrimersA.fwd.end - flankingPrimersA.fwd.start) * cellW);
-                ctx.fillStyle = 'rgba(16, 185, 129, 0.25)'; // emerald fill
-                ctx.fillRect(fx, rulerY, fw, RULER_HEIGHT - 4);
-                ctx.fillStyle = '#10b981';
-                ctx.fillRect(fx, rulerY, fw, 3); // top stripe
-                ctx.fillRect(fx, rulerY + RULER_HEIGHT - 7, fw, 3); // bottom stripe
-                // label
-                if (fw > 20) {
-                    ctx.fillStyle = '#059669';
-                    ctx.font = 'bold 8px ui-monospace, SFMono-Regular, monospace';
-                    ctx.textAlign = 'center';
-                    ctx.textBaseline = 'middle';
-                    ctx.fillText('FWD', fx + fw / 2, rulerY + RULER_HEIGHT / 2);
+                const fwC = Math.min(fw, labelWidth + seqAreaW - fx);
+                if (fwC > 0) {
+                    ctx.fillStyle = 'rgba(16, 185, 129, 0.25)'; // emerald fill
+                    ctx.fillRect(fx, rulerY, fwC, RULER_HEIGHT - 4);
+                    ctx.fillStyle = '#10b981';
+                    ctx.fillRect(fx, rulerY, fwC, 3); // top stripe
+                    ctx.fillRect(fx, rulerY + RULER_HEIGHT - 7, fwC, 3); // bottom stripe
+                    // label
+                    if (fwC > 20) {
+                        ctx.fillStyle = '#059669';
+                        ctx.font = 'bold 8px ui-monospace, SFMono-Regular, monospace';
+                        ctx.textAlign = 'center';
+                        ctx.textBaseline = 'middle';
+                        ctx.fillText('FWD', fx + fwC / 2, rulerY + RULER_HEIGHT / 2);
+                    }
                 }
             }
             if (flankingPrimersA.rev) {
                 const rx = labelWidth + flankingPrimersA.rev.start * cellW - scrollLeft;
                 const rw = Math.max(3, (flankingPrimersA.rev.end - flankingPrimersA.rev.start) * cellW);
-                ctx.fillStyle = 'rgba(20, 184, 166, 0.25)'; // teal fill
-                ctx.fillRect(rx, rulerY, rw, RULER_HEIGHT - 4);
-                ctx.fillStyle = '#14b8a6';
-                ctx.fillRect(rx, rulerY, rw, 3);
-                ctx.fillRect(rx, rulerY + RULER_HEIGHT - 7, rw, 3);
-                if (rw > 20) {
-                    ctx.fillStyle = '#0d9488';
-                    ctx.font = 'bold 8px ui-monospace, SFMono-Regular, monospace';
-                    ctx.textAlign = 'center';
-                    ctx.textBaseline = 'middle';
-                    ctx.fillText('REV', rx + rw / 2, rulerY + RULER_HEIGHT / 2);
+                const rwC = Math.min(rw, labelWidth + seqAreaW - rx);
+                if (rwC > 0) {
+                    ctx.fillStyle = 'rgba(20, 184, 166, 0.25)'; // teal fill
+                    ctx.fillRect(rx, rulerY, rwC, RULER_HEIGHT - 4);
+                    ctx.fillStyle = '#14b8a6';
+                    ctx.fillRect(rx, rulerY, rwC, 3);
+                    ctx.fillRect(rx, rulerY + RULER_HEIGHT - 7, rwC, 3);
+                    if (rwC > 20) {
+                        ctx.fillStyle = '#0d9488';
+                        ctx.font = 'bold 8px ui-monospace, SFMono-Regular, monospace';
+                        ctx.textAlign = 'center';
+                        ctx.textBaseline = 'middle';
+                        ctx.fillText('REV', rx + rwC / 2, rulerY + RULER_HEIGHT / 2);
+                    }
                 }
             }
         }
