@@ -53,5 +53,7 @@ export const TAG_DATABASE: TagEntry[] = [
     { reg: 73, partNumber: "MTAG-A073", antiTag: "GTTGAGAAATTAGAATTTGATAAAG", complementary: "CTTTATCAAATTCTAATTCTCAAC" },
     { reg: 74, partNumber: "MTAG-A074", antiTag: "AATGAAATAGTGTTAAATGAGTGT", complementary: "ACACTCATTAAACACTATTCATT" },
     { reg: 75, partNumber: "MTAG-A075", antiTag: "TTTGTTAGAATGAGAAGATTTATG", complementary: "CATAAATCTTCTCATCTTAACAAA" },
-    { reg: 76, partNumber: "MTAG-A076", antiTag: "AAAGAATTAGTATGATAGATGAGA", complementary: "TCTCATCTATCATACTAATTCTTT" }
+    { reg: 76, partNumber: "MTAG-A076", antiTag: "AAAGAATTAGTATGATAGATGAGA", complementary: "TCTCATCTATCATACTAATTCTTT" },
+    { reg: 77, partNumber: "MTAG-A077", antiTag: "GTTATGATATAGTGAGTTGTTATT", complementary: "AATAACAACTCACTATATCATAAC" },
+    { reg: 78, partNumber: "MTAG-A078", antiTag: "GTATAGTGTGATTAGATTTGTAAA", complementary: "TTTACAAATCTAATCACACTATAC" }
 ];
