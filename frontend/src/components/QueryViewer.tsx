@@ -2907,14 +2907,6 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
                         </svg>
                         <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Flanking Primers Provenance</span>
-                        {flankingPrimersData?.amplicon != null && (
-                            <span
-                                className="px-2 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 text-xs font-semibold font-mono tabular-nums normal-case tracking-normal"
-                                title="Amplicon size: forward primer + template between primers + reverse primer"
-                            >
-                                Amplicon: {flankingPrimersData.amplicon.toLocaleString()} bp
-                            </span>
-                        )}
                     </div>
                     <button onClick={() => setShowFlankingPrimers(false)}
                         className="text-xs text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 px-2 py-1 rounded hover:bg-zinc-100 dark:hover:bg-zinc-700 transition-colors">

@@ -1419,26 +1419,35 @@ export default function FlankingPrimersPanel({
                             {selFwd && <span><span className="inline-block w-2.5 h-2.5 bg-emerald-400 rounded-sm mr-1 align-middle" />Left Flanking</span>}
                             {selRev && <span><span className="inline-block w-2.5 h-2.5 bg-accent-400 rounded-sm mr-1 align-middle" />Right Flanking</span>}
                         </div>
-                        
-                        {/* Manual Region Indicators in the legend bar */}
-                        {(manualLeftStart !== null || manualRightStart !== null) && (
-                            <div className="flex gap-1 items-center">
-                                {manualLeftStart !== null && (
-                                    <div className="bg-zinc-100 dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 text-[10px] font-medium px-2 py-0.5 rounded-md border border-zinc-200 dark:border-zinc-800 flex items-center gap-2 tabular-nums">
-                                        <span className="status-dot bg-emerald-500" />
-                                        <span>Left Target: {manualLeftStart}-{manualLeftEnd}</span>
-                                        <button onClick={() => { setManualLeftStart(null); setManualLeftEnd(null); }} className="hover:text-red-500">Clear</button>
-                                    </div>
-                                )}
-                                {manualRightStart !== null && (
-                                    <div className="bg-zinc-100 dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 text-[10px] font-medium px-2 py-0.5 rounded-md border border-zinc-200 dark:border-zinc-800 flex items-center gap-2 tabular-nums">
-                                        <span className="status-dot bg-accent-400" />
-                                        <span>Right Target: {manualRightStart}-{manualRightEnd}</span>
-                                        <button onClick={() => { setManualRightStart(null); setManualRightEnd(null); }} className="hover:text-red-500">Clear</button>
-                                    </div>
-                                )}
-                            </div>
-                        )}
+                        <div className="flex items-center gap-3">
+                            {ampliconBp != null && (
+                                <span
+                                    className="font-mono tabular-nums text-emerald-600 dark:text-emerald-400 font-semibold whitespace-nowrap text-xs tracking-wider"
+                                    title="Amplicon size: forward primer + template between primers + reverse primer"
+                                >
+                                    Amplicon: {ampliconBp.toLocaleString()} bp
+                                </span>
+                            )}
+                            {/* Manual Region Indicators in the legend bar */}
+                            {(manualLeftStart !== null || manualRightStart !== null) && (
+                                <div className="flex gap-1 items-center">
+                                    {manualLeftStart !== null && (
+                                        <div className="bg-zinc-100 dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 text-[10px] font-medium px-2 py-0.5 rounded-md border border-zinc-200 dark:border-zinc-800 flex items-center gap-2 tabular-nums">
+                                            <span className="status-dot bg-emerald-500" />
+                                            <span>Left Target: {manualLeftStart}-{manualLeftEnd}</span>
+                                            <button onClick={() => { setManualLeftStart(null); setManualLeftEnd(null); }} className="hover:text-red-500">Clear</button>
+                                        </div>
+                                    )}
+                                    {manualRightStart !== null && (
+                                        <div className="bg-zinc-100 dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 text-[10px] font-medium px-2 py-0.5 rounded-md border border-zinc-200 dark:border-zinc-800 flex items-center gap-2 tabular-nums">
+                                            <span className="status-dot bg-accent-400" />
+                                            <span>Right Target: {manualRightStart}-{manualRightEnd}</span>
+                                            <button onClick={() => { setManualRightStart(null); setManualRightEnd(null); }} className="hover:text-red-500">Clear</button>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                        </div>
                     </div>
                     {staleManualNote && (
                         <div className="px-4 py-1.5 bg-amber-50 dark:bg-amber-900/20 border-b border-amber-200 dark:border-amber-800 flex items-center justify-between gap-2">
@@ -1458,21 +1467,6 @@ export default function FlankingPrimersPanel({
                     </div>
                 </div>
                 </div>
-
-                {/* ── Amplicon Length ── */}
-                {ampliconBp != null && (
-                    <div className="rounded-lg border border-emerald-200 dark:border-emerald-800/50 bg-emerald-50/60 dark:bg-emerald-900/10 px-4 py-3 flex items-center justify-between">
-                        <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">
-                            Amplicon Length
-                        </span>
-                        <span
-                            className="text-base font-bold font-mono tabular-nums text-emerald-700 dark:text-emerald-300"
-                            title="Amplicon size: forward primer + template between primers + reverse primer"
-                        >
-                            {ampliconBp.toLocaleString()} bp
-                        </span>
-                    </div>
-                )}
 
                 {/* ── Primer3 Parameters ── */}
                 <div className="rounded-lg border border-zinc-200 dark:border-zinc-800 overflow-hidden">
@@ -1601,6 +1595,15 @@ export default function FlankingPrimersPanel({
                                         <span className="text-sm font-bold text-zinc-700 dark:text-zinc-200 uppercase tracking-widest">
                                             Primer Pair Advanced QC
                                         </span>
+                                        {(() => {
+                                            const pw = (idtResults || striderPairResults)?.pairwise;
+                                            if (!pw) return null;
+                                            const rawItems = Array.isArray(pw.raw) ? pw.raw : (pw.raw ? [pw.raw] : []);
+                                            const bestDg = rawItems[0]?.DeltaG ?? rawItems[0]?.Local_DeltaG ?? pw.DeltaG;
+                                            return bestDg != null
+                                                ? <span className={`text-xs font-mono tabular-nums ${getIdtStatusColor(bestDg)}`}>{bestDg.toFixed(2)} kcal/mol</span>
+                                                : null;
+                                        })()}
                                     </div>
                                     <div className="flex items-center gap-3 text-zinc-400">
                                         {(isAnalyzing || isAnalyzingStriderPair) && <div className="w-4 h-4 border-2 border-zinc-300 dark:border-zinc-700 border-t-zinc-700 dark:border-t-zinc-300 rounded-full animate-spin" />}
@@ -1616,10 +1619,8 @@ export default function FlankingPrimersPanel({
                                             <div className="text-sm text-red-500 font-bold">Analysis Error: {analysisError}</div>
                                         ) : (idtResults || striderPairResults) ? (
                                             <div>
-                                                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                                                    {renderResultCard("Left Primer Stability (Hairpin/Self)", (idtResults || striderPairResults).m1.hairpin)}
-                                                    {renderResultCard("Right Primer Stability (Hairpin/Self)", (idtResults || striderPairResults).m2.hairpin)}
-                                                    {renderResultCard("HeteroDimer Pairwise", (idtResults || striderPairResults).pairwise)}
+                                                <div className="grid grid-cols-1 gap-6">
+                                                    {renderResultCard("HeteroDimer Pairwise", (idtResults || striderPairResults).pairwise, 5)}
                                                 </div>
                                                 {idtCredentials && !isAnalyzing && (
                                                     <div className="mt-4 flex justify-center">
