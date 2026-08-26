@@ -100,6 +100,7 @@ export default function FlankingPrimersPanel({
     const idtDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const idtPairDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const skipNextPairEffectRef = useRef(false);
+    const prevPairSeqsRef = useRef<{ fwd?: string; rev?: string }>({});
 
     const [fwdName, setFwdName] = useState(restoredState?.fwdName ?? '');
     const [revName, setRevName] = useState(restoredState?.revName ?? '');
@@ -690,12 +691,18 @@ export default function FlankingPrimersPanel({
             return;
         }
         if (selFwdSeq && selRevSeq) {
+            const prev = prevPairSeqsRef.current;
+            if (prev.fwd !== selFwdSeq || prev.rev !== selRevSeq) {
+                setIdtResults(null);
+            }
+            prevPairSeqsRef.current = { fwd: selFwdSeq, rev: selRevSeq };
             // Strider pair analysis fires automatically (local, no credentials needed).
             runStriderPairAnalysis(selFwdSeq, selRevSeq);
         } else {
             setStriderPairResults(null);
             setIdtResults(null);
             setAnalysisError(null);
+            prevPairSeqsRef.current = {};
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [selFwdSeq, selRevSeq, concKey]);
@@ -710,9 +717,57 @@ export default function FlankingPrimersPanel({
 
     const getIdtStatusColor = (dg: number | undefined) => {
         if (dg === undefined || dg === null) return 'text-zinc-400';
-        if (dg < -9) return 'text-red-500 font-bold';
-        if (dg < -6) return 'text-amber-500 font-medium';
+        if (dg < -9) return 'text-red-500';
+        if (dg < -6) return 'text-amber-500';
         return 'text-emerald-500';
+    };
+
+    const renderCompetitionStrip = (competition: any, label: string) => {
+        if (!competition) return null;
+        const pHairpin = competition.P_Hairpin ?? 0;
+        const pFreeOpen = Math.max(0, (competition.P_Free ?? 0) - pHairpin);
+        const segments: { label: string; value: number; className: string }[] = [
+            { label: 'Free', value: pFreeOpen, className: 'bg-zinc-300 dark:bg-zinc-600' },
+            { label: 'Hairpin', value: pHairpin, className: 'bg-amber-500' },
+            { label: 'Self-Dimer', value: competition.P_SelfDimer ?? 0, className: 'bg-red-500' },
+            { label: 'Cross-Dimer', value: competition.P_HeteroDimer ?? 0, className: 'bg-purple-500' },
+        ];
+        const shown = segments.filter(s => s.value > 0.001);
+        if (shown.length === 0) return null;
+        const wasComputed: Record<string, boolean> = {
+            Hairpin: competition.P_Hairpin !== null && competition.P_Hairpin !== undefined,
+            'Self-Dimer': competition.P_SelfDimer !== null && competition.P_SelfDimer !== undefined,
+            'Cross-Dimer': competition.P_HeteroDimer !== null && competition.P_HeteroDimer !== undefined,
+        };
+        const negligible = segments.filter(s => s.label !== 'Free' && s.value <= 0.001 && wasComputed[s.label]);
+
+        return (
+            <div className="mb-2">
+                <div className="text-xs text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-1">{label}</div>
+                <div className="flex h-3 w-full rounded-full overflow-hidden border border-zinc-200 dark:border-zinc-700">
+                    {shown.map(s => (
+                        <div key={s.label} className={s.className} style={{ width: `${s.value * 100}%` }} title={`${s.label}: ${(s.value * 100).toFixed(1)}%`} />
+                    ))}
+                </div>
+                <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1 text-[10px] text-zinc-500 dark:text-zinc-400">
+                    {shown.map(s => (
+                        <span key={s.label} className="flex items-center gap-1">
+                            <span className={`inline-block w-1.5 h-1.5 rounded-full ${s.className}`} />
+                            {s.label} <span className="font-mono tabular-nums">{(s.value * 100).toFixed(1)}%</span>
+                        </span>
+                    ))}
+                    {negligible.map(s => (
+                        <span key={s.label} className="flex items-center gap-1 opacity-60">
+                            <span className={`inline-block w-1.5 h-1.5 rounded-full ${s.className}`} />
+                            {s.label} <span className="font-mono tabular-nums">&lt;0.1%</span>
+                        </span>
+                    ))}
+                </div>
+                {competition.Converged === false && (
+                    <div className="text-[9px] text-amber-500 mt-0.5 italic">Equilibrium solve did not fully converge, treat as approximate.</div>
+                )}
+            </div>
+        );
     };
 
     const extractTm = (analyzeData: any) => {
@@ -746,7 +801,7 @@ export default function FlankingPrimersPanel({
         return (
             <div className="card p-3 flex flex-col gap-2">
                 <div className="flex justify-between items-center border-b border-zinc-100 dark:border-zinc-800 pb-2">
-                    <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider text-ellipsis overflow-hidden whitespace-nowrap">{title}</span>
+                    <span className="text-xs text-zinc-500 uppercase tracking-wider text-ellipsis overflow-hidden whitespace-nowrap">{title}</span>
                     <span className={`text-xs flex-shrink-0 font-mono tabular-nums ${getIdtStatusColor(topDg)}`}>{topDg != null ? `${topDg.toFixed(2)} kcal/mol` : 'N/A'}</span>
                 </div>
                 <div className="flex flex-col gap-3 mt-1">
@@ -760,19 +815,19 @@ export default function FlankingPrimersPanel({
                             <div key={i} className={`flex flex-col gap-2 ${maxItems > 1 && i > 0 ? 'border-t border-zinc-100 dark:border-zinc-800 pt-3' : ''}`}>
                                 {/* Provenance block (dG + Tm together, above the structure : mirrors MOLigo). */}
                                 {(!hasStructure && topDg == null && itemLocalDg == null) ? (
-                                    <div className="text-[9px] text-zinc-400 italic text-center px-1 py-0.5">No stable structure found</div>
+                                    <div className="text-[10px] text-zinc-400 italic text-center px-1 py-0.5">No stable structure found</div>
                                 ) : (
-                                    <div className="flex flex-col gap-0.5 text-[9px] text-zinc-400 font-medium px-1">
+                                    <div className="flex flex-col gap-0.5 text-[11px] text-zinc-400 px-1">
                                         <div className="flex justify-between items-center">
-                                            {maxItems > 1 && <span className="font-semibold text-[10px]">{title} {i + 1}</span>}
+                                            {maxItems > 1 && <span className="text-xs">{title} {i + 1}</span>}
                                             <div className="flex gap-3 ml-auto">
-                                                <span>IDT ΔG: <b className={`font-mono tabular-nums ${getIdtStatusColor(itemDg ?? undefined)}`}>{itemDg != null ? `${itemDg > 0 ? '+' : ''}${itemDg.toFixed(2)}` : '–'}</b></span>
-                                                <span>Strider ΔG: <b className={`font-mono tabular-nums ${itemLocalDg != null ? (itemLocalDg <= 0 ? "text-amber-500" : "text-zinc-400") : "text-zinc-400"}`}>{itemLocalDg != null ? `${itemLocalDg > 0 ? '+' : ''}${itemLocalDg.toFixed(2)}` : '–'}</b></span>
+                                                <span>IDT ΔG: <span className={`font-mono tabular-nums ${getIdtStatusColor(itemDg ?? undefined)}`}>{itemDg != null ? `${itemDg > 0 ? '+' : ''}${itemDg.toFixed(2)}` : '–'}</span></span>
+                                                <span>Strider ΔG: <span className={`font-mono tabular-nums ${itemLocalDg != null ? (itemLocalDg <= 0 ? "text-amber-500" : "text-zinc-400") : "text-zinc-400"}`}>{itemLocalDg != null ? `${itemLocalDg > 0 ? '+' : ''}${itemLocalDg.toFixed(2)}` : '–'}</span></span>
                                             </div>
                                         </div>
                                         <div className="flex gap-3 justify-end opacity-80">
-                                            <span>IDT Tm: <b className="font-mono tabular-nums text-zinc-500">{itemIdtTm != null ? `${Number(itemIdtTm).toFixed(1)}°C` : '–'}</b></span>
-                                            <span>Strider Tm: <b className="font-mono tabular-nums text-zinc-500">{itemLocalTm != null ? `${itemLocalTm.toFixed(1)}°C` : '–'}</b></span>
+                                            <span>IDT Tm: <span className="font-mono tabular-nums text-zinc-500">{itemIdtTm != null ? `${Number(itemIdtTm).toFixed(1)}°C` : '–'}</span></span>
+                                            <span>Strider Tm: <span className="font-mono tabular-nums text-zinc-500">{itemLocalTm != null ? `${itemLocalTm.toFixed(1)}°C` : '–'}</span></span>
                                         </div>
                                     </div>
                                 )}
@@ -1191,18 +1246,18 @@ export default function FlankingPrimersPanel({
                                     let cn = 'text-zinc-500 dark:text-zinc-400';
                                     let handlers: React.HTMLAttributes<HTMLSpanElement> = {};
 
-                                    if (isP1) cn = 'bg-green-200 dark:bg-green-900/40 text-green-900 dark:text-green-300 font-bold';
-                                    if (isP2) cn = 'bg-amber-200 dark:bg-amber-900/40 text-amber-900 dark:text-amber-300 font-bold';
+                                    if (isP1) cn = 'bg-green-200 dark:bg-green-900/40 text-green-900 dark:text-green-300 font-medium';
+                                    if (isP2) cn = 'bg-amber-200 dark:bg-amber-900/40 text-amber-900 dark:text-amber-300 font-medium';
 
                                     if (isFwd && liveFwdInterval) {
                                         const isEdge = i === liveFwdInterval[0] || i === liveFwdInterval[1] - 1;
-                                        cn = `bg-emerald-300 dark:bg-emerald-700/60 text-emerald-900 dark:text-emerald-200 font-bold underline ${isEdge ? 'cursor-ew-resize' : 'cursor-grab active:cursor-grabbing'}`;
+                                        cn = `bg-emerald-300 dark:bg-emerald-700/60 text-emerald-900 dark:text-emerald-200 font-medium underline ${isEdge ? 'cursor-ew-resize' : 'cursor-grab active:cursor-grabbing'}`;
                                         if (i === liveFwdInterval[0]) handlers = { onMouseDown: (e) => handleFlankMouseDown(e, 'fwd', 'left') };
                                         else if (i === liveFwdInterval[1] - 1) handlers = { onMouseDown: (e) => handleFlankMouseDown(e, 'fwd', 'right') };
                                         else handlers = { onMouseDown: (e) => handleFlankMouseDown(e, 'fwd', 'move') };
                                     } else if (isRev && liveRevInterval) {
                                         const isEdge = i === liveRevInterval[0] || i === liveRevInterval[1] - 1;
-                                        cn = `bg-accent-300 dark:bg-accent-700/60 text-accent-900 dark:text-accent-200 font-bold underline ${isEdge ? 'cursor-ew-resize' : 'cursor-grab active:cursor-grabbing'}`;
+                                        cn = `bg-accent-300 dark:bg-accent-700/60 text-accent-900 dark:text-accent-200 font-medium underline ${isEdge ? 'cursor-ew-resize' : 'cursor-grab active:cursor-grabbing'}`;
                                         if (i === liveRevInterval[0]) handlers = { onMouseDown: (e) => handleFlankMouseDown(e, 'rev', 'left') };
                                         else if (i === liveRevInterval[1] - 1) handlers = { onMouseDown: (e) => handleFlankMouseDown(e, 'rev', 'right') };
                                         else handlers = { onMouseDown: (e) => handleFlankMouseDown(e, 'rev', 'move') };
@@ -1229,11 +1284,11 @@ export default function FlankingPrimersPanel({
         const winStart = Math.max(0, Math.min(moligoStart, iv[0], partnerIv?.[0] ?? Infinity) - FLANK);
         const winEnd = Math.min(rawSeq.length, Math.max(moligoEnd, iv[1], partnerIv?.[1] ?? -Infinity) + FLANK);
         const primerCn = side === 'fwd'
-            ? 'bg-emerald-300 dark:bg-emerald-700/60 text-emerald-900 dark:text-emerald-200 font-bold underline'
-            : 'bg-accent-300 dark:bg-accent-700/60 text-accent-900 dark:text-accent-200 font-bold underline';
+            ? 'bg-emerald-300 dark:bg-emerald-700/60 text-emerald-900 dark:text-emerald-200 font-medium underline'
+            : 'bg-accent-300 dark:bg-accent-700/60 text-accent-900 dark:text-accent-200 font-medium underline';
         const partnerCn = partnerSide === 'fwd'
-            ? 'bg-emerald-300 dark:bg-emerald-700/60 text-emerald-900 dark:text-emerald-200 font-bold'
-            : 'bg-accent-300 dark:bg-accent-700/60 text-accent-900 dark:text-accent-200 font-bold';
+            ? 'bg-emerald-300 dark:bg-emerald-700/60 text-emerald-900 dark:text-emerald-200 font-medium'
+            : 'bg-accent-300 dark:bg-accent-700/60 text-accent-900 dark:text-accent-200 font-medium';
         const rows = [];
         for (let rowStart = winStart; rowStart < winEnd; rowStart += LINE) {
             const row = rawSeq.slice(rowStart, Math.min(rowStart + LINE, winEnd));
@@ -1248,8 +1303,8 @@ export default function FlankingPrimersPanel({
                             const isPrimer = i >= iv[0] && i < iv[1];
                             const isPartner = partnerIv && i >= partnerIv[0] && i < partnerIv[1];
                             let cn = 'text-zinc-500 dark:text-zinc-400';
-                            if (isP1) cn = 'bg-green-200 dark:bg-green-900/40 text-green-900 dark:text-green-300 font-bold';
-                            if (isP2) cn = 'bg-amber-200 dark:bg-amber-900/40 text-amber-900 dark:text-amber-300 font-bold';
+                            if (isP1) cn = 'bg-green-200 dark:bg-green-900/40 text-green-900 dark:text-green-300 font-medium';
+                            if (isP2) cn = 'bg-amber-200 dark:bg-amber-900/40 text-amber-900 dark:text-amber-300 font-medium';
                             if (isPartner) cn = partnerCn;
                             if (isPrimer) cn = primerCn;
                             return <span key={i} className={cn}>{char}</span>;
@@ -1266,9 +1321,9 @@ export default function FlankingPrimersPanel({
         const isSelected = side === 'fwd' ? selFwd?.sequence === p.sequence : selRev?.sequence === p.sequence;
         const statusDg = (dg: number | null) => {
             if (dg === null) return 'text-zinc-400';
-            if (dg < -6) return 'text-red-500 font-bold';
-            if (dg < -3) return 'text-amber-500 font-bold';
-            return 'text-emerald-500 font-bold';
+            if (dg < -6) return 'text-red-500';
+            if (dg < -3) return 'text-amber-500';
+            return 'text-emerald-500';
         };
         const copyKey = `${side}-${idx}`;
         const relPos = relativeMOLigoPos(p, side);
@@ -1283,11 +1338,11 @@ export default function FlankingPrimersPanel({
             <div key={idx} className={`rounded-lg border p-3 text-xs transition-all ${isSelected ? 'border-accent-600/60 dark:border-accent-300/40 bg-accent-700/5 dark:bg-accent-300/10' : 'border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900'}`}>
                 <div className="flex items-start justify-between gap-2 mb-2">
                     <div className="flex items-center gap-2">
-                        <span className="font-bold text-zinc-500 dark:text-zinc-400 text-[10px] uppercase tracking-wider">#{idx + 1}</span>
-                        {p.name && <span className="font-bold text-amber-600 dark:text-amber-400 text-[10px] uppercase tracking-wider">{p.name}</span>}
+                        <span className="text-zinc-500 dark:text-zinc-400 text-[11px] uppercase tracking-wider">#{idx + 1}</span>
+                        {p.name && <span className="text-amber-600 dark:text-amber-400 text-[11px] uppercase tracking-wider">{p.name}</span>}
                         <span className="font-mono text-zinc-700 dark:text-zinc-200 break-all">{p.sequence}</span>
                         {relPos && (
-                            <span className="font-mono text-[10px] text-zinc-400 dark:text-zinc-500 whitespace-nowrap" title="Distance from the MOLigo region (bp)">
+                            <span className="font-mono text-[11px] text-zinc-400 dark:text-zinc-500 whitespace-nowrap" title="Distance from the MOLigo region (bp)">
                                 {relPos}
                             </span>
                         )}
@@ -1300,7 +1355,7 @@ export default function FlankingPrimersPanel({
                         }}
                             disabled={!idtCredentials || isAnalIdt}
                             title={!idtCredentials ? 'Configure IDT credentials in settings' : 'Run IDT OligoAnalyzer (re-calculates with current params)'}
-                            className={`text-[10px] px-2 py-0.5 rounded-md border font-bold transition-all ${idtResult ? 'bg-blue-600 border-blue-600 text-white' : 'border-blue-600/40 text-blue-700 dark:text-blue-300 hover:bg-blue-700/10 dark:hover:bg-blue-300/10 disabled:opacity-40 disabled:cursor-not-allowed'}`}>
+                            className={`text-[10px] px-2 py-0.5 rounded-md border font-medium transition-all ${idtResult ? 'bg-blue-600 border-blue-600 text-white' : 'border-blue-600/40 text-blue-700 dark:text-blue-300 hover:bg-blue-700/10 dark:hover:bg-blue-300/10 disabled:opacity-40 disabled:cursor-not-allowed'}`}>
                             {isAnalIdt ? '...' : idtResult ? 'IDT ↻' : 'IDT'}
                         </button>
                         <button onClick={() => doCopy(p.sequence, copyKey)}
@@ -1324,19 +1379,19 @@ export default function FlankingPrimersPanel({
                                 else { setSelRev(null); setRevName(''); }
                             }
                         }}
-                            className={`text-[10px] px-2 py-0.5 rounded-md border font-bold transition-all ${isSelected ? 'bg-accent-600 border-accent-600 text-white' : 'border-accent-600/40 text-accent-700 dark:text-accent-300 hover:bg-accent-700/10 dark:hover:bg-accent-300/10'}`}>
+                            className={`text-[10px] px-2 py-0.5 rounded-md border font-medium transition-all ${isSelected ? 'bg-accent-600 border-accent-600 text-white' : 'border-accent-600/40 text-accent-700 dark:text-accent-300 hover:bg-accent-700/10 dark:hover:bg-accent-300/10'}`}>
                             {isSelected ? 'Used' : 'Use'}
                         </button>
                     </div>
                 </div>
-                <div className="grid grid-cols-7 gap-2 text-[10px] text-zinc-500 dark:text-zinc-400">
-                    <div><span className="font-bold text-zinc-600 dark:text-zinc-300">Len</span><br /><span className="font-mono tabular-nums">{p.length} bp</span></div>
-                    <div><span className="font-bold text-zinc-600 dark:text-zinc-300">P3 Tm</span><br /><span className="font-mono tabular-nums">{p.tm ?? p.primer3?.tm ?? '–'}°C</span></div>
-                    <div><span className="font-bold text-zinc-600 dark:text-zinc-300" title="IDT Tm">IDT Tm</span><br /><span className="font-mono tabular-nums">{idtResult?.analyze ? (extractTm(idtResult.analyze)?.toFixed(1) || 'N/A') + '°C' : '–'}</span></div>
-                    <div><span className="font-bold text-zinc-600 dark:text-zinc-300" title="Strider duplex Tm">Strider Tm</span><br /><span className="font-mono tabular-nums">{p.tm_strider != null ? `${p.tm_strider.toFixed(1)}°C` : '–'}</span></div>
-                    <div><span className="font-bold text-zinc-600 dark:text-zinc-300">GC</span><br /><span className="font-mono tabular-nums">{p.gc_percent ?? p.primer3?.gc_percent ?? '–'}%</span></div>
-                    <div><span className="font-bold text-zinc-600 dark:text-zinc-300">Hairpin Tm</span><br /><span className={`font-mono tabular-nums ${p.hairpin.structure_found ? 'text-amber-500' : 'text-emerald-500'}`}>{p.hairpin.structure_found ? `${p.primer3?.hairpin_th ?? '–'}°C` : 'None'}</span></div>
-                    <div><span className="font-bold text-zinc-600 dark:text-zinc-300">Self-dimer</span><br /><span className={`font-mono tabular-nums ${statusDg(p.homodimer?.dg)}`}>{p.homodimer?.dg !== null ? `${p.homodimer.dg} kcal` : 'OK'}</span></div>
+                <div className="grid grid-cols-7 gap-1 text-xs text-zinc-500 dark:text-zinc-400">
+                    <div><span className="text-zinc-600 dark:text-zinc-300">Len</span><br /><span className="font-mono tabular-nums font-medium">{p.length} bp</span></div>
+                    <div><span className="text-zinc-600 dark:text-zinc-300">P3 Tm</span><br /><span className="font-mono tabular-nums font-medium">{p.tm ?? p.primer3?.tm ?? '–'}°C</span></div>
+                    <div><span className="text-zinc-600 dark:text-zinc-300" title="IDT Tm">IDT Tm</span><br /><span className="font-mono tabular-nums font-medium">{idtResult?.analyze ? (extractTm(idtResult.analyze)?.toFixed(1) || 'N/A') + '°C' : '–'}</span></div>
+                    <div><span className="text-zinc-600 dark:text-zinc-300" title="Strider duplex Tm">Strider Tm</span><br /><span className="font-mono tabular-nums font-medium">{p.tm_strider != null ? `${p.tm_strider.toFixed(1)}°C` : '–'}</span></div>
+                    <div><span className="text-zinc-600 dark:text-zinc-300">GC</span><br /><span className="font-mono tabular-nums font-medium">{p.gc_percent ?? p.primer3?.gc_percent ?? '–'}%</span></div>
+                    <div><span className="text-zinc-600 dark:text-zinc-300">Hairpin Tm</span><br /><span className={`font-mono tabular-nums font-medium ${p.hairpin.structure_found ? 'text-amber-500' : 'text-emerald-500'}`}>{p.hairpin.structure_found ? `${p.primer3?.hairpin_th ?? '–'}°C` : 'None'}</span></div>
+                    <div><span className="text-zinc-600 dark:text-zinc-300">Self-dimer</span><br /><span className={`font-mono tabular-nums font-medium ${statusDg(p.homodimer?.dg)}`}>{p.homodimer?.dg !== null ? `${p.homodimer.dg} kcal` : 'OK'}</span></div>
                 </div>
 
                 {isSelected && (
@@ -1368,7 +1423,7 @@ export default function FlankingPrimersPanel({
 
     const numInput = (label: string, val: number, set: (v: number) => void, step = 1, min?: number, max?: number) => (
         <div className="flex flex-col gap-0.5">
-            <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">{label}</label>
+            <label className="text-[10px] font-medium text-zinc-400 uppercase tracking-wider">{label}</label>
             <input type="number" value={val} step={step} min={min} max={max}
                 onChange={e => set(parseFloat(e.target.value) || 0)}
                 className="input px-2 py-1 text-xs font-mono tabular-nums" />
@@ -1472,13 +1527,13 @@ export default function FlankingPrimersPanel({
                 <div className="rounded-lg border border-zinc-200 dark:border-zinc-800 overflow-hidden">
                     <div className="px-4 py-3 border-b border-zinc-100 dark:border-zinc-800 flex items-center justify-between">
                         <div className="flex items-center gap-2">
-                            <span className="text-xs font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Primer3 Parameters</span>
+                            <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Primer3 Parameters</span>
                             {searchEngine === 'strider' && (
                                 <span className="text-[10px] font-medium uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Engine: Strider</span>
                             )}
                         </div>
                         <button onClick={() => setShowAdv(v => !v)}
-                            className="text-[10px] font-bold px-2 py-1 rounded border border-zinc-200 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-700 transition-colors text-zinc-500">
+                            className="text-[10px] font-medium px-2 py-1 rounded border border-zinc-200 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-700 transition-colors text-zinc-500">
                             {showAdv ? '▲ Hide Advanced' : '▼ Advanced'}
                         </button>
                     </div>
@@ -1500,7 +1555,7 @@ export default function FlankingPrimersPanel({
                         </div>
                         {showAdv && (
                             <div className="border-t border-zinc-100 dark:border-zinc-800 pt-4">
-                                <p className="text-[10px] text-zinc-400 mb-3 uppercase tracking-wider font-bold">Thermodynamic Parameters</p>
+                                <p className="text-[10px] text-zinc-400 mb-3 uppercase tracking-wider font-medium">Thermodynamic Parameters</p>
                                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                                     {numInput('Mono [mM]', mvConc, setMvConc, 5, 0)}
                                     {numInput('Dival [mM]', dvConc, setDvConc, 0.5, 0)}
@@ -1553,13 +1608,13 @@ export default function FlankingPrimersPanel({
                 {(result || selFwd || selRev) && (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-5 ">
                         <div>
-                            <div className="text-xs font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider mb-2 px-1">
+                            <div className="text-xs font-medium text-emerald-600 dark:text-emerald-400 uppercase tracking-wider mb-2 px-1">
                                 Left (Forward) Primers{result ? `: ${result.forward.num_returned} found` : ''}
                             </div>
                             {/* Custom dragged primer card shown above results when it no longer matches any candidate */}
                             {selFwd && !result?.forward.primers.some(p => p.sequence === selFwd.sequence) && (
                                 <div className="mb-2">
-                                    <div className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold uppercase tracking-widest px-1 mb-1">Custom (edited)</div>
+                                    <div className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium uppercase tracking-widest px-1 mb-1">Custom (edited)</div>
                                     {renderCard(selFwd, 'fwd', -1)}
                                 </div>
                             )}
@@ -1568,13 +1623,13 @@ export default function FlankingPrimersPanel({
                                 : <div className="space-y-2">{result.forward.primers.map((p, i) => renderCard(p, 'fwd', i))}</div>)}
                         </div>
                         <div>
-                            <div className="text-xs font-bold text-accent-600 dark:text-accent-400 uppercase tracking-wider mb-2 px-1">
+                            <div className="text-xs font-medium text-accent-600 dark:text-accent-400 uppercase tracking-wider mb-2 px-1">
                                 Right (Reverse) Primers{result ? `: ${result.reverse.num_returned} found` : ''}
                             </div>
                             {/* Custom dragged primer card shown above results when it no longer matches any candidate */}
                             {selRev && !result?.reverse.primers.some(p => p.sequence === selRev.sequence) && (
                                 <div className="mb-2">
-                                    <div className="text-[10px] text-accent-600 dark:text-accent-400 font-bold uppercase tracking-widest px-1 mb-1">Custom (edited)</div>
+                                    <div className="text-[10px] text-accent-600 dark:text-accent-400 font-medium uppercase tracking-widest px-1 mb-1">Custom (edited)</div>
                                     {renderCard(selRev, 'rev', -1)}
                                 </div>
                             )}
@@ -1592,17 +1647,35 @@ export default function FlankingPrimersPanel({
                                         <svg className="w-5 h-5 text-accent-700 dark:text-accent-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
                                         </svg>
-                                        <span className="text-sm font-bold text-zinc-700 dark:text-zinc-200 uppercase tracking-widest">
+                                        <span className="text-sm font-medium text-zinc-700 dark:text-zinc-200 uppercase tracking-widest">
                                             Primer Pair Advanced QC
                                         </span>
                                         {(() => {
-                                            const pw = (idtResults || striderPairResults)?.pairwise;
-                                            if (!pw) return null;
-                                            const rawItems = Array.isArray(pw.raw) ? pw.raw : (pw.raw ? [pw.raw] : []);
-                                            const bestDg = rawItems[0]?.DeltaG ?? rawItems[0]?.Local_DeltaG ?? pw.DeltaG;
-                                            return bestDg != null
-                                                ? <span className={`text-xs font-mono tabular-nums ${getIdtStatusColor(bestDg)}`}>{bestDg.toFixed(2)} kcal/mol</span>
-                                                : null;
+                                            const r = idtResults || striderPairResults;
+                                            if (!r) return null;
+                                            const ensDg = (d: any): number | null => {
+                                                if (!d) return null;
+                                                return d.Ensemble_DeltaG ??
+                                                    (Array.isArray(d.all_Ensemble_DeltaG) ? d.all_Ensemble_DeltaG[0] : null) ??
+                                                    null;
+                                            };
+                                            const hairpinEns = [ensDg(r.m1?.hairpin), ensDg(r.m2?.hairpin)]
+                                                .filter((v): v is number => v != null);
+                                            const selfDimerEns = [ensDg(r.m1?.self_dimer), ensDg(r.m2?.self_dimer)]
+                                                .filter((v): v is number => v != null);
+                                            const bestHairpin = hairpinEns.length ? Math.min(...hairpinEns) : null;
+                                            const bestSelfDimer = selfDimerEns.length ? Math.min(...selfDimerEns) : null;
+                                            const bestHetero = ensDg(r.pairwise);
+                                            const fmt = (v: number | null) => v != null ? `${v.toFixed(2)}` : '–';
+                                            return (
+                                                <div className="flex items-center gap-2 ml-2 text-sm font-normal text-emerald-800 dark:text-emerald-200">
+                                                    <span>Hairpin ΔG <span className="font-mono tabular-nums">{fmt(bestHairpin)}</span></span>
+                                                    <span className="text-zinc-300 dark:text-zinc-600">|</span>
+                                                    <span>Self-dimer ΔG <span className="font-mono tabular-nums">{fmt(bestSelfDimer)}</span></span>
+                                                    <span className="text-zinc-300 dark:text-zinc-600">|</span>
+                                                    <span>Heterodimer ΔG <span className="font-mono tabular-nums">{fmt(bestHetero)}</span></span>
+                                                </div>
+                                            );
                                         })()}
                                     </div>
                                     <div className="flex items-center gap-3 text-zinc-400">
@@ -1616,16 +1689,20 @@ export default function FlankingPrimersPanel({
                                 {isAnalysisExpanded && (
                                     <div className="p-5 border-t border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
                                         {analysisError ? (
-                                            <div className="text-sm text-red-500 font-bold">Analysis Error: {analysisError}</div>
+                                            <div className="text-sm text-red-500 font-medium">Analysis Error: {analysisError}</div>
                                         ) : (idtResults || striderPairResults) ? (
                                             <div>
+                                                <div className="mb-4 space-y-3">
+                                                    {renderCompetitionStrip((idtResults || striderPairResults).m1?.competition, "Left (Forward) Primer Equilibrium")}
+                                                    {renderCompetitionStrip((idtResults || striderPairResults).m2?.competition, "Right (Reverse) Primer Equilibrium")}
+                                                </div>
                                                 <div className="grid grid-cols-1 gap-6">
                                                     {renderResultCard("HeteroDimer Pairwise", (idtResults || striderPairResults).pairwise, 5)}
                                                 </div>
                                                 {idtCredentials && !isAnalyzing && (
                                                     <div className="mt-4 flex justify-center">
                                                         <button onClick={() => runProductAnalysis(selFwdSeq!, selRevSeq!)}
-                                                            className={`text-xs px-3 py-1.5 rounded-md border font-bold transition-all ${idtResults ? 'border-blue-600 dark:border-blue-400 text-blue-600 dark:text-blue-400 bg-blue-600/10 dark:bg-blue-400/10' : 'border-blue-600/40 text-blue-700 dark:text-blue-300 hover:bg-blue-700/10 dark:hover:bg-blue-300/10'}`}>
+                                                            className={`text-xs px-3 py-1.5 rounded-md border font-medium transition-all ${idtResults ? 'border-blue-600 dark:border-blue-400 text-blue-600 dark:text-blue-400 bg-blue-600/10 dark:bg-blue-400/10' : 'border-blue-600/40 text-blue-700 dark:text-blue-300 hover:bg-blue-700/10 dark:hover:bg-blue-300/10'}`}>
                                                             {idtResults ? '↻ Re-run IDT Pair Analysis' : 'Run IDT Pair Analysis'}
                                                         </button>
                                                     </div>
@@ -1646,11 +1723,11 @@ export default function FlankingPrimersPanel({
                             <div className="col-span-full mt-4 border-t border-zinc-100 dark:border-zinc-800 pt-4">
                                 <div className="flex items-center gap-2 mb-3">
                                     <div className="w-1.5 h-4 bg-zinc-400 rounded-full"></div>
-                                    <h4 className="text-xs font-bold text-zinc-400 uppercase tracking-widest">Rename Primers</h4>
+                                    <h4 className="text-xs font-medium text-zinc-400 uppercase tracking-widest">Rename Primers</h4>
                                 </div>
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                     <div className="flex flex-col gap-1">
-                                        <label className="text-[10px] font-bold text-emerald-500 uppercase tracking-wider">Forward Primer Label</label>
+                                        <label className="text-[10px] font-medium text-emerald-500 uppercase tracking-wider">Forward Primer Label</label>
                                         <input
                                             type="text"
                                             value={fwdName}
@@ -1660,7 +1737,7 @@ export default function FlankingPrimersPanel({
                                         />
                                     </div>
                                     <div className="flex flex-col gap-1">
-                                        <label className="text-[10px] font-bold text-accent-500 uppercase tracking-wider">Reverse Primer Label</label>
+                                        <label className="text-[10px] font-medium text-accent-500 uppercase tracking-wider">Reverse Primer Label</label>
                                         <input
                                             type="text"
                                             value={revName}
@@ -1708,7 +1785,7 @@ export default function FlankingPrimersPanel({
                         >
                             <div className="panel-header flex items-center justify-between gap-3">
                                 <div className="flex items-center gap-2 min-w-0">
-                                    <span className={`text-sm font-bold uppercase tracking-widest flex-shrink-0 ${previewPrimer.side === 'fwd' ? 'text-emerald-600 dark:text-emerald-400' : 'text-accent-600 dark:text-accent-400'}`}>
+                                    <span className={`text-sm font-medium uppercase tracking-widest flex-shrink-0 ${previewPrimer.side === 'fwd' ? 'text-emerald-600 dark:text-emerald-400' : 'text-accent-600 dark:text-accent-400'}`}>
                                         {sideLabel} primer preview
                                     </span>
                                     <span className="font-mono text-xs text-zinc-600 dark:text-zinc-300 truncate">{previewPrimer.primer.sequence}</span>
@@ -1749,7 +1826,7 @@ export default function FlankingPrimersPanel({
                                     ? renderPreviewSeq(iv, previewPrimer.side, partnerIv, partnerSide)
                                     : <p className="text-xs text-red-500 font-medium">This primer could not be located on the template sequence.</p>}
                             </div>
-                            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 px-5 py-2.5 border-t border-zinc-100 dark:border-zinc-800 text-[10px] font-bold text-zinc-500 dark:text-zinc-400">
+                            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 px-5 py-2.5 border-t border-zinc-100 dark:border-zinc-800 text-[10px] font-medium text-zinc-500 dark:text-zinc-400">
                                 <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-green-300 dark:bg-green-700" /> MOLigo 1</span>
                                 <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-amber-300 dark:bg-amber-700" /> MOLigo 2</span>
                                 <span className="flex items-center gap-1.5"><span className={`w-2.5 h-2.5 rounded-sm ${previewPrimer.side === 'fwd' ? 'bg-emerald-400 dark:bg-emerald-600' : 'bg-accent-400 dark:bg-accent-600'}`} /> Previewed {sideLabel.toLowerCase()} primer (underlined)</span>
