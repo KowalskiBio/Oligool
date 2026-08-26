@@ -36,13 +36,13 @@ const HitRow: React.FC<{ hit: BlastHit; idx: number; dimmed?: boolean; onHitClic
                 idx % 2 === 0 ? 'bg-white dark:bg-zinc-900' : 'bg-zinc-50/50 dark:bg-zinc-800/50'
             } ${dimmed ? 'opacity-60' : ''}`}
         >
-            <td className="px-4 py-2.5 text-zinc-400 dark:text-zinc-500 font-mono text-xs">{idx + 1}</td>
+            <td className="px-4 py-2.5 text-zinc-400 dark:text-zinc-500 font-mono text-[13px]">{idx + 1}</td>
             <td className="px-4 py-2.5">
                 <a
                     href={`https://www.ncbi.nlm.nih.gov/nuccore/${hit.accession}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-accent-700 dark:text-accent-300 hover:text-accent-800 dark:hover:text-accent-200 font-mono text-xs font-medium hover:underline"
+                    className="text-accent-700 dark:text-accent-300 hover:text-accent-800 dark:hover:text-accent-200 font-mono text-[13px] font-medium hover:underline"
                     onClick={e => e.stopPropagation()}
                 >
                     {hit.accession}
@@ -51,11 +51,11 @@ const HitRow: React.FC<{ hit: BlastHit; idx: number; dimmed?: boolean; onHitClic
             <td className="px-4 py-2.5 text-zinc-700 dark:text-zinc-300 max-w-md truncate" title={hit.description}>
                 {hit.description}
             </td>
-            <td className="px-4 py-2.5 text-right font-mono text-xs text-zinc-600 dark:text-zinc-400">
+            <td className="px-4 py-2.5 text-right font-mono text-[13px] text-zinc-600 dark:text-zinc-400">
                 {hit.evalue.toExponential(1)}
             </td>
             <td className="px-4 py-2.5 text-right">
-                <span className="inline-flex items-center justify-end gap-1.5 text-xs font-medium font-mono tabular-nums text-zinc-700 dark:text-zinc-300">
+                <span className="inline-flex items-center justify-end gap-1.5 text-[13px] font-medium font-mono tabular-nums text-zinc-700 dark:text-zinc-300">
                     <span
                         className={`status-dot ${
                             hit.identity >= 100
@@ -70,7 +70,7 @@ const HitRow: React.FC<{ hit: BlastHit; idx: number; dimmed?: boolean; onHitClic
                     {hit.identity}%
                 </span>
             </td>
-            <td className="px-4 py-2.5 text-right font-mono text-xs text-zinc-600 dark:text-zinc-400">
+            <td className="px-4 py-2.5 text-right font-mono text-[13px] text-zinc-600 dark:text-zinc-400">
                 {hit.query_cover}%
             </td>
         </tr>
@@ -97,7 +97,7 @@ const BlastResults: React.FC<BlastResultsProps> = ({ hits, filteredHits = [], sh
                         ({totalVisible} hit{totalVisible !== 1 ? 's' : ''})
                     </span>
                     {filteredHits.length > 0 && (
-                        <span className="text-xs font-normal text-zinc-400 dark:text-zinc-500">
+                        <span className="text-[13px] font-normal text-zinc-400 dark:text-zinc-500">
                             · {filteredHits.length} exact match{filteredHits.length !== 1 ? 'es' : ''} filtered
                         </span>
                     )}
@@ -150,7 +150,7 @@ const BlastResults: React.FC<BlastResultsProps> = ({ hits, filteredHits = [], sh
                             {showMatches && filteredHits.length > 0 && (
                                 <>
                                     <tr className="bg-zinc-50 dark:bg-zinc-800/50">
-                                        <td colSpan={6} className="px-4 py-1.5 text-xs font-medium text-accent-700 dark:text-accent-300 border-t border-zinc-200 dark:border-zinc-800">
+                                        <td colSpan={6} className="px-4 py-1.5 text-[13px] font-medium text-accent-700 dark:text-accent-300 border-t border-zinc-200 dark:border-zinc-800">
                                             100% identity matches (filtered)
                                         </td>
                                     </tr>

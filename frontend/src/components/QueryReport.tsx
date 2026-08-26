@@ -50,7 +50,7 @@ const renderIdtSvg = (item: IdtRawItem, seq1?: string, seq2?: string) => {
 
     const isDimer = seq.includes('&') || db.includes('&');
     if (!db) {
-        return <p className="text-xs text-zinc-500 italic">No structure predicted</p>;
+        return <p className="text-[13px] text-zinc-500 italic">No structure predicted</p>;
     }
     return (
         <div className="w-full bg-zinc-50 rounded border border-zinc-200 p-2">
@@ -97,7 +97,7 @@ const ContextMap = ({ contextMap }: { contextMap?: ReportContextMap }) => {
                 {lines.map((line, lineIdx) => {
                     const lineStart = absStart + lineIdx * lineLen;
                     return (
-                        <div key={lineIdx} className="font-mono text-xs whitespace-nowrap break-inside-avoid-page">
+                        <div key={lineIdx} className="font-mono text-[13px] whitespace-nowrap break-inside-avoid-page">
                             <span className="text-zinc-400 select-none inline-block w-20 text-right pr-3 print:w-16">{lineStart}</span>
                             <span className="whitespace-pre inline-block">
                                 {line.split('').map((char, charIdx) => {
@@ -113,7 +113,7 @@ const ContextMap = ({ contextMap }: { contextMap?: ReportContextMap }) => {
                     );
                 })}
             </div>
-            <div className="flex flex-wrap gap-3 text-xs mt-3">
+            <div className="flex flex-wrap gap-3 text-[13px] mt-3">
                 {uniqueRegionLabels.map(label => (
                     <div key={label} className="flex items-center gap-1">
                         <span className={`inline-block w-3 h-3 rounded-sm ${regionStyle(label).bg}`} />
@@ -155,7 +155,7 @@ const StructureSection = ({
                     const localTm = allLocalTm[idx] ?? (idx === 0 ? result?.Local_Tm : undefined);
                     return (
                         <div key={idx} className="break-inside-avoid">
-                            <div className="grid grid-cols-2 gap-x-4 gap-y-0.5 text-xs text-zinc-600 mb-1 whitespace-pre-wrap">
+                            <div className="grid grid-cols-2 gap-x-4 gap-y-0.5 text-[13px] text-zinc-600 mb-1 whitespace-pre-wrap">
                                 {fmtDG(idtDg) !== 'N/A' && <span>IDT ΔG{'\t'}<span className="font-mono tabular-nums font-bold text-zinc-900">{fmtDG(idtDg)}</span></span>}
                                 {fmtDG(localDg) !== 'N/A' && <span>Strider ΔG{'\t'}<span className="font-mono tabular-nums font-bold text-zinc-900">{fmtDG(localDg)}</span></span>}
                                 {fmtNum(idtTm) !== 'N/A' && <span>IDT Tm{'\t'}<span className="font-mono tabular-nums font-bold text-zinc-900">{fmtNum(idtTm)} °C</span></span>}
@@ -195,14 +195,14 @@ export default function QueryReport({ data }: QueryReportProps) {
             <div className="p-6 max-w-5xl mx-auto bg-white text-black">
                 <div className="mb-6 border-b-2 border-zinc-900 pb-4">
                     <h1 className="text-xl font-bold text-zinc-900 tracking-tight">Oligool Complete Design Report</h1>
-                    <p className="text-xs text-zinc-500 mt-1">{new Date().toLocaleString()}</p>
+                    <p className="text-[13px] text-zinc-500 mt-1">{new Date().toLocaleString()}</p>
                     {data.header && (
                         <p className="text-base font-medium text-zinc-800 mt-2 break-words">{data.header}</p>
                     )}
                 </div>
 
                 {data.genbankHeader && (
-                    <pre data-genbank-header className="font-mono text-[10px] leading-[1.15] text-zinc-600 whitespace-pre-wrap break-words mb-6">{data.genbankHeader}</pre>
+                    <pre data-genbank-header className="font-mono text-[13px] leading-[1.15] text-zinc-600 whitespace-pre-wrap break-words mb-6">{data.genbankHeader}</pre>
                 )}
 
                 {data.contextMap && (
@@ -228,16 +228,16 @@ export default function QueryReport({ data }: QueryReportProps) {
                 <div className="break-inside-avoid mb-6 grid grid-cols-1 gap-3">
                     <div>
                         <h2 className="text-sm font-bold text-zinc-800 border-b border-zinc-300 pb-0.5 mb-1">{data.moligo1Name || 'MOLIGO 1'}</h2>
-                        <p className="font-mono text-xs break-all bg-zinc-50 p-1.5 rounded border border-zinc-200">{data.moligo1Seq}</p>
-                        <div className="text-xs text-zinc-600 mt-1 flex flex-wrap gap-x-4 gap-y-0.5 whitespace-pre-wrap">
+                        <p className="font-mono text-[13px] break-all bg-zinc-50 p-1.5 rounded border border-zinc-200">{data.moligo1Seq}</p>
+                        <div className="text-[13px] text-zinc-600 mt-1 flex flex-wrap gap-x-4 gap-y-0.5 whitespace-pre-wrap">
                             <span><span className="text-zinc-500">Name{'\t'}</span><V>{data.moligo1Name}</V></span>
                             <span><span className="text-zinc-500">Length{'\t'}</span><V>{data.moligo1Len} nt</V></span>
                             <span><span className="text-zinc-500">GC{'\t'}</span><V>{fmtNum(calcGC(data.moligo1Seq))}%</V></span>
                         </div>
-                        <div className="text-xs text-zinc-600 mt-0.5 whitespace-pre-wrap">
+                        <div className="text-[13px] text-zinc-600 mt-0.5 whitespace-pre-wrap">
                             <span><span className="text-zinc-500">Tm{'\t'}P3{'\t'}</span><V>{fmtNum(data.moligo1TmP3)} °C</V>{'\t'}<span className="text-zinc-500">Strider{'\t'}</span><V>{fmtNum(data.moligo1TmStrider)} °C</V>{'\t'}<span className="text-zinc-500">IDT{'\t'}</span><V>{fmtNum(data.idtM1Tm)} °C</V></span>
                         </div>
-                        <div className="text-xs text-zinc-600 mt-0.5 grid grid-cols-2 gap-x-6 gap-y-0.5 whitespace-pre-wrap">
+                        <div className="text-[13px] text-zinc-600 mt-0.5 grid grid-cols-2 gap-x-6 gap-y-0.5 whitespace-pre-wrap">
                             <span><span className="text-zinc-500">Hairpin IDT ΔG{'\t'}</span><V>{fmtDG(data.idtM1Hairpin?.DeltaG)}</V></span>
                             <span><span className="text-zinc-500">Hairpin Strider ΔG{'\t'}</span><V>{fmtDG(extractTopLocalDg(data.idtM1Hairpin))}</V></span>
                             <span><span className="text-zinc-500">Self-Dimer IDT ΔG{'\t'}</span><V>{fmtDG(data.idtM1SelfDimer?.DeltaG)}</V></span>
@@ -247,16 +247,16 @@ export default function QueryReport({ data }: QueryReportProps) {
 
                     <div>
                         <h2 className="text-sm font-bold text-zinc-800 border-b border-zinc-300 pb-0.5 mb-1">{data.moligo2Name || 'MOLIGO 2'}</h2>
-                        <p className="font-mono text-xs break-all bg-zinc-50 p-1.5 rounded border border-zinc-200">{data.moligo2Seq}</p>
-                        <div className="text-xs text-zinc-600 mt-1 flex flex-wrap gap-x-4 gap-y-0.5 whitespace-pre-wrap">
+                        <p className="font-mono text-[13px] break-all bg-zinc-50 p-1.5 rounded border border-zinc-200">{data.moligo2Seq}</p>
+                        <div className="text-[13px] text-zinc-600 mt-1 flex flex-wrap gap-x-4 gap-y-0.5 whitespace-pre-wrap">
                             <span><span className="text-zinc-500">Name{'\t'}</span><V>{data.moligo2Name}</V></span>
                             <span><span className="text-zinc-500">Length{'\t'}</span><V>{data.moligo2Len} nt</V></span>
                             <span><span className="text-zinc-500">GC{'\t'}</span><V>{fmtNum(calcGC(data.moligo2Seq))}%</V></span>
                         </div>
-                        <div className="text-xs text-zinc-600 mt-0.5 whitespace-pre-wrap">
+                        <div className="text-[13px] text-zinc-600 mt-0.5 whitespace-pre-wrap">
                             <span><span className="text-zinc-500">Tm{'\t'}P3{'\t'}</span><V>{fmtNum(data.moligo2TmP3)} °C</V>{'\t'}<span className="text-zinc-500">Strider{'\t'}</span><V>{fmtNum(data.moligo2TmStrider)} °C</V>{'\t'}<span className="text-zinc-500">IDT{'\t'}</span><V>{fmtNum(data.idtM2Tm)} °C</V></span>
                         </div>
-                        <div className="text-xs text-zinc-600 mt-0.5 grid grid-cols-2 gap-x-6 gap-y-0.5 whitespace-pre-wrap">
+                        <div className="text-[13px] text-zinc-600 mt-0.5 grid grid-cols-2 gap-x-6 gap-y-0.5 whitespace-pre-wrap">
                             <span><span className="text-zinc-500">Hairpin IDT ΔG{'\t'}</span><V>{fmtDG(data.idtM2Hairpin?.DeltaG)}</V></span>
                             <span><span className="text-zinc-500">Hairpin Strider ΔG{'\t'}</span><V>{fmtDG(extractTopLocalDg(data.idtM2Hairpin))}</V></span>
                             <span><span className="text-zinc-500">Self-Dimer IDT ΔG{'\t'}</span><V>{fmtDG(data.idtM2SelfDimer?.DeltaG)}</V></span>
@@ -334,7 +334,7 @@ export default function QueryReport({ data }: QueryReportProps) {
                             {data.savedPositions.map((pos) => (
                                 <div key={pos.id} className="bg-zinc-50 p-3 rounded border border-zinc-200">
                                     <p className="text-sm font-bold text-zinc-700 mb-1">{pos.label}</p>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs whitespace-pre-wrap">
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-[13px] whitespace-pre-wrap">
                                         <div>
                                             <span className="font-semibold text-zinc-600">Oligo 1{'\t'}</span>{pos.p1.seq}
                                             <br />
@@ -346,7 +346,7 @@ export default function QueryReport({ data }: QueryReportProps) {
                                             <span className="text-zinc-500">bp <span className="font-mono tabular-nums font-bold text-zinc-900">{pos.p2AbsStart}–{pos.p2AbsEnd}</span> | GC <span className="font-mono tabular-nums font-bold text-zinc-900">{pos.p2.gc.toFixed(1)}%</span> | Tm <span className="font-mono tabular-nums font-bold text-zinc-900">{pos.p2.tm.toFixed(1)}°C</span></span>
                                         </div>
                                     </div>
-                                    {pos.notes && <p className="text-xs text-zinc-500 mt-1 italic">{pos.notes}</p>}
+                                    {pos.notes && <p className="text-[13px] text-zinc-500 mt-1 italic">{pos.notes}</p>}
                                 </div>
                             ))}
                         </div>
@@ -355,7 +355,7 @@ export default function QueryReport({ data }: QueryReportProps) {
 
                 <div className="break-avoid mb-6">
                     <h2 className="text-lg font-bold text-zinc-800 mb-2 border-b border-zinc-300 pb-1">FINAL ORDER SEQUENCES</h2>
-                    <div className="font-mono text-xs whitespace-pre-wrap break-all bg-zinc-50 p-3 rounded border border-zinc-200">
+                    <div className="font-mono text-[13px] whitespace-pre-wrap break-all bg-zinc-50 p-3 rounded border border-zinc-200">
                         {[
                             `${data.moligo2Name || 'Oligo 2'}\t${fullOligo2}`,
                             `${data.moligo1Name || 'Oligo 1'}\t${fullOligo1}`,
@@ -365,7 +365,7 @@ export default function QueryReport({ data }: QueryReportProps) {
                     </div>
                 </div>
 
-                <div className="mt-8 pt-4 border-t border-zinc-300 text-xs text-zinc-400">
+                <div className="mt-8 pt-4 border-t border-zinc-300 text-[13px] text-zinc-400">
                     Oligool | Complete Design Report
                 </div>
             </div>

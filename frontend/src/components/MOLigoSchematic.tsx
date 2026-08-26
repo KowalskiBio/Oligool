@@ -166,9 +166,9 @@ export default function MOLigoSchematic({
                         opacity={0.3} />
 
                     <text x={tmplX0 - 6} y={tmplY + stH / 2 + 3} textAnchor="end"
-                        fontSize="9" fontWeight="bold" fill={C.tmpl}>5'</text>
+                        fontSize="13" fontWeight="bold" fill={C.tmpl}>5'</text>
                     <text x={tmplX1 + 6} y={tmplY + stH / 2 + 3} textAnchor="start"
-                        fontSize="9" fontWeight="bold" fill={C.tmpl}>3'</text>
+                        fontSize="13" fontWeight="bold" fill={C.tmpl}>3'</text>
 
                     <g opacity={0.15}>
                         {revLen > 0 && <polygon points={polyRevP} fill={C.revP} />}
@@ -210,31 +210,31 @@ export default function MOLigoSchematic({
                         <div className="flex items-center gap-2">
                             <div className="w-4 h-4 rounded-sm" style={{ backgroundColor: C.revP }} />
                             <span className={`font-semibold text-zinc-700 ${dk('dark:text-zinc-200')}`}>Reverse Primer</span>
-                            <span className="text-zinc-400 font-mono text-xs">({revLen}nt)</span>
+                            <span className="text-zinc-400 font-mono text-[13px]">({revLen}nt)</span>
                         </div>
                     )}
                     <div className="flex items-center gap-2">
                         <div className="w-4 h-4 rounded-sm" style={{ backgroundColor: C.m2 }} />
                         <span className={`font-semibold text-zinc-700 ${dk('dark:text-zinc-200')}`}>Oligo 2</span>
-                        <span className="text-zinc-400 font-mono text-xs">({m2Len}nt)</span>
+                        <span className="text-zinc-400 font-mono text-[13px]">({m2Len}nt)</span>
                     </div>
                     <div className="flex items-center gap-2">
                         <div className="w-4 h-4 rounded-sm" style={{ backgroundColor: C.m1 }} />
                         <span className={`font-semibold text-zinc-700 ${dk('dark:text-zinc-200')}`}>Oligo 1</span>
-                        <span className="text-zinc-400 font-mono text-xs">({m1Len}nt)</span>
+                        <span className="text-zinc-400 font-mono text-[13px]">({m1Len}nt)</span>
                     </div>
                     {tagLen > 0 && (
                         <div className="flex items-center gap-2">
                             <div className="w-4 h-4 rounded-sm" style={{ backgroundColor: C.tag }} />
                             <span className={`font-semibold text-zinc-700 ${dk('dark:text-zinc-200')}`}>TAG</span>
-                            <span className="text-zinc-400 font-mono text-xs">({tagLen}nt)</span>
+                            <span className="text-zinc-400 font-mono text-[13px]">({tagLen}nt)</span>
                         </div>
                     )}
                     {fwdLen > 0 && (
                         <div className="flex items-center gap-2">
                             <div className="w-4 h-4 rounded-sm" style={{ backgroundColor: C.fwdRC }} />
                             <span className={`font-semibold text-zinc-700 ${dk('dark:text-zinc-200')}`}>RC(Fwd Primer)</span>
-                            <span className="text-zinc-400 font-mono text-xs">({fwdLen}nt)</span>
+                            <span className="text-zinc-400 font-mono text-[13px]">({fwdLen}nt)</span>
                         </div>
                     )}
                 </div>
@@ -247,7 +247,7 @@ export default function MOLigoSchematic({
                         <div className="w-4 h-[3px] rounded-full" style={{ backgroundColor: C.tmpl }} />
                     </div>
                     <span className={`font-semibold text-zinc-700 ${dk('dark:text-zinc-200')}`}>Target Template</span>
-                    <span className="text-zinc-400 font-mono text-xs">({templateSeq?.length || 0}nt)</span>
+                    <span className="text-zinc-400 font-mono text-[13px]">({templateSeq?.length || 0}nt)</span>
                 </div>
             </div>
         </div>

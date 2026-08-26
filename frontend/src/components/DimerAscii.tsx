@@ -151,7 +151,7 @@ function buildFromDotBracket(seq1: string, seq2: string, db: string): string | u
 export default function DimerAscii({ seq, dotBracket, raw, className = '', light = false }: DimerAsciiProps) {
   const dk = (darkClass: string): string => (light ? '' : darkClass);
   if (!seq || !dotBracket || !seq.includes('&')) {
-    return <div className="text-[10px] text-zinc-400 italic">Invalid dimer sequence</div>;
+    return <div className="text-[13px] text-zinc-400 italic">Invalid dimer sequence</div>;
   }
 
   const [seq1, seq2 = ''] = seq.split('&');
@@ -173,12 +173,12 @@ export default function DimerAscii({ seq, dotBracket, raw, className = '', light
   }
 
   if (!ascii) {
-    return <div className="text-[10px] text-zinc-400 italic">No base pairs predicted</div>;
+    return <div className="text-[13px] text-zinc-400 italic">No base pairs predicted</div>;
   }
 
   return (
     <div className={`w-full overflow-x-auto overflow-y-auto max-h-40 bg-zinc-100 ${dk('dark:bg-zinc-800')} rounded p-2 ${className}`}>
-      <pre className={`font-mono text-[10px] sm:text-xs text-zinc-700 ${dk('dark:text-zinc-300')} whitespace-pre leading-[1.15] tracking-tighter`}>
+      <pre className={`font-mono text-[13px] sm:text-[13px] text-zinc-700 ${dk('dark:text-zinc-300')} whitespace-pre leading-[1.15] tracking-tighter`}>
         {ascii}
       </pre>
     </div>

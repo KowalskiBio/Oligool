@@ -375,7 +375,7 @@ const RabbitGame: React.FC = () => {
 
   return (
     <div className="flex flex-col items-center gap-2 mt-6">
-      <p className="text-xs text-zinc-400 dark:text-zinc-500 font-mono tracking-wide">
+      <p className="text-[13px] text-zinc-400 dark:text-zinc-500 font-mono tracking-wide">
         help the bunny survive while BLAST runs!
       </p>
       <div className="flex items-center gap-1.5">
@@ -383,7 +383,7 @@ const RabbitGame: React.FC = () => {
           <button
             key={s}
             onClick={() => setSpeed(s)}
-            className={`px-2.5 py-1 text-xs font-medium rounded-md border transition-colors ${
+            className={`px-2.5 py-1 text-[13px] font-medium rounded-md border transition-colors ${
               speed === s
                 ? 'bg-accent-700/10 dark:bg-accent-300/10 text-accent-800 dark:text-accent-200 border-accent-700/30 dark:border-accent-300/30'
                 : 'bg-white dark:bg-zinc-800 border-zinc-300 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700'

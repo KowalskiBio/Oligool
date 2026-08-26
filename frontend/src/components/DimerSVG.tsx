@@ -27,7 +27,7 @@ function basePairSymbol(a: string, b: string): string {
 
 export default function DimerSVG({ seq, dotBracket }: DimerSVGProps) {
     if (!seq || !dotBracket || !seq.includes('&')) {
-        return <div className="text-[10px] text-zinc-400 italic">Invalid dimer structure</div>;
+        return <div className="text-[13px] text-zinc-400 italic">Invalid dimer structure</div>;
     }
 
     const [seq1, seq2] = seq.split('&');
@@ -41,7 +41,7 @@ export default function DimerSVG({ seq, dotBracket }: DimerSVGProps) {
 
     if (!db1 || !db2 || !seq1 || !seq2 || seq1.length !== db1.length || seq2.length !== db2.length) {
         console.error('[DimerSVG] mismatch', { seq, dotBracket, seq1, seq2, db1, db2 });
-        return <div className="text-[10px] text-zinc-400 italic">Structure mismatch</div>;
+        return <div className="text-[13px] text-zinc-400 italic">Structure mismatch</div>;
     }
 
     // Layout constants
@@ -116,7 +116,7 @@ export default function DimerSVG({ seq, dotBracket }: DimerSVGProps) {
                 {base.toUpperCase()}
             </text>
             {label && (
-                <text x={x} y={y + (y === topY ? -12 : 12)} textAnchor="middle" fontSize={8} fill="#94a3b8" fontWeight="bold">
+                <text x={x} y={y + (y === topY ? -12 : 12)} textAnchor="middle" fontSize={13} fill="#94a3b8" fontWeight="bold">
                     {label}
                 </text>
             )}

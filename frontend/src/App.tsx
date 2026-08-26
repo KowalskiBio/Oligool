@@ -678,7 +678,7 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                   type="button"
                   onClick={() => setShowUserReport(true)}
                   title="Create a standalone report with images and notes"
-                  className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent-700 dark:focus-visible:outline-accent-300"
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 text-[13px] font-medium text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent-700 dark:focus-visible:outline-accent-300"
                 >
                   <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -688,14 +688,14 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                 <button
                   onClick={() => setShowWhatsNew(true)}
                   title="Kliknutím zobrazíte novinky a návod k použití"
-                  className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium whitespace-nowrap border-l border-zinc-300 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent-700 dark:focus-visible:outline-accent-300"
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 text-[13px] font-medium whitespace-nowrap border-l border-zinc-300 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent-700 dark:focus-visible:outline-accent-300"
                 >
                   v0.9.9 beta
                 </button>
                 <button
                   onClick={() => fileInputRef.current?.click()}
                   title="Load a saved Oligool session (.oligool.json)"
-                  className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium border-l border-zinc-300 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent-700 dark:focus-visible:outline-accent-300"
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 text-[13px] font-medium border-l border-zinc-300 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent-700 dark:focus-visible:outline-accent-300"
                 >
                   <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
@@ -706,7 +706,7 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                   <button
                     onClick={handleSaveSession}
                     title="Save this session (oligos, pinned positions, primers & alignment) to a file"
-                    className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium border-l border-zinc-300 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent-700 dark:focus-visible:outline-accent-300"
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 text-[13px] font-medium border-l border-zinc-300 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent-700 dark:focus-visible:outline-accent-300"
                   >
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 16v1a3 3 0 01-3 3H7a3 3 0 01-3-3v-1m4-4l4 4m0 0l4-4m-4 4V4" />
@@ -717,7 +717,7 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
               </div>
               {sessionMsg && (
                 <span
-                  className={`text-xs font-medium tabular-nums ${sessionMsg.type === 'ok' ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}
+                  className={`text-[13px] font-medium tabular-nums ${sessionMsg.type === 'ok' ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}
                 >
                   {sessionMsg.text}
                 </span>
@@ -770,7 +770,7 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                     <button
                       key={key}
                       onClick={() => setSettingsTab(key)}
-                      className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${settingsTab === key ? 'bg-accent-700/10 dark:bg-accent-300/10 text-accent-800 dark:text-accent-200' : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300'}`}
+                      className={`px-3 py-1 text-[13px] font-medium rounded-md transition-colors ${settingsTab === key ? 'bg-accent-700/10 dark:bg-accent-300/10 text-accent-800 dark:text-accent-200' : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300'}`}
                     >
                       {label}
                     </button>
@@ -801,7 +801,7 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                           <div className={`block w-8 h-4 rounded-full transition-colors ${showSecrets ? 'bg-accent-700' : 'bg-zinc-300 dark:bg-zinc-700'}`}></div>
                           <div className={`absolute left-0.5 top-0.5 bg-white w-3 h-3 rounded-full transition-transform ${showSecrets ? 'tranzinc-x-4' : ''}`}></div>
                         </div>
-                        <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400 group-hover:text-zinc-700 dark:group-hover:text-zinc-300 transition-colors">
+                        <span className="text-[13px] font-medium text-zinc-500 dark:text-zinc-400 group-hover:text-zinc-700 dark:group-hover:text-zinc-300 transition-colors">
                           Show Passwords
                         </span>
                       </label>
@@ -809,7 +809,7 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div className="space-y-3">
                         <div className="flex items-center gap-3">
-                          <label className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider w-24">
+                          <label className="text-[13px] font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider w-24">
                             NCBI Key
                           </label>
                           <input
@@ -817,16 +817,16 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                             value={apiKey}
                             onChange={(e) => handleApiKeyChange(e.target.value)}
                             placeholder="NCBI API key"
-                            className="input text-xs p-2 font-mono"
+                            className="input text-[13px] p-2 font-mono"
                           />
                         </div>
-                        <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                        <p className="text-[13px] text-zinc-500 dark:text-zinc-400">
                           Increases BLAST rate limit (3 → 10 req/s). Get from <a href="https://www.ncbi.nlm.nih.gov/account/settings/" target="_blank" rel="noopener noreferrer" className="text-accent-700 underline">NCBI Settings</a>.
                         </p>
                       </div>
                       <div className="space-y-3">
                         <div className="flex items-center gap-3">
-                          <label className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider w-24">
+                          <label className="text-[13px] font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider w-24">
                             IDT Client ID
                           </label>
                           <input
@@ -834,11 +834,11 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                             value={idtClientId}
                             onChange={(e) => handleIdtIdChange(e.target.value)}
                             placeholder="OligoAnalyzer Client ID"
-                            className="input text-xs p-2 font-mono"
+                            className="input text-[13px] p-2 font-mono"
                           />
                         </div>
                         <div className="flex items-center gap-3">
-                          <label className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider w-24">
+                          <label className="text-[13px] font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider w-24">
                             IDT Secret
                           </label>
                           <input
@@ -846,11 +846,11 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                             value={idtClientSecret}
                             onChange={(e) => handleIdtSecretChange(e.target.value)}
                             placeholder="OligoAnalyzer Client Secret"
-                            className="input text-xs p-2 font-mono"
+                            className="input text-[13px] p-2 font-mono"
                           />
                         </div>
                         <div className="flex items-center gap-3">
-                          <label className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider w-24">
+                          <label className="text-[13px] font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider w-24">
                             IDT User
                           </label>
                           <input
@@ -858,11 +858,11 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                             value={idtUsername}
                             onChange={(e) => handleIdtUsernameChange(e.target.value)}
                             placeholder="IDT Username"
-                            className="input text-xs p-2 font-mono"
+                            className="input text-[13px] p-2 font-mono"
                           />
                         </div>
                         <div className="flex items-center gap-3">
-                          <label className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider w-24">
+                          <label className="text-[13px] font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider w-24">
                             IDT Pass
                           </label>
                           <input
@@ -870,23 +870,23 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                             value={idtPassword}
                             onChange={(e) => handleIdtPasswordChange(e.target.value)}
                             placeholder="IDT Account Password"
-                            className="input text-xs p-2 font-mono"
+                            className="input text-[13px] p-2 font-mono"
                           />
                         </div>
                         <div className="flex items-center gap-3">
-                          <label className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider w-24">
+                          <label className="text-[13px] font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider w-24">
                             IDT Region
                           </label>
                           <select
                             value={idtRegion}
                             onChange={(e) => handleIdtRegionChange(e.target.value as 'us' | 'eu')}
-                            className="input text-xs p-2 font-mono"
+                            className="input text-[13px] p-2 font-mono"
                           >
                             <option value="eu">EU (eu.idtdna.com)</option>
                             <option value="us">US (www.idtdna.com)</option>
                           </select>
                         </div>
-                        <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                        <p className="text-[13px] text-zinc-500 dark:text-zinc-400">
                           Required for IDT OligoAnalyzer features. Obtain from <a href="https://www.idtdna.com/pages/scitools/plus-api" target="_blank" rel="noopener noreferrer" className="text-accent-700 underline">IDT SciTools Plus API</a>. US and EU accounts use separate IDT regions.
                         </p>
                       </div>
@@ -897,7 +897,7 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                   <div>
                     <h3 className="text-sm font-semibold text-zinc-700 dark:text-zinc-300 mb-3">Search Engine</h3>
                     <div className="flex items-center gap-3 flex-wrap">
-                      <label className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider w-24">
+                      <label className="text-[13px] font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider w-24">
                         Engine
                       </label>
                       <div
@@ -911,7 +911,7 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                           <button
                             key={value}
                             onClick={() => setSearchEngine(value)}
-                            className={`px-2.5 py-1 text-xs font-medium transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent-700 dark:focus-visible:outline-accent-300 ${idx > 0 ? 'border-l border-zinc-300 dark:border-zinc-700 ' : ''}${
+                            className={`px-2.5 py-1 text-[13px] font-medium transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent-700 dark:focus-visible:outline-accent-300 ${idx > 0 ? 'border-l border-zinc-300 dark:border-zinc-700 ' : ''}${
                               searchEngine === value
                                 ? 'bg-accent-700/10 dark:bg-accent-300/10 text-accent-800 dark:text-accent-200'
                                 : 'bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700'
@@ -921,7 +921,7 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                           </button>
                         ))}
                       </div>
-                      <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                      <p className="text-[13px] text-zinc-500 dark:text-zinc-400">
                         Tm and oligo picks follow the selected engine's model
                       </p>
                     </div>
@@ -932,13 +932,13 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                     <h3 className="text-sm font-semibold text-zinc-700 dark:text-zinc-300 mb-3">Theme</h3>
                     <div className="space-y-4">
                       <div>
-                        <label className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">
+                        <label className="text-[13px] font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">
                           Wallpaper
                         </label>
                         <div className="grid grid-cols-6 sm:grid-cols-9 gap-2 mt-2">
                           <button
                             onClick={() => setWallpaperUrl('')}
-                            className={`h-12 rounded-md border-2 flex items-center justify-center text-[10px] text-zinc-400 transition-colors ${!wallpaperUrl ? 'border-accent-600 dark:border-accent-300' : 'border-zinc-200 dark:border-zinc-700 hover:border-zinc-300 dark:hover:border-zinc-600'}`}
+                            className={`h-12 rounded-md border-2 flex items-center justify-center text-[13px] text-zinc-400 transition-colors ${!wallpaperUrl ? 'border-accent-600 dark:border-accent-300' : 'border-zinc-200 dark:border-zinc-700 hover:border-zinc-300 dark:hover:border-zinc-600'}`}
                           >
                             None
                           </button>
@@ -976,7 +976,7 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                         </div>
                         {wallpaperUrl && (
                           <div className="flex items-center gap-3 mt-3">
-                            <label className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider w-20">
+                            <label className="text-[13px] font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider w-20">
                               Opacity
                             </label>
                             <input
@@ -987,12 +987,12 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                               onChange={(e) => setWallpaperOpacity(parseInt(e.target.value, 10))}
                               className="flex-1 accent-accent-600 dark:accent-accent-300"
                             />
-                            <span className="text-xs text-zinc-500 dark:text-zinc-400 w-10 text-right tabular-nums">{wallpaperOpacity}%</span>
+                            <span className="text-[13px] text-zinc-500 dark:text-zinc-400 w-10 text-right tabular-nums">{wallpaperOpacity}%</span>
                           </div>
                         )}
                       </div>
                       <div>
-                        <label className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">
+                        <label className="text-[13px] font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">
                           Accent color
                         </label>
                         <div className="flex items-center gap-2 mt-2">
@@ -1020,7 +1020,7 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                         </div>
                       </div>
                       <div>
-                        <label className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">
+                        <label className="text-[13px] font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">
                           Neutral palette
                         </label>
                         <div className="flex items-center gap-2 mt-2">
@@ -1092,7 +1092,7 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                     ) : idx + 1}
                   </div>
                   <span
-                    className={`mt-1.5 text-xs font-medium ${isStepActive(s.key) ? 'text-accent-700 dark:text-accent-300' : 'text-zinc-400 dark:text-zinc-500'
+                    className={`mt-1.5 text-[13px] font-medium ${isStepActive(s.key) ? 'text-accent-700 dark:text-accent-300' : 'text-zinc-400 dark:text-zinc-500'
                       }`}
                   >
                     {s.label}
@@ -1156,7 +1156,7 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
               onChange={(e) => setInput(e.target.value)}
             />
             {queryHeader && (
-              <p className="mt-1 text-xs text-emerald-600 dark:text-emerald-400 break-all">
+              <p className="mt-1 text-[13px] text-emerald-600 dark:text-emerald-400 break-all">
                 Header detected. It will be used in the report: <span className="font-mono font-semibold">{queryHeader}</span>
               </p>
             )}
@@ -1169,7 +1169,7 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
               id="genbank-header"
               rows={4}
               disabled={step !== 'input'}
-              className="input font-mono text-xs p-3"
+              className="input font-mono text-[13px] p-3"
               placeholder={"LOCUS       PD166130                 981 bp    DNA     linear   PAT 29-JAN-2025\nDEFINITION  ...\nACCESSION   ...\nVERSION     ..."}
               value={genbankHeader}
               onChange={(e) => setGenbankHeader(e.target.value)}
@@ -1178,7 +1178,7 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
             <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4 border-t border-zinc-200 dark:border-zinc-800 pt-4">
               {/* Organism Filter */}
               <div>
-                <label className="block text-xs font-semibold text-zinc-500 dark:text-zinc-400 mb-1">Organism (Optional)</label>
+                <label className="block text-[13px] font-semibold text-zinc-500 dark:text-zinc-400 mb-1">Organism (Optional)</label>
                 <input
                   type="text"
                   value={organism}
@@ -1191,7 +1191,7 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
 
               {/* E-value Threshold */}
               <div>
-                <label className="block text-xs font-semibold text-zinc-500 dark:text-zinc-400 mb-1">E-value Threshold</label>
+                <label className="block text-[13px] font-semibold text-zinc-500 dark:text-zinc-400 mb-1">E-value Threshold</label>
                 <input
                   type="number"
                   step="1e-10"
@@ -1199,13 +1199,13 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                   value={eValue}
                   onChange={(e) => setEValue(e.target.value)}
                   disabled={step !== 'input'}
-                  className="input px-2 py-1 text-xs font-mono tabular-nums"
+                  className="input px-2 py-1 text-[13px] font-mono tabular-nums"
                 />
               </div>
 
               {/* % Identity Threshold */}
               <div>
-                <label className="block text-xs font-semibold text-zinc-500 dark:text-zinc-400 mb-1">% Identity Threshold</label>
+                <label className="block text-[13px] font-semibold text-zinc-500 dark:text-zinc-400 mb-1">% Identity Threshold</label>
                 <input
                   type="number"
                   min="0"
@@ -1213,14 +1213,14 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                   value={percIdentity}
                   onChange={(e) => setPercIdentity(e.target.value)}
                   disabled={step !== 'input'}
-                  className="input px-2 py-1 text-xs font-mono tabular-nums"
+                  className="input px-2 py-1 text-[13px] font-mono tabular-nums"
                 />
               </div>
             </div>
             {/* ... buttons ... */}
             <div className="mt-4 flex items-center justify-between flex-wrap gap-3 pt-2">
               <div className="flex items-center gap-2">
-                <label className="text-xs font-medium text-zinc-500 dark:text-zinc-400">Max hits:</label>
+                <label className="text-[13px] font-medium text-zinc-500 dark:text-zinc-400">Max hits:</label>
                 <div className="flex rounded-md overflow-hidden border border-zinc-300 dark:border-zinc-700">
                   {[
                     { value: 'all', label: 'All' },
@@ -1236,7 +1236,7 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                       type="button"
                       onClick={() => setMaxHitsPreset(opt.value)}
                       disabled={step !== 'input'}
-                      className={`px-2.5 py-1 text-xs font-medium transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent-700 dark:focus-visible:outline-accent-300 disabled:opacity-50 ${i > 0 ? 'border-l border-zinc-300 dark:border-zinc-700' : ''
+                      className={`px-2.5 py-1 text-[13px] font-medium transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent-700 dark:focus-visible:outline-accent-300 disabled:opacity-50 ${i > 0 ? 'border-l border-zinc-300 dark:border-zinc-700' : ''
                         } ${maxHitsPreset === opt.value
                           ? 'bg-accent-700/10 dark:bg-accent-300/10 text-accent-800 dark:text-accent-200'
                           : 'bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700'
@@ -1259,20 +1259,20 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                     onChange={(e) => setCustomHits(e.target.value)}
                     disabled={step !== 'input'}
                     placeholder="e.g. 200"
-                    className="input px-2 py-1 text-xs font-mono tabular-nums placeholder-zinc-400 dark:placeholder-zinc-500"
+                    className="input px-2 py-1 text-[13px] font-mono tabular-nums placeholder-zinc-400 dark:placeholder-zinc-500"
                   />
                 </div>
               </div>
 
               {/* Filter Matches Toggle */}
               <div className="flex items-center gap-2">
-                <label className="text-xs font-medium text-zinc-500 dark:text-zinc-400">Filter matches:</label>
+                <label className="text-[13px] font-medium text-zinc-500 dark:text-zinc-400">Filter matches:</label>
                 <div className="flex rounded-md overflow-hidden border border-zinc-300 dark:border-zinc-700">
                   <button
                     type="button"
                     onClick={() => setFilterMatches(true)}
                     disabled={step !== 'input'}
-                    className={`px-2.5 py-1 text-xs font-medium transition-colors disabled:opacity-50 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent-700 dark:focus-visible:outline-accent-300 ${filterMatches ? 'bg-accent-700/10 dark:bg-accent-300/10 text-accent-800 dark:text-accent-200' : 'bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700'
+                    className={`px-2.5 py-1 text-[13px] font-medium transition-colors disabled:opacity-50 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent-700 dark:focus-visible:outline-accent-300 ${filterMatches ? 'bg-accent-700/10 dark:bg-accent-300/10 text-accent-800 dark:text-accent-200' : 'bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700'
                       }`}
                   >
                     Yes
@@ -1281,7 +1281,7 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                     type="button"
                     onClick={() => setFilterMatches(false)}
                     disabled={step !== 'input'}
-                    className={`px-2.5 py-1 text-xs font-medium transition-colors disabled:opacity-50 border-l border-zinc-300 dark:border-zinc-700 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent-700 dark:focus-visible:outline-accent-300 ${!filterMatches ? 'bg-accent-700/10 dark:bg-accent-300/10 text-accent-800 dark:text-accent-200' : 'bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700'
+                    className={`px-2.5 py-1 text-[13px] font-medium transition-colors disabled:opacity-50 border-l border-zinc-300 dark:border-zinc-700 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent-700 dark:focus-visible:outline-accent-300 ${!filterMatches ? 'bg-accent-700/10 dark:bg-accent-300/10 text-accent-800 dark:text-accent-200' : 'bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700'
                       }`}
                   >
                     No
@@ -1332,7 +1332,7 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                     {Math.floor(elapsedSeconds / 60)}:{(elapsedSeconds % 60).toString().padStart(2, '0')} elapsed
                   </span>
                 </div>
-                <p className="text-xs text-zinc-400 dark:text-zinc-500">This may take 1-2 minutes depending on sequence count. Preparing environment...</p>
+                <p className="text-[13px] text-zinc-400 dark:text-zinc-500">This may take 1-2 minutes depending on sequence count. Preparing environment...</p>
               </div>
 
               <div><RabbitGame /></div>
@@ -1400,7 +1400,7 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                   <span className="w-2 h-2 rounded-full bg-emerald-600 dark:bg-emerald-400"></span>
                   {(jobName && jobName !== 'Query') ? jobName : 'Search Analysis'} Completed
                 </h3>
-                <div className="mt-1 text-xs text-zinc-500 dark:text-zinc-400 font-mono tabular-nums flex flex-wrap gap-x-4 gap-y-1">
+                <div className="mt-1 text-[13px] text-zinc-500 dark:text-zinc-400 font-mono tabular-nums flex flex-wrap gap-x-4 gap-y-1">
                   <span>RID: <span className="text-zinc-700 dark:text-zinc-300">{blastMeta.rid}</span></span>
                   <span>Len: <span className="text-zinc-700 dark:text-zinc-300">{blastMeta.query_len} bp</span></span>
                   <span>Hits: <span className="text-zinc-700 dark:text-zinc-300">{blastHits.length}</span></span>
@@ -1518,7 +1518,7 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
             <div className="card shadow-xl max-w-lg w-full max-h-[80vh] overflow-y-auto p-6" onClick={e => e.stopPropagation()}>
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
-                  <span className="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-accent-700/10 dark:bg-accent-300/10 text-accent-700 dark:text-accent-300 text-xs font-bold">v0.9.9</span>
+                  <span className="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-accent-700/10 dark:bg-accent-300/10 text-accent-700 dark:text-accent-300 text-[13px] font-bold">v0.9.9</span>
                   <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">Co je nového</h2>
                 </div>
                 <button onClick={() => setShowWhatsNew(false)} className="text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-200 text-xl leading-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-700 dark:focus-visible:outline-accent-300">&times;</button>
@@ -1764,7 +1764,7 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
           </div>
         )}
 
-        <footer className="relative mt-10 pt-6 border-t border-zinc-200 dark:border-zinc-800 text-center text-xs text-zinc-500 dark:text-zinc-400 space-y-1">
+        <footer className="relative mt-10 pt-6 border-t border-zinc-200 dark:border-zinc-800 text-center text-[13px] text-zinc-500 dark:text-zinc-400 space-y-1">
           <p>
             Oligool is developed by{' '}
             <strong className="text-zinc-700 dark:text-zinc-300">Mgr. Vojtěch Rejtar</strong>.

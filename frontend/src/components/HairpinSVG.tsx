@@ -138,7 +138,7 @@ export default function HairpinSVG({ seq, dotBracket, light = false }: HairpinSV
         const allDots = dotBracket && !dotBracket.includes('(') && !dotBracket.includes(')');
         if (allDots) {
             return (
-                <div className={`text-[10px] text-zinc-400 ${dk('dark:text-zinc-500')} italic py-1`}>
+                <div className={`text-[13px] text-zinc-400 ${dk('dark:text-zinc-500')} italic py-1`}>
                     No secondary structure predicted
                 </div>
             );
@@ -161,7 +161,7 @@ export default function HairpinSVG({ seq, dotBracket, light = false }: HairpinSV
             blockPairs.push(`${seq.slice(start, start + 50)}\n${dotBracket.slice(start, start + 50)}`);
         }
         return (
-            <pre className={`font-mono text-[10px] text-zinc-500 ${dk('dark:text-zinc-400')} whitespace-pre-wrap break-all overflow-x-auto`}>
+            <pre className={`font-mono text-[13px] text-zinc-500 ${dk('dark:text-zinc-400')} whitespace-pre-wrap break-all overflow-x-auto`}>
                 {blockPairs.join('\n\n')}
             </pre>
         );
@@ -321,7 +321,7 @@ export default function HairpinSVG({ seq, dotBracket, light = false }: HairpinSV
     elements.push(
         <text key="5p" x={fivePrimeX} y={stemBottomY + 1}
             textAnchor="middle" dominantBaseline="central"
-            fontSize={8} fontFamily="sans-serif" fontWeight="bold" fill="#818cf8">
+            fontSize={13} fontFamily="sans-serif" fontWeight="bold" fill="#818cf8">
             5'
         </text>
     );
@@ -329,7 +329,7 @@ export default function HairpinSVG({ seq, dotBracket, light = false }: HairpinSV
     elements.push(
         <text key="3p" x={threePrimeX} y={stemBottomY + 1}
             textAnchor="middle" dominantBaseline="central"
-            fontSize={8} fontFamily="sans-serif" fontWeight="bold" fill="#fb923c">
+            fontSize={13} fontFamily="sans-serif" fontWeight="bold" fill="#fb923c">
             3'
         </text>
     );

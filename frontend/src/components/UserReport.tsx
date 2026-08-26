@@ -298,7 +298,7 @@ export default function UserReport({ open, onClose, defaultSequence, jobName }: 
                 <div className="flex justify-between items-start px-6 py-4 border-b border-zinc-100 dark:border-zinc-800 sticky top-0 bg-white dark:bg-zinc-900 rounded-t-lg z-10">
                     <div>
                         <h3 id="user-report-title" className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">Report</h3>
-                        <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">Paste images, write notes, and save a standalone report.</p>
+                        <p className="text-[13px] text-zinc-500 dark:text-zinc-400 mt-0.5">Paste images, write notes, and save a standalone report.</p>
                     </div>
                     <button
                         onClick={onClose}
@@ -325,7 +325,7 @@ export default function UserReport({ open, onClose, defaultSequence, jobName }: 
                             value={sequence}
                             onChange={(e) => setSequence(e.target.value)}
                             placeholder={"ATCGATCGATCG... or >my_sequence\\nATCG..."}
-                            className="input font-mono text-xs resize-y"
+                            className="input font-mono text-[13px] resize-y"
                         />
                     </div>
 
@@ -380,8 +380,8 @@ export default function UserReport({ open, onClose, defaultSequence, jobName }: 
                         </div>
                         {/* Paste zone */}
                         <div className="rounded-lg border-2 border-dashed border-zinc-300 dark:border-zinc-600 bg-zinc-50 dark:bg-zinc-900/30 px-4 py-3 text-center">
-                            <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                                Paste an image here with <kbd className="px-1.5 py-0.5 rounded bg-zinc-200 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300 font-mono text-[10px]">Ctrl/⌘ + V</kbd>
+                            <p className="text-[13px] text-zinc-500 dark:text-zinc-400">
+                                Paste an image here with <kbd className="px-1.5 py-0.5 rounded bg-zinc-200 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300 font-mono text-[13px]">Ctrl/⌘ + V</kbd>
                                 {images.length === 0 && ' or use "Add file" above.'}
                             </p>
                         </div>
@@ -401,7 +401,7 @@ export default function UserReport({ open, onClose, defaultSequence, jobName }: 
                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
                                             </svg>
                                         </button>
-                                        <p className="text-[10px] text-zinc-500 dark:text-zinc-400 truncate px-1.5 py-1 bg-white dark:bg-zinc-800">{img.name}</p>
+                                        <p className="text-[13px] text-zinc-500 dark:text-zinc-400 truncate px-1.5 py-1 bg-white dark:bg-zinc-800">{img.name}</p>
                                     </div>
                                 ))}
                             </div>
@@ -410,7 +410,7 @@ export default function UserReport({ open, onClose, defaultSequence, jobName }: 
 
                     {/* Status */}
                     {status && (
-                        <p className={`text-xs font-medium ${status.kind === 'ok' ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
+                        <p className={`text-[13px] font-medium ${status.kind === 'ok' ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
                             {status.text}
                         </p>
                     )}

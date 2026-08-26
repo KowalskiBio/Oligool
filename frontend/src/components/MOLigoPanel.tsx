@@ -148,7 +148,7 @@ export default function MOLigoPanel(props: MOLigoProps) {
                                 <span className="status-dot bg-purple-500" />
                                 Universal Reverse Primer
                             </div>
-                            <span className="text-xs font-mono tabular-nums text-zinc-400">{revLen}nt</span>
+                            <span className="text-[13px] font-mono tabular-nums text-zinc-400">{revLen}nt</span>
                         </div>
                         <div className="flex-1 bg-zinc-50 dark:bg-zinc-800/60 p-2 rounded-md border border-zinc-200 dark:border-zinc-700">
                             <textarea
@@ -168,12 +168,12 @@ export default function MOLigoPanel(props: MOLigoProps) {
                                 <span className="status-dot bg-red-500" />
                                 TAG Sequence
                             </div>
-                            <span className="text-xs font-mono tabular-nums text-zinc-400">{tagLen}nt</span>
+                            <span className="text-[13px] font-mono tabular-nums text-zinc-400">{tagLen}nt</span>
                         </div>
 
                         <div className="flex flex-col gap-2 flex-1">
                             <select
-                                className="input text-xs p-1.5"
+                                className="input text-[13px] p-1.5"
                                 onChange={(e) => {
                                     const tag = TAG_DATABASE.find(t => t.partNumber === e.target.value);
                                     if (tag) onTagChange?.(tag.antiTag);
@@ -207,7 +207,7 @@ export default function MOLigoPanel(props: MOLigoProps) {
                                 <span className="status-dot bg-pink-500" />
                                 Universal Forward Primer
                             </div>
-                            <span className="text-xs font-mono tabular-nums text-zinc-400">{fwdLen}nt</span>
+                            <span className="text-[13px] font-mono tabular-nums text-zinc-400">{fwdLen}nt</span>
                         </div>
                         <div className="flex-1 bg-zinc-50 dark:bg-zinc-800/60 p-2 rounded-md border border-zinc-200 dark:border-zinc-700 flex flex-col">
                             <textarea
@@ -220,7 +220,7 @@ export default function MOLigoPanel(props: MOLigoProps) {
                         </div>
                         {fwdLen > 0 && (
                             <div className="mt-3 border-t border-zinc-100 dark:border-zinc-700 pt-2 flex items-center justify-between">
-                                <span className="text-xs text-zinc-500 font-mono truncate">
+                                <span className="text-[13px] text-zinc-500 font-mono truncate">
                                     RC: {fwdRCSeq}
                                 </span>
                             </div>
@@ -232,21 +232,21 @@ export default function MOLigoPanel(props: MOLigoProps) {
                 <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3 max-w-[85rem] mx-auto px-2 md:px-6">
                     <div className="bg-white dark:bg-zinc-800 rounded-lg border border-zinc-200 dark:border-zinc-700 p-3 shadow-sm">
                         <div className="flex items-center justify-between mb-2">
-                            <div className="flex items-center gap-2 text-xs font-bold text-zinc-500 uppercase tracking-wider">
+                            <div className="flex items-center gap-2 text-[13px] font-bold text-zinc-500 uppercase tracking-wider">
                                 <span className="w-2 h-2 rounded-full bg-purple-400" />
                                 <span className="w-2 h-2 rounded-full bg-amber-400" />
                                 <span>Left Oligo</span>
                             </div>
-                            <span className="text-xs font-mono text-zinc-400 font-bold">{leftOligoSeq.length}nt</span>
+                            <span className="text-[13px] font-mono text-zinc-400 font-bold">{leftOligoSeq.length}nt</span>
                         </div>
                         <div className="relative">
-                            <div className="bg-zinc-50 dark:bg-zinc-900/50 p-2.5 pb-8 rounded border border-zinc-200 dark:border-zinc-700 font-mono text-xs text-zinc-700 dark:text-zinc-300 break-all">
+                            <div className="bg-zinc-50 dark:bg-zinc-900/50 p-2.5 pb-8 rounded border border-zinc-200 dark:border-zinc-700 font-mono text-[13px] text-zinc-700 dark:text-zinc-300 break-all">
                                 {leftOligoSeq || <span className="text-zinc-400 italic">Enter reverse primer and Oligo 2...</span>}
                             </div>
                             <button
                                 onClick={() => copyToClipboard(leftOligoSeq, 'left')}
                                 disabled={!leftOligoSeq}
-                                className="absolute right-1.5 bottom-1.5 btn-secondary text-xs px-2 py-1"
+                                className="absolute right-1.5 bottom-1.5 btn-secondary text-[13px] px-2 py-1"
                             >
                                 {copiedLabel === 'left' ? 'Copied!' : 'Copy'}
                             </button>
@@ -255,22 +255,22 @@ export default function MOLigoPanel(props: MOLigoProps) {
 
                     <div className="bg-white dark:bg-zinc-800 rounded-lg border border-zinc-200 dark:border-zinc-700 p-3 shadow-sm">
                         <div className="flex items-center justify-between mb-2">
-                            <div className="flex items-center gap-2 text-xs font-bold text-zinc-500 uppercase tracking-wider">
+                            <div className="flex items-center gap-2 text-[13px] font-bold text-zinc-500 uppercase tracking-wider">
                                 <span className="w-2 h-2 rounded-full bg-emerald-400" />
                                 <span className="w-2 h-2 rounded-full bg-red-400" />
                                 <span className="w-2 h-2 rounded-full bg-pink-400" />
                                 <span>Right Oligo</span>
                             </div>
-                            <span className="text-xs font-mono text-zinc-400 font-bold">{rightOligoSeq.length}nt</span>
+                            <span className="text-[13px] font-mono text-zinc-400 font-bold">{rightOligoSeq.length}nt</span>
                         </div>
                         <div className="relative">
-                            <div className="bg-zinc-50 dark:bg-zinc-900/50 p-2.5 pb-8 rounded border border-zinc-200 dark:border-zinc-700 font-mono text-xs text-zinc-700 dark:text-zinc-300 break-all">
+                            <div className="bg-zinc-50 dark:bg-zinc-900/50 p-2.5 pb-8 rounded border border-zinc-200 dark:border-zinc-700 font-mono text-[13px] text-zinc-700 dark:text-zinc-300 break-all">
                                 {rightOligoSeq || <span className="text-zinc-400 italic">Enter Oligo 1, TAG, and forward primer...</span>}
                             </div>
                             <button
                                 onClick={() => copyToClipboard(rightOligoSeq, 'right')}
                                 disabled={!rightOligoSeq}
-                                className="absolute right-1.5 bottom-1.5 btn-secondary text-xs px-2 py-1"
+                                className="absolute right-1.5 bottom-1.5 btn-secondary text-[13px] px-2 py-1"
                             >
                                 {copiedLabel === 'right' ? 'Copied!' : 'Copy'}
                             </button>

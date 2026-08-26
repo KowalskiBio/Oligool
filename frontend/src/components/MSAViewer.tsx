@@ -1885,12 +1885,12 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
             <div className="panel-header flex items-center justify-between flex-wrap gap-2">
                 <div className="flex items-center gap-3 flex-wrap">
                     <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-                        Multiple sequence alignment <span className="text-xs font-normal text-zinc-500 dark:text-zinc-400 font-mono tabular-nums">({sequences.length} seq, {anchorLen} bp)</span>
+                        Multiple sequence alignment <span className="text-[13px] font-normal text-zinc-500 dark:text-zinc-400 font-mono tabular-nums">({sequences.length} seq, {anchorLen} bp)</span>
                     </h2>
                     <div className="flex items-center gap-1.5">
                         <button
                             onClick={copyAllFasta}
-                            className="px-2 py-1 text-xs font-medium rounded-md border border-zinc-300 dark:border-zinc-700 text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-700 hover:text-zinc-700 dark:hover:text-zinc-200 transition-colors flex items-center gap-1"
+                            className="px-2 py-1 text-[13px] font-medium rounded-md border border-zinc-300 dark:border-zinc-700 text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-700 hover:text-zinc-700 dark:hover:text-zinc-200 transition-colors flex items-center gap-1"
                             title="Copy full alignment as FASTA"
                         >
                             <ClipboardIcon /> FASTA
@@ -1922,7 +1922,7 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
                         </button>
                     )}
                     {copyFeedback && (
-                        <span className="text-xs text-emerald-600 dark:text-emerald-400 font-medium animate-pulse">{copyFeedback}</span>
+                        <span className="text-[13px] text-emerald-600 dark:text-emerald-400 font-medium animate-pulse">{copyFeedback}</span>
                     )}
                 </div>
                 <div className="flex items-center gap-3">
@@ -1934,7 +1934,7 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
                                 setScrollLeft(0);
                                 targetScrollRef.current = 0;
                             }}
-                            className={`px-3 py-1 text-xs font-medium transition-colors ${viewMode === 'bars'
+                            className={`px-3 py-1 text-[13px] font-medium transition-colors ${viewMode === 'bars'
                                 ? 'bg-accent-700/10 dark:bg-accent-300/10 text-accent-800 dark:text-accent-200'
                                 : 'bg-white dark:bg-zinc-900 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-700'
                                 }`}
@@ -1960,7 +1960,7 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
                                 setScrollLeft(clampedSL);
                                 targetScrollRef.current = clampedSL;
                             }}
-                            className={`px-3 py-1 text-xs font-medium transition-colors border-l border-zinc-300 dark:border-zinc-800 ${viewMode === 'letters'
+                            className={`px-3 py-1 text-[13px] font-medium transition-colors border-l border-zinc-300 dark:border-zinc-800 ${viewMode === 'letters'
                                 ? 'bg-accent-700/10 dark:bg-accent-300/10 text-accent-800 dark:text-accent-200'
                                 : 'bg-white dark:bg-zinc-900 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-700'
                                 }`}
@@ -1995,7 +1995,7 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
                             title="Zoom in"
                         >+</button>
                     </div>
-                    <span className="text-xs text-zinc-400 font-mono w-20 text-right">{Math.round(visibleBases)} bp</span>
+                    <span className="text-[13px] text-zinc-400 font-mono w-20 text-right">{Math.round(visibleBases)} bp</span>
                 </div>
             </div>
 
@@ -2003,10 +2003,10 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
             {showAutofindUI && autofindActive && (
                 <div className="px-5 py-3 bg-zinc-50 dark:bg-zinc-950 border-b border-zinc-200 dark:border-zinc-800">
                     <div className="flex items-center justify-between mb-2">
-                        <span className="text-xs font-semibold text-zinc-600 dark:text-zinc-400 uppercase tracking-wide">
+                        <span className="text-[13px] font-semibold text-zinc-600 dark:text-zinc-400 uppercase tracking-wide">
                             Clean Regions
                         </span>
-                        <span className="text-xs text-zinc-400 dark:text-zinc-500">
+                        <span className="text-[13px] text-zinc-400 dark:text-zinc-500">
                             {cleanRegions.length} region{cleanRegions.length !== 1 ? 's' : ''}
                         </span>
                     </div>
@@ -2017,12 +2017,12 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
                             onChange={(e) => onAutofindTreatIndelsAsMismatchesChange?.(e.target.checked)}
                             className="rounded border-zinc-300 dark:border-zinc-700 text-accent-700 focus:ring-accent-700"
                         />
-                        <span className="text-xs text-zinc-600 dark:text-zinc-400">
+                        <span className="text-[13px] text-zinc-600 dark:text-zinc-400">
                             Count insertions/deletions as mismatches
                         </span>
                     </label>
                     {cleanRegions.length === 0 ? (
-                        <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                        <p className="text-[13px] text-zinc-500 dark:text-zinc-400">
                             No clean regions found.
                         </p>
                     ) : (
@@ -2032,7 +2032,7 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
                                     key={`${region.start}-${region.end}`}
                                     data-testid="clean-region-pill"
                                     onClick={() => onAutofindRegionSelect?.(region.start, region.end)}
-                                    className="px-2.5 py-1 text-xs font-mono tabular-nums rounded-md border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 hover:border-accent-700/50 dark:hover:border-accent-300/50 hover:text-accent-800 dark:hover:text-accent-200 transition-colors"
+                                    className="px-2.5 py-1 text-[13px] font-mono tabular-nums rounded-md border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 hover:border-accent-700/50 dark:hover:border-accent-300/50 hover:text-accent-800 dark:hover:text-accent-200 transition-colors"
                                     title={`Jump to columns ${region.start + 1}–${region.end + 1}`}
                                 >
                                     {region.start + 1}–{region.end + 1}
@@ -2058,7 +2058,7 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
             </div>
 
             {/* ── legend ── */}
-            <div className="px-5 py-1.5 border-b border-zinc-100 dark:border-zinc-800 bg-white dark:bg-zinc-900 flex items-center gap-4 text-xs text-zinc-500 dark:text-zinc-400">
+            <div className="px-5 py-1.5 border-b border-zinc-100 dark:border-zinc-800 bg-white dark:bg-zinc-900 flex items-center gap-4 text-[13px] text-zinc-500 dark:text-zinc-400">
                 <span className="flex items-center gap-1">
                     <button
                         type="button"
@@ -2165,7 +2165,7 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
             {/* ── selection stats footer ── */}
             {
                 selectionStats && (
-                    <div className="bg-zinc-50 dark:bg-zinc-950 border-t border-zinc-200 dark:border-zinc-800 px-5 py-2 text-xs text-zinc-600 dark:text-zinc-400 font-mono tabular-nums flex items-center justify-between">
+                    <div className="bg-zinc-50 dark:bg-zinc-950 border-t border-zinc-200 dark:border-zinc-800 px-5 py-2 text-[13px] text-zinc-600 dark:text-zinc-400 font-mono tabular-nums flex items-center justify-between">
                         <div className="flex items-center gap-4">
                             <span className="font-semibold text-zinc-700 dark:text-zinc-300">Visible Range: {startCol + 1}–{endCol + 1}</span>
                             <span>Length: {selectionStats.total} bp</span>
@@ -2184,7 +2184,7 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
             {/* ── label tooltip ── */}
             {labelHoverInfo && (
                 <div
-                    className="fixed z-[9999] px-2 py-1 bg-zinc-800 text-white text-xs rounded shadow-lg pointer-events-none whitespace-nowrap border border-zinc-600"
+                    className="fixed z-[9999] px-2 py-1 bg-zinc-800 text-white text-[13px] rounded shadow-lg pointer-events-none whitespace-nowrap border border-zinc-600"
                     style={{
                         left: `${labelHoverInfo.x + 12}px`,
                         top: `${labelHoverInfo.y + 12}px`
@@ -2196,7 +2196,7 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
             {/* ── insertion tooltip (original, shown when coordinate feature is off) ── */}
             {!showPositions && insertHoverInfo && (
                 <div
-                    className="fixed z-[9999] pointer-events-none px-2 py-1 bg-zinc-800 text-white text-xs rounded shadow-lg border border-zinc-600"
+                    className="fixed z-[9999] pointer-events-none px-2 py-1 bg-zinc-800 text-white text-[13px] rounded shadow-lg border border-zinc-600"
                     style={insertHoverInfo.flipX
                         ? { left: `${insertHoverInfo.x - 12}px`, top: `${insertHoverInfo.y + 12}px`, transform: 'translateX(-100%)' }
                         : { left: `${insertHoverInfo.x + 12}px`, top: `${insertHoverInfo.y + 12}px` }
@@ -2209,7 +2209,7 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
             {/* ── coordinate tooltip (unified: indel info + position numbers) ── */}
             {showPositions && positionHoverInfo && (
                 <div
-                    className="fixed z-[9999] pointer-events-none px-2 py-1 bg-zinc-800 text-white text-xs rounded shadow-lg border border-zinc-600 whitespace-nowrap"
+                    className="fixed z-[9999] pointer-events-none px-2 py-1 bg-zinc-800 text-white text-[13px] rounded shadow-lg border border-zinc-600 whitespace-nowrap"
                     style={positionHoverInfo.flipX
                         ? { left: `${positionHoverInfo.x - 12}px`, top: `${positionHoverInfo.y + 12}px`, transform: 'translateX(-100%)' }
                         : { left: `${positionHoverInfo.x + 12}px`, top: `${positionHoverInfo.y + 12}px` }
@@ -2294,7 +2294,7 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
                                 </button>
                             )}
                         </div>
-                        <p className="mt-4 text-xs text-zinc-500 dark:text-zinc-400">
+                        <p className="mt-4 text-[13px] text-zinc-500 dark:text-zinc-400">
                             Choose whether to view the complete genome record or just the BLAST-aligned coding region.
                         </p>
                     </div>
