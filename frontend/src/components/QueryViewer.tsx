@@ -1698,9 +1698,9 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
 
             return (
                 <div key={idx} className="border-t border-zinc-200 dark:border-zinc-700 pt-2 mt-2 first:mt-0 first:border-0 first:pt-0">
-                    <div className="flex flex-col gap-1 text-[10px] text-zinc-400 mb-1">
+                    <div className="flex flex-col gap-1 text-[11px] text-zinc-400 mb-1">
                         <div className="flex justify-between items-center">
-                            <span className="font-semibold">{title} {idx + 1}:</span>
+                            <span className="text-xs">{title} {idx + 1}:</span>
                             <div className="flex gap-3">
                                 {itemDg !== undefined && itemDg !== null && (
                                     <span>IDT ΔG: <span className={`font-mono tabular-nums ${getIdtStatusColor(itemDg)}`}>{itemDg.toFixed(2)}</span></span>
@@ -1710,7 +1710,7 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                                 )}
                             </div>
                         </div>
-                        <div className="flex justify-end gap-3 text-[9px] opacity-80">
+                        <div className="flex justify-end gap-3 text-[10px] opacity-80">
                             {itemIdtTmVal !== undefined && itemIdtTmVal !== null && (
                                 <span>IDT Tm: <span className={`font-mono tabular-nums ${getTmColor(itemIdtTmVal)}`}>{Number(itemIdtTmVal).toFixed(1)}°C</span></span>
                             )}
@@ -1719,8 +1719,8 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                             )}
                         </div>
                         {itemPopFrac !== undefined && itemPopFrac !== null && (
-                            <div className="flex justify-end gap-3 text-[9px] opacity-80">
-                                <span title="Share of the full structural ensemble this MFE structure represents"><span className="font-mono tabular-nums text-blue-500 dark:text-blue-400 font-medium">{(itemPopFrac * 100).toFixed(itemPopFrac < 0.01 ? 2 : 0)}%</span> of Ensemble</span>
+                            <div className="flex justify-end gap-3 text-[10px] opacity-80">
+                                <span title="Share of the full structural ensemble this MFE structure represents"><span className="font-mono tabular-nums text-blue-500 dark:text-blue-400">{(itemPopFrac * 100).toFixed(itemPopFrac < 0.01 ? 2 : 0)}%</span> of Ensemble</span>
                             </div>
                         )}
                     </div>
@@ -1737,7 +1737,7 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                         <div className="mt-1 text-[10px] text-zinc-400 italic">Structure found but sequence unavailable for SVG</div>
                     )}
                     {asciiStructure && !hairpinDotBracket && (
-                        <div className="mt-1 w-full overflow-x-auto overflow-y-auto max-h-32 bg-zinc-100 dark:bg-zinc-800 rounded p-2 text-[10px] sm:text-xs">
+                        <div className="mt-1 w-full overflow-x-auto overflow-y-auto max-h-32 bg-zinc-100 dark:bg-zinc-800 rounded p-2 text-xs">
                             <pre className="font-mono text-zinc-700 dark:text-zinc-300 whitespace-pre leading-[1.15] tracking-tighter">
                                 {asciiStructure}
                             </pre>
@@ -1767,7 +1767,7 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
 
         return (
             <div className="flex flex-col gap-1 mb-2">
-                <div className="flex justify-between items-center text-sm font-medium border-b border-zinc-200 dark:border-zinc-700 pb-1 mb-1">
+                <div className="flex justify-between items-center text-xs border-b border-zinc-200 dark:border-zinc-700 pb-1 mb-1">
                     <span className="text-zinc-600 dark:text-zinc-300">Summary {title}:</span>
                     <span className={getIdtStatusColor(summaryEnsembleDg)}>
                         {summaryEnsembleDg !== undefined && summaryEnsembleDg !== null
