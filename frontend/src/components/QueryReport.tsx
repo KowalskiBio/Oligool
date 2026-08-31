@@ -224,10 +224,12 @@ export default function QueryReport({ data }: QueryReportProps) {
             <div className="p-6 max-w-5xl mx-auto bg-white text-black">
                 <div className="mb-6 border-b-2 border-zinc-900 pb-4">
                     <h1 className="text-xl font-bold text-zinc-900 tracking-tight">Oligool Complete Design Report</h1>
-                    {data.engineUsed && (
-                        <p className="text-base font-bold text-zinc-700 mt-1">{data.engineUsed === 'strider' ? 'Strider' : 'Primer3'}</p>
-                    )}
-                    <p className="text-[13px] text-zinc-500 mt-1">{new Date().toLocaleString()}</p>
+                    <div className="flex items-baseline justify-between mt-1">
+                        <p className="text-[13px] text-zinc-500">{new Date().toLocaleString()}</p>
+                        {data.engineUsed && (
+                            <p className="text-[13px] text-zinc-500">Engine: <span className="font-semibold text-zinc-700">{data.engineUsed === 'strider' ? 'Strider' : 'Primer3'}</span></p>
+                        )}
+                    </div>
                     {data.header && (
                         <p className="text-base font-medium text-zinc-800 mt-2 break-words">{data.header}</p>
                     )}

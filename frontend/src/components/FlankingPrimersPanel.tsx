@@ -879,7 +879,7 @@ export default function FlankingPrimersPanel({
                     </div>
                     {restRow.length > 0 && (
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                            {restRow.map(renderBox)}
+                            {restRow.map((item: any, i: number) => renderBox(item, firstRow.length + i))}
                         </div>
                     )}
                 </div>
