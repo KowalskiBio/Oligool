@@ -727,6 +727,12 @@ export default function FlankingPrimersPanel({
         return 'text-emerald-500';
     };
 
+    // Strider dimer ΔG carries the ~1.89 kcal/mol bimolecular initiation penalty
+    // (physically complete, same convention as its Tm); IDT/P3 report structure-only
+    // dimer ΔG without it. Subtract before grading with IDT-calibrated thresholds.
+    // Hairpins pay no such fee.
+    const STRIDER_DIMER_INIT_DG = 1.89;
+
     const renderCompetitionStrip = (competition: any, label: string) => {
         if (!competition) return null;
         const pHairpin = competition.P_Hairpin ?? 0;
@@ -801,13 +807,16 @@ export default function FlankingPrimersPanel({
         const items = (Array.isArray(data.raw) ? data.raw : [data.raw]).filter((item: unknown) => !!item && typeof item === 'object');
         const displayItems = items.slice(itemOffset, itemOffset + maxItems);
         if (displayItems.length === 0) return null;
-        const topDg = displayItems[0]?.DeltaG ?? displayItems[0]?.Local_DeltaG ?? data.DeltaG;
+        const firstItem = displayItems[0];
+        const topIsStriderDimer = firstItem?.DeltaG == null && firstItem?.Local_DeltaG != null &&
+            String(firstItem?.Sequence ?? firstItem?.DotBracket ?? firstItem?.Local_DotBracket ?? '').includes('&');
+        const topDg = firstItem?.DeltaG ?? firstItem?.Local_DeltaG ?? data.DeltaG;
 
         return (
             <div className="card p-3 flex flex-col gap-2">
                 <div className="flex justify-between items-center border-b border-zinc-100 dark:border-zinc-800 pb-2">
                     <span className="text-[13px] text-zinc-500 uppercase tracking-wider text-ellipsis overflow-hidden whitespace-nowrap">{title}</span>
-                    <span className={`text-[13px] flex-shrink-0 font-mono tabular-nums ${getIdtStatusColor(topDg)}`}>{topDg != null ? `${topDg.toFixed(2)} kcal/mol` : 'N/A'}</span>
+                    <span className={`text-[13px] flex-shrink-0 font-mono tabular-nums ${getIdtStatusColor(topDg != null && topIsStriderDimer ? topDg - STRIDER_DIMER_INIT_DG : topDg)}`}>{topDg != null ? `${topDg.toFixed(2)} kcal/mol` : 'N/A'}</span>
                 </div>
                 <div className="flex flex-col gap-3 mt-1">
                     {displayItems.map((item: any, i: number) => {
@@ -817,6 +826,7 @@ export default function FlankingPrimersPanel({
                         const itemLocalTm = item.Local_Tm ?? null;
                         const itemLocalTmShort = item.Local_Tm_ShortStem === true;
                         const hasStructure = !!(item.DotBracket || item.Local_DotBracket || item.Bonds);
+                        const itemIsDimer = String(item.Sequence ?? item.DotBracket ?? item.Local_DotBracket ?? '').includes('&');
                         return (
                             <div key={i} className={`flex flex-col gap-2 ${maxItems > 1 && i > 0 ? 'border-t border-zinc-100 dark:border-zinc-800 pt-3' : ''}`}>
                                 {/* Provenance block (dG + Tm together, above the structure : mirrors MOLigo). */}
@@ -828,7 +838,7 @@ export default function FlankingPrimersPanel({
                                             {maxItems > 1 && <span className="text-[13px]">{title} {i + 1}</span>}
                                             <div className="flex gap-3 ml-auto">
                                                 <span>IDT ΔG: <span className={`font-mono tabular-nums ${getIdtStatusColor(itemDg ?? undefined)}`}>{itemDg != null ? `${itemDg > 0 ? '+' : ''}${itemDg.toFixed(2)}` : '–'}</span></span>
-                                                <span>Strider ΔG: <span className={`font-mono tabular-nums ${itemLocalDg != null ? (itemLocalDg <= 0 ? "text-amber-500" : "text-zinc-400") : "text-zinc-400"}`}>{itemLocalDg != null ? `${itemLocalDg > 0 ? '+' : ''}${itemLocalDg.toFixed(2)}` : '–'}</span></span>
+                                                <span title={itemIsDimer ? 'Strider dimer ΔG at 25 °C including the ~1.9 kcal/mol bimolecular initiation penalty (the physically complete association energy, same convention as the Tm). IDT omits this penalty, so its number reads ~1.9 lower.' : undefined}>Strider ΔG: <span className={`font-mono tabular-nums ${itemLocalDg != null ? (itemLocalDg <= 0 ? "text-amber-500" : "text-zinc-400") : "text-zinc-400"}`}>{itemLocalDg != null ? `${itemLocalDg > 0 ? '+' : ''}${itemLocalDg.toFixed(2)}` : '–'}</span></span>
                                             </div>
                                         </div>
                                         <div className="flex gap-3 justify-end opacity-80">
@@ -1431,7 +1441,13 @@ export default function FlankingPrimersPanel({
                         const showTm = hasStructure && validTm;
                         return <span className={`font-mono tabular-nums font-medium ${showTm ? 'text-amber-500' : 'text-emerald-500'}`}>{showTm ? <>{tm}°C{isStrider && tmStriderShort && <span title="Hairpin stem under 3 bp: two-state Tm is unreliable (marginal structure)" className="text-amber-600 dark:text-amber-400 font-bold"> *</span>}</> : 'None'}</span>;
                     })()}</div>
-                    <div><span className="text-zinc-600 dark:text-zinc-300">Self-dimer</span><br /><span className={`font-mono tabular-nums font-medium ${statusDg(searchEngine === 'strider' ? p.strider?.homodimer_dg : p.homodimer?.dg)}`}>{searchEngine === 'strider' ? (p.strider?.homodimer_dg != null ? `${p.strider.homodimer_dg} kcal` : 'OK') : (p.homodimer?.dg !== null && p.homodimer?.dg !== undefined ? `${p.homodimer.dg} kcal` : 'OK')}</span></div>
+                    <div><span className="text-zinc-600 dark:text-zinc-300" title={searchEngine === 'strider' ? 'Strider homodimer ΔG includes the ~1.9 kcal/mol bimolecular initiation penalty; P3 and IDT numbers do not' : undefined}>Self-dimer</span><br />{(() => {
+                        const isStrider = searchEngine === 'strider';
+                        const dg = isStrider ? p.strider?.homodimer_dg : p.homodimer?.dg;
+                        const tm = isStrider ? p.strider?.homodimer_tm : p.homodimer?.tm;
+                        const dgForColor = dg != null && isStrider ? dg - STRIDER_DIMER_INIT_DG : dg;
+                        return <span className={`font-mono tabular-nums font-medium ${statusDg(dgForColor)}`}>{dg != null ? <>{dg} kcal{tm != null && <> · {tm}°C</>}</> : 'OK'}</span>;
+                    })()}</div>
                 </div>
 
                 {isSelected && (

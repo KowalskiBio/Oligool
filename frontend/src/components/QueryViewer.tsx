@@ -1417,6 +1417,8 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
             flankingRevHomodimerTm: sr?.homodimer?.tm,
             flankingHetDg: fps?.result?.pair_metrics?.heterodimer?.dg,
             flankingHetTm: fps?.result?.pair_metrics?.heterodimer?.tm,
+            flankingHetStriderDg: fps?.result?.pair_metrics?.strider_heterodimer?.dg ?? null,
+            flankingHetStriderTm: fps?.result?.pair_metrics?.strider_heterodimer?.tm ?? null,
             contextMap: buildContextMap(),
         };
     };
@@ -1644,6 +1646,12 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
         return 'text-emerald-500 font-bold';
     };
 
+    // Strider dimer ΔG carries the ~1.89 kcal/mol bimolecular initiation penalty
+    // (physically complete, same convention as its Tm); IDT/P3 report structure-only
+    // dimer ΔG without it. Subtract the offset before grading with the IDT-calibrated
+    // thresholds above so both conventions color alike. Hairpins pay no such fee.
+    const STRIDER_DIMER_INIT_DG = 1.89;
+
     const getTmColor = (tm: number | undefined | null) => {
         if (tm === undefined || tm === null) return 'text-zinc-400';
         if (tm > 55) return 'text-red-500 font-medium';
@@ -1690,6 +1698,7 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
         // (best) entry of all_Ensemble_DeltaG.
         const summaryEnsembleDg: number | null | undefined = data.Ensemble_DeltaG ??
             (Array.isArray(data.all_Ensemble_DeltaG) ? data.all_Ensemble_DeltaG[0] : undefined);
+        const isDimerSection = title.includes('Dimer');
 
         // Render individual items (hairpins, dimers, etc.)
         const renderItem = (item: any, seq: string | undefined, idx: number, itemDg?: number, itemLocalDg?: number, itemIdtTmVal?: number, itemLocalTmVal?: number, itemPopFrac?: number | null) => {
@@ -1734,7 +1743,7 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                                     <span>IDT ΔG: <span className={`font-mono tabular-nums ${getIdtStatusColor(itemDg)}`}>{itemDg.toFixed(2)}</span></span>
                                 )}
                                 {itemLocalDg !== undefined && itemLocalDg !== null && (
-                                    <span>Strider ΔG: <span className={`font-mono tabular-nums ${getIdtStatusColor(itemLocalDg)}`}>{itemLocalDg > 0 ? '+' : ''}{itemLocalDg.toFixed(2)}</span></span>
+                                    <span title={isDimer ? 'Strider dimer ΔG at 25 °C including the ~1.9 kcal/mol bimolecular initiation penalty (the physically complete association energy, same convention as the Tm). IDT omits this penalty, so its number reads ~1.9 lower.' : undefined}>Strider ΔG: <span className={`font-mono tabular-nums ${getIdtStatusColor(isDimer ? itemLocalDg - STRIDER_DIMER_INIT_DG : itemLocalDg)}`}>{itemLocalDg > 0 ? '+' : ''}{itemLocalDg.toFixed(2)}</span></span>
                                 )}
                             </div>
                         </div>
@@ -1797,7 +1806,7 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
             <div className="flex flex-col gap-1 mb-2">
                 <div className="flex justify-between items-center text-base border-b border-zinc-200 dark:border-zinc-700 pb-1 mb-1">
                     <span className="text-zinc-600 dark:text-zinc-300">Summary {title}:</span>
-                    <span className={getIdtStatusColor(summaryEnsembleDg)}>
+                    <span className={getIdtStatusColor(summaryEnsembleDg != null && isDimerSection ? summaryEnsembleDg - STRIDER_DIMER_INIT_DG : summaryEnsembleDg)} title={isDimerSection ? 'Strider ensemble ΔG (association-included convention; IDT-style numbers read ~1.9 lower)' : undefined}>
                         {summaryEnsembleDg !== undefined && summaryEnsembleDg !== null
                             ? <><span className="font-mono tabular-nums">{summaryEnsembleDg.toFixed(2)}</span> kcal/mol</>
                             : 'N/A'}

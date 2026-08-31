@@ -265,6 +265,8 @@ export default function QueryReport({ data }: QueryReportProps) {
                     </div>
                 </div>
 
+                <p className="text-[13px] text-zinc-600 mb-6 whitespace-pre-wrap"><span className="text-zinc-500">Total oligo length{'\t'}</span><V>{data.moligo1Len + data.moligo2Len} nt</V></p>
+
                 {data.tagSeq && (
                     <div className="break-avoid mb-6">
                         <h2 className="text-lg font-bold text-zinc-800 mb-2 border-b border-zinc-300 pb-1">TAG SEQUENCE</h2>
@@ -318,7 +320,7 @@ export default function QueryReport({ data }: QueryReportProps) {
                         <div>
                             <h3 className="text-sm font-bold text-zinc-700">{(data.flankingFwdName || 'Primer1')} × {(data.flankingRevName || 'Primer2')}</h3>
                             {(data.flankingHetDg != null || data.flankingHetTm != null) && (
-                                <p className="text-sm text-zinc-600 whitespace-pre-wrap">Heterodimer ΔG{'\t'}<V>{fmtDG(data.flankingHetDg)}</V> (Tm{'\t'}<V>{fmtNum(data.flankingHetTm)} °C</V>)</p>
+                                <p className="text-sm text-zinc-600 whitespace-pre-wrap">Heterodimer ΔG{'\t'}<V>{fmtDG(data.flankingHetDg)}</V> (Tm{'\t'}<V>{fmtNum(data.flankingHetTm)} °C</V>){(data.flankingHetStriderDg != null || data.flankingHetStriderTm != null) && <> · Strider ΔG{'\t'}<V>{fmtDG(data.flankingHetStriderDg)}</V> (Tm{'\t'}<V>{fmtNum(data.flankingHetStriderTm)} °C</V>)</>}</p>
                             )}
                             {data.ampliconLength != null && (
                                 <p className="text-sm text-zinc-600 whitespace-pre-wrap">Amplicon length{'\t'}<V>{data.ampliconLength} bp</V></p>

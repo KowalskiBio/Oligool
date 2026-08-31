@@ -159,6 +159,10 @@ export interface CompleteReportData {
     flankingHetDg?: number | null;
     /** Primer3 heterodimer Tm (°C) of the flanking primer pair. */
     flankingHetTm?: number | null;
+    /** Strider heterodimer ΔG (kcal/mol, 25 °C) of the flanking primer pair. */
+    flankingHetStriderDg?: number | null;
+    /** Strider heterodimer Tm (°C) of the flanking primer pair. */
+    flankingHetStriderTm?: number | null;
 
     /** Visual context map showing moligos and flanking primers in the surrounding sequence. */
     contextMap?: ReportContextMap;

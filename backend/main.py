@@ -821,14 +821,15 @@ except Exception:  # strider absent — fall back to reporting dH/dS as-is
 
 
 def _dg_rescale_dimer(dh_kcal: float, ds_cal_per_k: float, celsius: float = 25.0) -> float:
-    """Dimer ΔG(T) with the bimolecular *initiation* contribution removed.
+    """Dimer ΔG(T) with the bimolecular *initiation* contribution removed
+    (IDT's structure-only convention).
 
     Strider folds the duplex-nucleation term (DUPLEX_INIT_DG37/ΔH) into the
     reported dH/dS so its two-state Tm is correct.  IDT OligoAnalyzer reports
-    dimer ΔG WITHOUT it (structure-only energy); subtracting the initiation
-    contribution ΔG_init(T) = ΔH_init − T·ΔS_init, with
-    ΔS_init = (ΔH_init − ΔG37_init)/T_ref, puts strider on IDT's convention
-    (e.g. -3.54 vs IDT -3.61 for GCACTACAACCGCTACCGTG instead of -1.64).
+    dimer ΔG WITHOUT it.  NOT used for user-facing values anymore (those show
+    the physical, association-included ΔG so ΔG and Tm agree); it survives for
+    internal scoring whose thresholds were calibrated on the IDT convention
+    (the flanking design penalty in ``_design_single_side_strider``).
     """
     if _DUPLEX_INIT_DG37 is None:
         return _dg_rescale(dh_kcal, ds_cal_per_k, celsius)
@@ -837,12 +838,10 @@ def _dg_rescale_dimer(dh_kcal: float, ds_cal_per_k: float, celsius: float = 25.0
 
 
 def _dimer_init_dg(celsius: float = 25.0) -> float:
-    """ΔG(T) of the duplex-initiation term alone, i.e. exactly the constant
-    ``_dg_rescale_dimer`` subtracts out of the raw two-state ΔG. Used to rebase
-    ``ThermoEngine.pfunc()``'s ensemble ΔG (which keeps the association term,
-    same as strider's raw dH/dS) onto the IDT-stripped convention that
-    ``Local_DeltaG``/``viz_dg`` already display, so the two numbers are
-    directly comparable on screen.
+    """ΔG(T) of the duplex-initiation term alone, i.e. the constant that
+    separates the physical (association-included) dimer ΔG displayed by
+    ``Local_DeltaG`` from IDT's structure-only convention. Frontend QC
+    thresholds use the same offset to grade both conventions alike.
     """
     if _DUPLEX_INIT_DG37 is None:
         return 0.0
@@ -1018,8 +1017,17 @@ def _run_strider_analysis(
                     raw_mfe = res.structure
                     if _valid_paired(raw_mfe):
                         viz_struct_raw = raw_mfe
-                        viz_dg = _dg_rescale_dimer(res.dH, res.dS)
-                        mfe_tm = round(res.tm_celsius, 1) if res.tm_celsius and res.tm_celsius > 1.0 else None
+                        # Physical (association-included) ΔG at 25 °C: the full
+                        # two-state energy that also sets Tm, i.e. the ~1.9
+                        # kcal/mol bimolecular initiation penalty is INCLUDED.
+                        # IDT's reported dimer ΔG excludes it; expect strider to
+                        # read ~1.9 kcal/mol weaker (less negative) than IDT.
+                        viz_dg = _dg_rescale(res.dH, res.dS)
+                        # Bimolecular dimer Tms are routinely low or negative
+                        # (a weak dimer only melts below 0 °C); that is the
+                        # physically meaningful answer, so only reject
+                        # non-finite / below-absolute-zero sentinels.
+                        mfe_tm = round(res.tm_celsius, 1) if res.tm_celsius is not None and res.tm_celsius > -273.15 else None
                         try:
                             # Ensemble math always uses native SantaLucia (eng_native), not the
                             # `parameter_set` toggle — same rule as the MFE dimer ΔG above.
@@ -1030,13 +1038,10 @@ def _run_strider_analysis(
                             # stripping the association penalty would understate how hard it
                             # actually is to dimerize at real concentrations.
                             ensemble_dg_native = round(float(dimer_pfunc.free_energy), 2)
-                            # For DISPLAY, rebase onto the same IDT-stripped convention as
-                            # viz_dg/Local_DeltaG so "Ensemble ΔG" is never shown as (confusingly)
-                            # weaker than the single MFE structure sitting right next to it —
-                            # they're the same physical quantity, just two different reporting
-                            # conventions, and the population-fraction math is invariant to the
-                            # constant shift either way.
-                            ensemble_dg = round(ensemble_dg_native - _dimer_init_dg(base_temp), 2)
+                            # Ensemble ΔG is displayed in the same physical
+                            # (association-included) convention as viz_dg above,
+                            # so the two numbers are directly comparable.
+                            ensemble_dg = ensemble_dg_native
                             # dimer_thermo's dedicated MFE search and pfunc's ensemble DP are two
                             # independently-implemented energy models (different internal loop/
                             # coaxial-stacking handling); for very strongly-paired duplexes they can
@@ -1082,8 +1087,8 @@ def _run_strider_analysis(
                             subopt_dimers.append({
                                 "Sequence": display_seq,
                                 "DotBracket": _with_div(r.structure),
-                                "DeltaG": _dg_rescale_dimer(r.dH, r.dS),
-                                "Tm": round(r.tm_celsius, 1) if r.tm_celsius and r.tm_celsius > 1.0 else None,
+                                "DeltaG": _dg_rescale(r.dH, r.dS),
+                                "Tm": round(r.tm_celsius, 1) if r.tm_celsius is not None and r.tm_celsius > -273.15 else None,
                                 "BasePairs": r.n_pairs,
                             })
                     except Exception:
@@ -1686,20 +1691,28 @@ def _design_single_side_strider(flank_seq, *, is_left, min_size, max_size, min_g
         except Exception:
             hairpin_dg = 0.0
         homodimer_dg = 0.0
+        homodimer_tm = None
         try:
             res = dimer_thermo(primer_seq, primer_seq, sodium_M=sodium_m, magnesium_M=magnesium_m,
                                material='dna', structure=None, strand_conc_M=dna / 1e9, salt_model='auto')
-            homodimer_dg = round(_dg_rescale_dimer(res.dH, res.dS), 2)
+            # Reported value is the physical (association-included) ΔG, same
+            # convention as Local_DeltaG everywhere else. The scoring penalty
+            # below keeps using the initiation-stripped value so the candidate
+            # ranking is unchanged from the original calibration.
+            homodimer_dg = round(_dg_rescale(res.dH, res.dS), 2)
+            homodimer_dg_stripped = _dg_rescale_dimer(res.dH, res.dS)
+            homodimer_tm = round(res.tm_celsius, 1) if res.tm_celsius is not None and res.tm_celsius > -273.15 else None
         except Exception:
             homodimer_dg = 0.0
-        penalty = 2 * max(0, 3 + hairpin_dg) + 1 * max(0, 6 + homodimer_dg)
-        folded.append((score + penalty, start, length, primer_seq, tm, hairpin_dg, homodimer_dg))
+            homodimer_dg_stripped = 0.0
+        penalty = 2 * max(0, 3 + hairpin_dg) + 1 * max(0, 6 + homodimer_dg_stripped)
+        folded.append((score + penalty, start, length, primer_seq, tm, hairpin_dg, homodimer_dg, homodimer_tm))
 
     folded.sort(key=lambda c: c[0])
     return {
         "candidates": [
             {"start": c[1], "length": c[2], "sequence": c[3], "tm": c[4],
-             "hairpin_dg": c[5], "homodimer_dg": c[6]}
+             "hairpin_dg": c[5], "homodimer_dg": c[6], "homodimer_tm": c[7]}
             for c in folded
         ],
         "considered": considered,
@@ -1865,7 +1878,7 @@ def design_flanking_primers(req: FlankingPrimerParams):
                 "tm": a["tm"], "gc_percent": a["gc_percent"],
                 "self_any": None, "self_end": None, "hairpin_th": None,
             }
-            a["strider"] = {"hairpin_dg": cand["hairpin_dg"], "homodimer_dg": cand["homodimer_dg"]}
+            a["strider"] = {"hairpin_dg": cand["hairpin_dg"], "homodimer_dg": cand["homodimer_dg"], "homodimer_tm": cand["homodimer_tm"]}
             results["forward"]["primers"].append(a)
         results["forward"]["primers"] = _pick_diverse_primers(
             results["forward"]["primers"], req.num_return, min_gap=0)
@@ -1919,7 +1932,7 @@ def design_flanking_primers(req: FlankingPrimerParams):
                 "tm": a["tm"], "gc_percent": a["gc_percent"],
                 "self_any": None, "self_end": None, "hairpin_th": None,
             }
-            a["strider"] = {"hairpin_dg": cand["hairpin_dg"], "homodimer_dg": cand["homodimer_dg"]}
+            a["strider"] = {"hairpin_dg": cand["hairpin_dg"], "homodimer_dg": cand["homodimer_dg"], "homodimer_tm": cand["homodimer_tm"]}
             results["reverse"]["primers"].append(a)
         results["reverse"]["primers"] = _pick_diverse_primers(
             results["reverse"]["primers"], req.num_return, min_gap=0)
@@ -1980,10 +1993,11 @@ def design_flanking_primers(req: FlankingPrimerParams):
                                      material='dna', structure=None,
                                      strand_conc_M=req.dna_conc / 1e9, salt_model='auto')
                 results["pair_metrics"]["strider_heterodimer"] = {
-                    "dg": round(_dg_rescale_dimer(_sd.dH, _sd.dS), 2),
+                    "dg": round(_dg_rescale(_sd.dH, _sd.dS), 2),
+                    "tm": round(_sd.tm_celsius, 1) if _sd.tm_celsius is not None and _sd.tm_celsius > -273.15 else None,
                 }
             except Exception:
-                results["pair_metrics"]["strider_heterodimer"] = {"dg": None}
+                results["pair_metrics"]["strider_heterodimer"] = {"dg": None, "tm": None}
 
     if req.engine == "strider":
         results["engine"] = "strider"

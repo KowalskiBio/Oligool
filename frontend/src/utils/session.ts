@@ -103,7 +103,7 @@ export interface FlankingDesignedPrimer {
     tm_strider: number | null;
     hairpin: { structure_found: boolean; tm: number | null; dg: number | null; tm_strider?: number | null; tm_strider_short_stem?: boolean };
     homodimer: { structure_found: boolean; tm: number | null; dg: number | null };
-    strider?: { hairpin_dg: number | null; homodimer_dg: number | null };
+    strider?: { hairpin_dg: number | null; homodimer_dg: number | null; homodimer_tm?: number | null };
     primer3: { tm: number | null; gc_percent: number | null; self_any: number | null; self_end: number | null; hairpin_th: number | null };
     interval?: [number, number];
     name?: string;
@@ -112,7 +112,7 @@ export interface FlankingDesignedPrimer {
 export interface FlankingDesignResult {
     forward: { num_returned: number; primers: FlankingDesignedPrimer[]; explain: string };
     reverse: { num_returned: number; primers: FlankingDesignedPrimer[]; explain: string };
-    pair_metrics: { heterodimer: { structure_found: boolean; tm: number | null; dg: number | null } } | null;
+    pair_metrics: { heterodimer: { structure_found: boolean; tm: number | null; dg: number | null }; strider_heterodimer?: { dg: number | null; tm?: number | null } } | null;
 }
 
 /** Durable FlankingPrimersPanel state: everything needed to reopen the panel exactly as left. */
