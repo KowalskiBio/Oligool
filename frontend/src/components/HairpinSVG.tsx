@@ -2,13 +2,12 @@
  * HairpinSVG – renders an RNA/DNA secondary structure from a sequence + dot-bracket
  * as a clean 2D SVG diagram.
  *
- * Supports a single (unbranched) hairpin including bulges and internal loops,
- * e.g. ..((.((((.....)))).))  the gap between stems is bowed out to the side.
- *
- * Backbone is drawn as one continuous polyline through every base in sequence
- * order, so connectivity is correct regardless of bulges. Base pairs are drawn
- * as rungs. Multiloops (multiple sibling stems) are split into individual
- * stem-loop domains and rendered side by side. Pseudoknots fall back to text.
+ * Supports any unbranched structure: a single stem-loop with bulges and
+ * internal loops, e.g. ..((.((((.....)))).)), as well as multiple independent
+ * stem-loops, which are drawn as one connected diagram (stems side by side,
+ * joined by the single-stranded backbone running between them). Branched
+ * multiloops (sibling stems nested inside an enclosing stem) fall back to
+ * per-domain renderings. Pseudoknots fall back to text.
  */
 import React from 'react';
 import { openSvgInNewTab } from '../utils/openSvgTab';
@@ -21,11 +20,11 @@ interface HairpinSVGProps {
 }
 
 /**
- * Parse a dot-bracket string into a list of [i, j] base pairs (i < j),
- * sorted outermost-first. Returns null for anything that isn't a single
- * unbranched stem (multiloop, pseudoknot, unbalanced, no pairs).
+ * Parse a dot-bracket string into all base pairs [i, j] (i < j), sorted by
+ * left index. Returns null for unbalanced input, pseudoknots, or a
+ * structure without any pairs.
  */
-function parsePairs(db: string): Array<[number, number]> | null {
+function parseAllPairs(db: string): Array<[number, number]> | null {
     const stack: number[] = [];
     const pairs: Array<[number, number]> = [];
     for (let i = 0; i < db.length; i++) {
@@ -41,16 +40,54 @@ function parsePairs(db: string): Array<[number, number]> | null {
     }
     if (stack.length) return null; // unbalanced
     if (pairs.length === 0) return null; // no structure
-
     pairs.sort((a, b) => a[0] - b[0]);
-    // Single unbranched stem ⇒ l strictly increasing AND r strictly decreasing.
-    // Any violation means a multiloop (multiple sibling stems) → fall back.
-    for (let k = 1; k < pairs.length; k++) {
-        if (!(pairs[k][0] > pairs[k - 1][0] && pairs[k][1] < pairs[k - 1][1])) {
-            return null;
+    return pairs;
+}
+
+/**
+ * Group pairs into top-level stem domains: each domain is rooted at a pair
+ * not enclosed by any other pair and contains every pair that root encloses.
+ * Every domain must itself be a single unbranched stem (strictly nested
+ * pairs, so bulges and internal loops are fine). Returns null when a domain
+ * nests sibling stems inside it (a branched multiloop), which needs a
+ * different layout.
+ */
+function topLevelDomains(
+    db: string,
+    pairs: Array<[number, number]>,
+): Array<Array<[number, number]>> | null {
+    // parent left-index for each opener, -1 at top level
+    const parent = new Map<number, number>();
+    const stack: number[] = [];
+    for (let i = 0; i < db.length; i++) {
+        if (db[i] === '(') stack.push(i);
+        else if (db[i] === ')') {
+            const j = stack.pop();
+            if (j === undefined) return null;
+            parent.set(j, stack.length ? stack[stack.length - 1] : -1);
         }
     }
-    return pairs;
+    const domains = new Map<number, Array<[number, number]>>();
+    for (const p of pairs) {
+        let root = p[0];
+        while (parent.get(root) !== -1) root = parent.get(root)!;
+        const list = domains.get(root);
+        if (list) list.push(p);
+        else domains.set(root, [p]);
+    }
+    const result: Array<Array<[number, number]>> = [];
+    for (const list of domains.values()) {
+        // Unbranched stem => lefts strictly increasing AND rights strictly
+        // decreasing. Any violation means sibling stems nested inside.
+        for (let k = 1; k < list.length; k++) {
+            if (!(list[k][0] > list[k - 1][0] && list[k][1] < list[k - 1][1])) {
+                return null;
+            }
+        }
+        result.push(list);
+    }
+    result.sort((a, b) => a[0][0] - b[0][0]);
+    return result;
 }
 
 /**
@@ -133,9 +170,10 @@ function baseColor(b: string): string {
 export default function HairpinSVG({ seq, dotBracket, light = false }: HairpinSVGProps) {
     const dk = (darkClass: string): string => (light ? '' : darkClass);
     const valid = seq && dotBracket && seq.length === dotBracket.length;
-    const pairs = valid ? parsePairs(dotBracket) : null;
+    const allPairs = valid ? parseAllPairs(dotBracket) : null;
+    const domains = allPairs ? topLevelDomains(dotBracket, allPairs) : null;
 
-    if (!pairs) {
+    if (!domains) {
         const allDots = dotBracket && !dotBracket.includes('(') && !dotBracket.includes(')');
         if (allDots) {
             return (
@@ -144,10 +182,15 @@ export default function HairpinSVG({ seq, dotBracket, light = false }: HairpinSV
                 </div>
             );
         }
-        // Multiloop: try splitting into individual stem-loop domains and render
-        // each as a separate HairpinSVG side by side.
+        // Branched multiloop: try splitting into individual stem-loop domains
+        // and render each as a separate HairpinSVG side by side. Only recurse
+        // into strictly shorter slices so pathological inputs terminate.
         const stemGroups = valid ? splitStemGroups(seq, dotBracket) : null;
-        if (stemGroups && stemGroups.length > 1) {
+        if (
+            stemGroups &&
+            stemGroups.length > 1 &&
+            stemGroups.every(g => g.dotBracket.length < dotBracket.length)
+        ) {
             return (
                 <div className="flex gap-1 items-end justify-center overflow-x-auto">
                     {stemGroups.map((g, i) => (
@@ -176,100 +219,116 @@ export default function HairpinSVG({ seq, dotBracket, light = false }: HairpinSV
     const stemStep = 22;      // vertical distance between stacked stem pairs
     const bulgeStep = 18;     // extra vertical room per unpaired bulge/internal-loop base
     const bulgeOffset = 15;   // how far bulge bases bow out from the strand
-    const tailStep = 16;      // spacing for dangling 5'/3' tails
+    const tailStep = 16;      // spacing for unpaired backbone bases
+    const minDomainGap = 2 * bulgeOffset + 10; // keeps adjacent stems' bulges apart
 
-    const n = pairs.length;
     const L = seq.length;
-
-    const firstL = pairs[0][0];
-    const firstR = pairs[0][1];
-    const lastL = pairs[n - 1][0];
-    const lastR = pairs[n - 1][1];
-
-    const leftTailLen = firstL;            // indices 0 .. firstL-1
-    const rightTailLen = L - 1 - firstR;   // indices firstR+1 .. L-1
-    const loopLen = lastR - lastL - 1;     // indices lastL+1 .. lastR-1
-
-    const cx = 100 + leftTailLen * tailStep + bulgeOffset;
-    const leftX = cx - stemGap / 2;
-    const rightX = cx + stemGap / 2;
+    const m = domains.length;
     const stemBottomY = 170;
 
-    // Vertical level of each stem rung (outermost at bottom, innermost at top)
-    const levels: number[] = new Array(n);
-    levels[0] = stemBottomY;
-    for (let k = 1; k < n; k++) {
-        const leftGap = pairs[k][0] - pairs[k - 1][0] - 1;
-        const rightGap = pairs[k - 1][1] - pairs[k][1] - 1;
-        const gap = Math.max(leftGap, rightGap);
-        levels[k] = levels[k - 1] - stemStep - gap * bulgeStep;
-    }
-    const stemTopY = levels[n - 1];
+    // Vertical level of each stem rung (outermost at the shared baseline)
+    const domainLevels: number[][] = domains.map(d => {
+        const lv: number[] = new Array(d.length);
+        lv[0] = stemBottomY;
+        for (let k = 1; k < d.length; k++) {
+            const leftGap = d[k][0] - d[k - 1][0] - 1;
+            const rightGap = d[k - 1][1] - d[k][1] - 1;
+            const gap = Math.max(leftGap, rightGap);
+            lv[k] = lv[k - 1] - stemStep - gap * bulgeStep;
+        }
+        return lv;
+    });
 
     // ── Position every base by sequence index ──────────
     const pos: Array<{ x: number; y: number } | null> = new Array(L).fill(null);
 
-    // 5' tail – horizontal, going left from the bottom stem
+    // 5' tail – horizontal, going left from the first domain's bottom rung
+    const leftTailLen = domains[0][0][0];            // indices 0 .. first start-1
+    const firstLeftX = 0;
     for (let i = 0; i < leftTailLen; i++) {
-        pos[i] = { x: leftX - (leftTailLen - i) * tailStep, y: stemBottomY };
-    }
-    // 3' tail – horizontal, going right from the bottom stem
-    for (let t = 0; t < rightTailLen; t++) {
-        const idx = firstR + 1 + t;
-        pos[idx] = { x: rightX + (t + 1) * tailStep, y: stemBottomY };
+        pos[i] = { x: firstLeftX - (leftTailLen - i) * tailStep, y: stemBottomY };
     }
 
-    // Stem rungs
-    for (let k = 0; k < n; k++) {
-        pos[pairs[k][0]] = { x: leftX, y: levels[k] };
-        pos[pairs[k][1]] = { x: rightX, y: levels[k] };
+    let cursor = firstLeftX;
+    for (let di = 0; di < m; di++) {
+        const d = domains[di];
+        const n = d.length;
+        const levels = domainLevels[di];
+        const leftX = cursor;
+        const rightX = leftX + stemGap;
+        const cx = leftX + stemGap / 2;
+
+        // Stem rungs
+        for (let k = 0; k < n; k++) {
+            pos[d[k][0]] = { x: leftX, y: levels[k] };
+            pos[d[k][1]] = { x: rightX, y: levels[k] };
+        }
+
+        // Bulge / internal-loop bases between consecutive rungs
+        for (let k = 1; k < n; k++) {
+            const yLow = levels[k - 1];
+            const yHigh = levels[k];
+            // left side: indices d[k-1][0]+1 .. d[k][0]-1
+            const lStart = d[k - 1][0] + 1;
+            const lEnd = d[k][0] - 1;
+            const lCount = lEnd - lStart + 1;
+            for (let b = 0; b < lCount; b++) {
+                const frac = (b + 1) / (lCount + 1);
+                pos[lStart + b] = {
+                    x: leftX - bulgeOffset,
+                    y: yLow - (yLow - yHigh) * frac,
+                };
+            }
+            // right side: indices d[k][1]+1 .. d[k-1][1]-1
+            const rStart = d[k][1] + 1;
+            const rEnd = d[k - 1][1] - 1;
+            const rCount = rEnd - rStart + 1;
+            for (let b = 0; b < rCount; b++) {
+                const frac = (b + 1) / (rCount + 1);
+                pos[rStart + b] = {
+                    x: rightX + bulgeOffset,
+                    y: yHigh + (yLow - yHigh) * frac,
+                };
+            }
+        }
+
+        // Terminal loop – distributed along a semicircle above the top rung
+        const loopLen = d[n - 1][1] - d[n - 1][0] - 1;
+        const stemTopY = levels[n - 1];
+        const arcCx = cx;
+        const arcCy = stemTopY - baseR - 6;
+        const arcR = Math.max(stemGap / 2, (loopLen * 9) / Math.PI);
+        if (loopLen > 0) {
+            const angleStep = Math.PI / (loopLen + 1);
+            for (let b = 0; b < loopLen; b++) {
+                const angle = Math.PI + angleStep * (b + 1); // π (left) → 2π (right)
+                pos[d[n - 1][0] + 1 + b] = {
+                    x: arcCx + arcR * Math.cos(angle),
+                    y: arcCy + arcR * Math.sin(angle),
+                };
+            }
+        }
+
+        // Unpaired backbone up to the next domain (or the 3' tail)
+        const connStart = d[0][1] + 1;
+        const connEnd = di + 1 < m ? domains[di + 1][0][0] - 1 : L - 1;
+        const connLen = connEnd - connStart + 1;
+        if (di + 1 < m) {
+            const gap = connLen > 0 ? Math.max(connLen * tailStep, minDomainGap) : minDomainGap;
+            for (let b = 0; b < connLen; b++) {
+                const frac = (b + 1) / (connLen + 1);
+                pos[connStart + b] = { x: rightX + gap * frac, y: stemBottomY };
+            }
+            cursor = rightX + gap;
+        } else {
+            // 3' tail – horizontal, going right from the last domain
+            for (let b = 0; b < connLen; b++) {
+                pos[connStart + b] = { x: rightX + (b + 1) * tailStep, y: stemBottomY };
+            }
+        }
     }
 
-    // Bulge / internal-loop bases between consecutive rungs
-    for (let k = 1; k < n; k++) {
-        const yLow = levels[k - 1];
-        const yHigh = levels[k];
-        // left side: indices pairs[k-1][0]+1 .. pairs[k][0]-1
-        const lStart = pairs[k - 1][0] + 1;
-        const lEnd = pairs[k][0] - 1;
-        const lCount = lEnd - lStart + 1;
-        for (let m = 0; m < lCount; m++) {
-            const frac = (m + 1) / (lCount + 1);
-            pos[lStart + m] = {
-                x: leftX - bulgeOffset,
-                y: yLow - (yLow - yHigh) * frac,
-            };
-        }
-        // right side: indices pairs[k][1]+1 .. pairs[k-1][1]-1
-        const rStart = pairs[k][1] + 1;
-        const rEnd = pairs[k - 1][1] - 1;
-        const rCount = rEnd - rStart + 1;
-        for (let m = 0; m < rCount; m++) {
-            const frac = (m + 1) / (rCount + 1);
-            // order along 3'→5'? sequence index increases from rStart, which
-            // sits just above the inner rung; place top→bottom accordingly.
-            pos[rStart + m] = {
-                x: rightX + bulgeOffset,
-                y: yHigh + (yLow - yHigh) * frac,
-            };
-        }
-    }
-
-    // Loop bases – distributed along a semicircle above the top rung
-    const arcCx = cx;
-    const arcCy = stemTopY - baseR - 6;
-    const arcR = Math.max(stemGap / 2, (loopLen * 9) / Math.PI);
-    if (loopLen > 0) {
-        const angleStep = Math.PI / (loopLen + 1);
-        for (let m = 0; m < loopLen; m++) {
-            const idx = lastL + 1 + m;
-            const angle = Math.PI + angleStep * (m + 1); // π (left) → 2π (right)
-            pos[idx] = {
-                x: arcCx + arcR * Math.cos(angle),
-                y: arcCy + arcR * Math.sin(angle),
-            };
-        }
-    }
+    const rightTailLen = L - 1 - domains[m - 1][0][1]; // indices after the last domain
 
     // ── Build SVG elements ─────────────────────────────
     const elements: React.ReactElement[] = [];
@@ -285,18 +344,21 @@ export default function HairpinSVG({ seq, dotBracket, light = false }: HairpinSV
     }
 
     // Base-pair bonds (rungs)
-    for (let k = 0; k < n; k++) {
-        const a = pos[pairs[k][0]]!, b = pos[pairs[k][1]]!;
-        const sym = basePairSymbol(seq[pairs[k][0]], seq[pairs[k][1]]);
-        if (sym === 'none') continue;
-        elements.push(
-            <line key={`bond-${k}`}
-                x1={a.x + baseR + 1} y1={a.y} x2={b.x - baseR - 1} y2={b.y}
-                stroke={sym === 'wc' ? '#818cf8' : '#f59e0b'}
-                strokeWidth={1.5}
-                opacity={sym === 'wc' ? 0.6 : 0.5}
-                strokeDasharray={sym === 'wc' ? undefined : '2,2'} />
-        );
+    for (let di = 0; di < m; di++) {
+        const d = domains[di];
+        for (let k = 0; k < d.length; k++) {
+            const a = pos[d[k][0]]!, b = pos[d[k][1]]!;
+            const sym = basePairSymbol(seq[d[k][0]], seq[d[k][1]]);
+            if (sym === 'none') continue;
+            elements.push(
+                <line key={`bond-${di}-${k}`}
+                    x1={a.x + baseR + 1} y1={a.y} x2={b.x - baseR - 1} y2={b.y}
+                    stroke={sym === 'wc' ? '#818cf8' : '#f59e0b'}
+                    strokeWidth={1.5}
+                    opacity={sym === 'wc' ? 0.6 : 0.5}
+                    strokeDasharray={sym === 'wc' ? undefined : '2,2'} />
+            );
+        }
     }
 
     // Bases (drawn last so they sit on top of lines)
@@ -318,7 +380,7 @@ export default function HairpinSVG({ seq, dotBracket, light = false }: HairpinSV
     }
 
     // 5' / 3' labels
-    const fivePrimeX = leftTailLen > 0 ? pos[0]!.x - 16 : leftX - 18;
+    const fivePrimeX = pos[0]!.x - (leftTailLen > 0 ? 16 : 18);
     elements.push(
         <text key="5p" x={fivePrimeX} y={stemBottomY + 1}
             textAnchor="middle" dominantBaseline="central"
@@ -326,7 +388,7 @@ export default function HairpinSVG({ seq, dotBracket, light = false }: HairpinSV
             5'
         </text>
     );
-    const threePrimeX = rightTailLen > 0 ? pos[L - 1]!.x + 16 : rightX + 18;
+    const threePrimeX = pos[L - 1]!.x + (rightTailLen > 0 ? 16 : 18);
     elements.push(
         <text key="3p" x={threePrimeX} y={stemBottomY + 1}
             textAnchor="middle" dominantBaseline="central"
@@ -336,7 +398,7 @@ export default function HairpinSVG({ seq, dotBracket, light = false }: HairpinSV
     );
 
     // ── Bounding box from all placed points ────────────
-    let minX = fivePrimeX, maxX = threePrimeX, minY = arcCy - arcR, maxY = stemBottomY;
+    let minX = fivePrimeX, maxX = threePrimeX, minY = Infinity, maxY = stemBottomY;
     for (let i = 0; i < L; i++) {
         const p = pos[i];
         if (!p) continue;
