@@ -39,6 +39,12 @@ const PAL: Record<string, string> = {
   H: '#15803d', N: '#4ade80', S: '#fde68a', E: '#111111', K: '#374151', O: '#92400e',
 };
 
+// Night sky in dark mode, light sky in light mode
+const THEMES = {
+  dark:  { night: true,  sky: '#0d1b2a', cloud: '#1a3a5c', dirt: '#3d2b1f', grass: '#4a7c3f', tile: '#2d6e33', hud: '#e2e8f0', best: '#fbbf24', hint: 'rgba(148,163,184,0.7)' },
+  light: { night: false, sky: '#b3dcf2', cloud: '#ffffff', dirt: '#6b4f3a', grass: '#66a653', tile: '#4d9141', hud: '#1e293b', best: '#b45309', hint: 'rgba(71,85,105,0.75)' },
+};
+
 // ---------------------------------------------------------------------------
 // Pixel sprites  (each row = string of palette keys, '.' = transparent)
 // ---------------------------------------------------------------------------
@@ -117,11 +123,14 @@ const S_HUNTER: string[] = [
 // ---------------------------------------------------------------------------
 interface Bullet { x: number; y: number }
 
-const RabbitGame: React.FC = () => {
+const RabbitGame: React.FC<{ isDark?: boolean }> = ({ isDark = true }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rafRef    = useRef(0);
   const speedRef  = useRef<GameSpeed>('normal');
+  const isDarkRef = useRef(isDark);
   const [speed, setSpeed] = useState<GameSpeed>('normal');
+
+  useEffect(() => { isDarkRef.current = isDark; }, [isDark]);
 
   useEffect(() => {
     const canvas = canvasRef.current!;
@@ -251,18 +260,30 @@ const RabbitGame: React.FC = () => {
 
       // ── DRAW ──────────────────────────────────────────────────────────────
 
+      const th = THEMES[isDarkRef.current ? 'dark' : 'light'];
+
       // Sky
-      ctx.fillStyle = '#0d1b2a';
+      ctx.fillStyle = th.sky;
       ctx.fillRect(0, 0, CW, CH);
 
-      // Stars (pixel dots, static)
-      ctx.fillStyle = '#ffffff';
-      [50,120,200,315,430,545,610,660].forEach((sx, i) => {
-        ctx.fillRect(sx, [20,10,30,15,28,12,36,22][i], PS, PS);
-      });
+      if (th.night) {
+        // Stars (pixel dots, static)
+        ctx.fillStyle = '#ffffff';
+        [50,120,200,315,430,545,610,660].forEach((sx, i) => {
+          ctx.fillRect(sx, [20,10,30,15,28,12,36,22][i], PS, PS);
+        });
+      } else {
+        // Sun
+        ctx.fillStyle = '#fbbf24';
+        ctx.fillRect(51, 15, PS * 3, PS * 3);
+        ctx.fillRect(54, 6,  PS, PS);
+        ctx.fillRect(54, 27, PS, PS);
+        ctx.fillRect(44, 18, PS, PS);
+        ctx.fillRect(64, 18, PS, PS);
+      }
 
       // Pixel clouds
-      ctx.fillStyle = '#1a3a5c';
+      ctx.fillStyle = th.cloud;
       [[70, 44, 54, 10], [260, 37, 76, 12], [470, 48, 50, 10]].forEach(
         ([cx, cy, cw, chh]) => {
           ctx.fillRect(cx, cy, cw, chh);
@@ -271,12 +292,12 @@ const RabbitGame: React.FC = () => {
       );
 
       // Ground
-      ctx.fillStyle = '#3d2b1f';
+      ctx.fillStyle = th.dirt;
       ctx.fillRect(0, GY, CW, CH - GY);
-      ctx.fillStyle = '#4a7c3f';
+      ctx.fillStyle = th.grass;
       ctx.fillRect(0, GY, CW, PS * 2);
       // tile separators
-      ctx.fillStyle = '#2d6e33';
+      ctx.fillStyle = th.tile;
       for (let tx = 0; tx < CW; tx += 32) ctx.fillRect(tx, GY, PS, PS * 2);
 
       // Hunter
@@ -297,19 +318,19 @@ const RabbitGame: React.FC = () => {
       drawSprite(state.onGround ? S_STAND : S_JUMP, Math.round(state.rx), Math.round(state.ry));
 
       // HUD
-      ctx.fillStyle = '#e2e8f0';
+      ctx.fillStyle = th.hud;
       ctx.font      = 'bold 12px monospace';
       ctx.textAlign = 'center';
       ctx.fillText(`SCORE  ${state.score}`, CW / 2, 14);
       if (state.highScore > 0) {
-        ctx.fillStyle = '#fbbf24';
+        ctx.fillStyle = th.best;
         ctx.font      = '10px monospace';
         ctx.fillText(`BEST  ${state.highScore}`, CW / 2, 26);
       }
       ctx.textAlign = 'left';
 
       if (state.frame < 180 && !state.dead) {
-        ctx.fillStyle = 'rgba(148,163,184,0.7)';
+        ctx.fillStyle = th.hint;
         ctx.font      = '10px monospace';
         ctx.textAlign = 'center';
         ctx.fillText('SPACE/W/UP  to jump   A/D  to run', CW / 2, CH - 5);
@@ -374,7 +395,7 @@ const RabbitGame: React.FC = () => {
   }, [speed]);
 
   return (
-    <div className="flex flex-col items-center gap-2 mt-6">
+    <div className="flex flex-col items-center gap-2">
       <p className="text-[13px] text-zinc-400 dark:text-zinc-500 font-mono tracking-wide">
         help the bunny survive while BLAST runs!
       </p>
@@ -397,7 +418,7 @@ const RabbitGame: React.FC = () => {
         ref={canvasRef}
         width={CW}
         height={CH}
-        className="cursor-pointer rounded-lg border border-zinc-700 dark:border-zinc-800 shadow-lg select-none"
+        className={`cursor-pointer rounded-lg border shadow-lg select-none ${isDark ? 'border-zinc-700' : 'border-zinc-300'}`}
         style={{ maxWidth: '100%', imageRendering: 'pixelated' }}
       />
     </div>
