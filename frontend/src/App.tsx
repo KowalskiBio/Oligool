@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import MSAViewer, { type MSAViewerHandle } from './components/MSAViewer';
 import QueryViewer, { type QueryViewerHandle, type ImportedSession } from './components/QueryViewer';
 import BlastResults from './components/BlastResults';
-import RabbitGame from './components/RabbitGame';
+import GameArcade from './components/GameArcade';
 import UserReport from './components/UserReport';
 import { downloadSession, parseSessionText, OLIGOOL_SESSION_APP, OLIGOOL_SESSION_VERSION, type OligoolSession, type FlankingPanelState, type FlankingPrimerSelection } from './utils/session';
 import { parseSequenceHeader } from './utils/dna';
@@ -1335,7 +1335,7 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                 <p className="text-[13px] text-zinc-400 dark:text-zinc-500">This may take 1-2 minutes depending on sequence count. Preparing environment...</p>
               </div>
 
-              <div><RabbitGame /></div>
+              <div><GameArcade isDark={isDarkMode} /></div>
 
               {/* MSA Viewer Blueprint */}
               <div className="card overflow-hidden opacity-60 pointer-events-none animate-pulse duration-1000">
