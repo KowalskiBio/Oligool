@@ -11,6 +11,7 @@
  * stem-loop domains and rendered side by side. Pseudoknots fall back to text.
  */
 import React from 'react';
+import { openSvgInNewTab } from '../utils/openSvgTab';
 
 interface HairpinSVGProps {
     seq: string;
@@ -353,7 +354,12 @@ export default function HairpinSVG({ seq, dotBracket, light = false }: HairpinSV
             width="100%"
             style={{ maxHeight: '220px' }}
             preserveAspectRatio="xMidYMid meet"
+            className="cursor-zoom-in"
+            role="button"
+            aria-label="Open structure in a new tab"
+            onClick={(e) => openSvgInNewTab(e.currentTarget, 'Hairpin structure')}
         >
+            <title>Click to open in a new tab</title>
             {elements}
         </svg>
     );

@@ -1,4 +1,5 @@
 import React from 'react';
+import { openSvgInNewTab } from '../utils/openSvgTab';
 
 interface DimerSVGProps {
     seq: string; // contains '&'
@@ -187,8 +188,12 @@ export default function DimerSVG({ seq, dotBracket }: DimerSVGProps) {
                 viewBox={`0 0 ${svgW} ${svgH}`}
                 width="100%"
                 style={{ maxHeight: '120px' }}
-                className="mx-auto"
+                className="mx-auto cursor-zoom-in"
+                role="button"
+                aria-label="Open structure in a new tab"
+                onClick={(e) => openSvgInNewTab(e.currentTarget, 'Dimer structure')}
             >
+                <title>Click to open in a new tab</title>
                 {elements}
             </svg>
         </div>
