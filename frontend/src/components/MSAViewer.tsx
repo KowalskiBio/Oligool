@@ -136,6 +136,10 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
     const [ncbiModalAccession, setNcbiModalAccession] = useState<string | null>(null);
     const hoverColRef = useRef<number | null>(null);
     const hoverRafRef = useRef<number>(0);
+    // Set while a left-drag region selection is in progress; suppresses the
+    // onClick popup (NCBI modal / autofind boundary) that would otherwise
+    // fire after mouseup of a drag.
+    const suppressClickAfterDragRef = useRef(false);
     const redrawRef = useRef<() => void>(() => { });
     const [autofindActive, setAutofindActive] = useState(false);
     const [lightMatchBars, setLightMatchBars] = useState(false);
@@ -1774,6 +1778,7 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
         const startC = Math.max(0, Math.min(anchorLen - 1, Math.floor((scrollLeft + mouseX) / cellW)));
         const dragMode: 'select' | 'zoom' = e.button === 2 ? 'zoom' : 'select';
         setOligoSelection({ startCol: startC, endCol: startC, mode: dragMode });
+        suppressClickAfterDragRef.current = false;
 
         const colAt = (clientX: number) =>
             Math.max(0, Math.min(anchorLen - 1, Math.floor((scrollLeft + clientX - rect.left - labelWidth) / cellW)));
@@ -1812,6 +1817,11 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
 
             const dragPx = Math.abs(ev.clientX - startClientX);
 
+            // A real drag (region selection) must not open the click popup.
+            // Flag it so the canvas onClick handler that fires after mouseup
+            // bails out; a genuine click stays under the 6px threshold.
+            if (dragPx >= 6) suppressClickAfterDragRef.current = true;
+
             // Tiny drag = click → check for flanking primer hit (ranges in anchor space)
             if (dragPx < 6 && onFlankingPrimerClick && flankingPrimers && flankingPrimersA) {
                 if (flankingPrimers.fwd && flankingPrimersA.fwd && startC >= flankingPrimersA.fwd.start && startC < flankingPrimersA.fwd.end) {
@@ -1841,6 +1851,10 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
     }, [labelWidth, anchorLen, anchorCols, scrollLeft, cellW, availableWidth, onOligoRegionSelect, flankingPrimers, flankingPrimersA, onFlankingPrimerClick]);
 
     const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
+        if (suppressClickAfterDragRef.current) {
+            suppressClickAfterDragRef.current = false;
+            return;
+        }
         const cvs = canvasRef.current;
         if (!cvs) return;
         const rect = cvs.getBoundingClientRect();
