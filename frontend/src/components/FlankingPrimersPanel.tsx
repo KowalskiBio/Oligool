@@ -802,64 +802,101 @@ export default function FlankingPrimersPanel({
         return getTmFromObj(analyzeData);
     };
 
-    const renderResultCard = (title: string, data: any, maxItems = 1, itemOffset = 0) => {
+    const renderResultCard = (title: string, data: any, maxItems = 1, itemOffset = 0, opts?: { grid?: boolean }) => {
         if (!data || data.error) return null;
         const items = (Array.isArray(data.raw) ? data.raw : [data.raw]).filter((item: unknown) => !!item && typeof item === 'object');
         const displayItems = items.slice(itemOffset, itemOffset + maxItems);
         if (displayItems.length === 0) return null;
-        const firstItem = displayItems[0];
-        const topIsStriderDimer = firstItem?.DeltaG == null && firstItem?.Local_DeltaG != null &&
-            String(firstItem?.Sequence ?? firstItem?.DotBracket ?? firstItem?.Local_DotBracket ?? '').includes('&');
-        const topDg = firstItem?.DeltaG ?? firstItem?.Local_DeltaG ?? data.DeltaG;
+
+        const renderItem = (item: any, i: number, gridMode: boolean) => {
+            const itemDg = item.DeltaG ?? null;
+            const itemLocalDg = item.Local_DeltaG ?? null;
+            const itemIdtTm = item.IDT_Tm ?? null;
+            const itemLocalTm = item.Local_Tm ?? null;
+            const itemLocalTmShort = item.Local_Tm_ShortStem === true;
+            const hasStructure = !!(item.DotBracket || item.Local_DotBracket || item.Bonds);
+            const itemIsDimer = String(item.Sequence ?? item.DotBracket ?? item.Local_DotBracket ?? '').includes('&');
+            const dgRow = (
+                <>
+                    <span>IDT ΔG: <span className={`font-mono tabular-nums ${getIdtStatusColor(itemDg ?? undefined)}`}>{itemDg != null ? `${itemDg > 0 ? '+' : ''}${itemDg.toFixed(2)}` : '–'}</span></span>
+                    <span title={itemIsDimer ? 'Strider dimer ΔG at 25 °C including the ~1.9 kcal/mol bimolecular initiation penalty (the physically complete association energy, same convention as the Tm). IDT omits this penalty, so its number reads ~1.9 lower.' : undefined}>Strider ΔG: <span className={`font-mono tabular-nums ${itemLocalDg != null ? (itemLocalDg <= 0 ? "text-amber-500" : "text-zinc-400") : "text-zinc-400"}`}>{itemLocalDg != null ? `${itemLocalDg > 0 ? '+' : ''}${itemLocalDg.toFixed(2)}` : '–'}</span></span>
+                </>
+            );
+            const tmRow = (
+                <>
+                    <span>IDT Tm: <span className="font-mono tabular-nums text-zinc-500">{itemIdtTm != null ? `${Number(itemIdtTm).toFixed(1)}°C` : '–'}</span></span>
+                    <span>Strider Tm: <span className="font-mono tabular-nums text-zinc-500">{itemLocalTm != null ? `${itemLocalTm.toFixed(1)}°C` : '–'}</span>{itemLocalTm != null && itemLocalTmShort && <span title="Hairpin stem under 3 bp: two-state Tm is unreliable (marginal structure)" className="ml-1 text-amber-600 dark:text-amber-400 font-bold">*</span>}</span>
+                </>
+            );
+            return (
+                <div className="flex flex-col gap-2">
+                    {gridMode && <span className="text-[13px] text-zinc-500">{title} {i + 1}</span>}
+                    {/* Provenance block (dG + Tm together, above the structure : mirrors MOLigo). */}
+                    {(!hasStructure && itemDg == null && itemLocalDg == null) ? (
+                        <div className="text-[13px] text-zinc-400 italic text-center px-1 py-0.5">No stable structure found</div>
+                    ) : (
+                        <div className="flex flex-col gap-0.5 text-[13px] text-zinc-400 px-1">
+                            {gridMode ? (
+                                <div className="flex flex-wrap gap-x-3 justify-end">{dgRow}</div>
+                            ) : (
+                                <div className="flex justify-between items-center">
+                                    {maxItems > 1 && <span className="text-[13px]">{title} {i + 1}</span>}
+                                    <div className="flex gap-3 ml-auto">{dgRow}</div>
+                                </div>
+                            )}
+                            <div className={`flex gap-x-3 justify-end opacity-80 ${gridMode ? 'flex-wrap' : ''}`}>{tmRow}</div>
+                        </div>
+                    )}
+                    {/* Structure below provenance. */}
+                    {hasStructure && (
+                        <div className="bg-zinc-50 dark:bg-zinc-900/50 rounded p-2 overflow-x-auto">
+                            {item.Sequence && item.Sequence.includes('&') ? (
+                                <DimerAscii seq={item.Sequence} dotBracket={item.DotBracket || item.Local_DotBracket} raw={item} />
+                            ) : (
+                                <HairpinSVG seq={item.Sequence || item.dot_bracket || ''} dotBracket={item.DotBracket || item.Local_DotBracket} />
+                            )}
+                        </div>
+                    )}
+                </div>
+            );
+        };
+
+        // Grid mode (heterodimer pairwise): one box per structure. The two best
+        // (most stable) heterodimers share the first row, the rest fill the
+        // second (structures are short, they fit side by side).
+        if (opts?.grid && displayItems.length > 1) {
+            const renderBox = (item: any, i: number) => (
+                <div key={i} className="card p-3 flex flex-col gap-2">
+                    {renderItem(item, i, true)}
+                </div>
+            );
+            const firstRow = displayItems.slice(0, 2);
+            const restRow = displayItems.slice(2);
+            return (
+                <div className="flex flex-col gap-3">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        {firstRow.map(renderBox)}
+                    </div>
+                    {restRow.length > 0 && (
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                            {restRow.map(renderBox)}
+                        </div>
+                    )}
+                </div>
+            );
+        }
 
         return (
             <div className="card p-3 flex flex-col gap-2">
                 <div className="flex justify-between items-center border-b border-zinc-100 dark:border-zinc-800 pb-2">
                     <span className="text-[13px] text-zinc-500 uppercase tracking-wider text-ellipsis overflow-hidden whitespace-nowrap">{title}</span>
-                    <span className={`text-[13px] flex-shrink-0 font-mono tabular-nums ${getIdtStatusColor(topDg != null && topIsStriderDimer ? topDg - STRIDER_DIMER_INIT_DG : topDg)}`}>{topDg != null ? `${topDg.toFixed(2)} kcal/mol` : 'N/A'}</span>
                 </div>
                 <div className="flex flex-col gap-3 mt-1">
-                    {displayItems.map((item: any, i: number) => {
-                        const itemDg = item.DeltaG ?? null;
-                        const itemLocalDg = item.Local_DeltaG ?? null;
-                        const itemIdtTm = item.IDT_Tm ?? null;
-                        const itemLocalTm = item.Local_Tm ?? null;
-                        const itemLocalTmShort = item.Local_Tm_ShortStem === true;
-                        const hasStructure = !!(item.DotBracket || item.Local_DotBracket || item.Bonds);
-                        const itemIsDimer = String(item.Sequence ?? item.DotBracket ?? item.Local_DotBracket ?? '').includes('&');
-                        return (
-                            <div key={i} className={`flex flex-col gap-2 ${maxItems > 1 && i > 0 ? 'border-t border-zinc-100 dark:border-zinc-800 pt-3' : ''}`}>
-                                {/* Provenance block (dG + Tm together, above the structure : mirrors MOLigo). */}
-                                {(!hasStructure && topDg == null && itemLocalDg == null) ? (
-                                    <div className="text-[13px] text-zinc-400 italic text-center px-1 py-0.5">No stable structure found</div>
-                                ) : (
-                                    <div className="flex flex-col gap-0.5 text-[13px] text-zinc-400 px-1">
-                                        <div className="flex justify-between items-center">
-                                            {maxItems > 1 && <span className="text-[13px]">{title} {i + 1}</span>}
-                                            <div className="flex gap-3 ml-auto">
-                                                <span>IDT ΔG: <span className={`font-mono tabular-nums ${getIdtStatusColor(itemDg ?? undefined)}`}>{itemDg != null ? `${itemDg > 0 ? '+' : ''}${itemDg.toFixed(2)}` : '–'}</span></span>
-                                                <span title={itemIsDimer ? 'Strider dimer ΔG at 25 °C including the ~1.9 kcal/mol bimolecular initiation penalty (the physically complete association energy, same convention as the Tm). IDT omits this penalty, so its number reads ~1.9 lower.' : undefined}>Strider ΔG: <span className={`font-mono tabular-nums ${itemLocalDg != null ? (itemLocalDg <= 0 ? "text-amber-500" : "text-zinc-400") : "text-zinc-400"}`}>{itemLocalDg != null ? `${itemLocalDg > 0 ? '+' : ''}${itemLocalDg.toFixed(2)}` : '–'}</span></span>
-                                            </div>
-                                        </div>
-                                        <div className="flex gap-3 justify-end opacity-80">
-                                            <span>IDT Tm: <span className="font-mono tabular-nums text-zinc-500">{itemIdtTm != null ? `${Number(itemIdtTm).toFixed(1)}°C` : '–'}</span></span>
-                                            <span>Strider Tm: <span className="font-mono tabular-nums text-zinc-500">{itemLocalTm != null ? `${itemLocalTm.toFixed(1)}°C` : '–'}</span>{itemLocalTm != null && itemLocalTmShort && <span title="Hairpin stem under 3 bp: two-state Tm is unreliable (marginal structure)" className="ml-1 text-amber-600 dark:text-amber-400 font-bold">*</span>}</span>
-                                        </div>
-                                    </div>
-                                )}
-                                {/* Structure below provenance. */}
-                                {hasStructure && (
-                                    <div className="bg-zinc-50 dark:bg-zinc-900/50 rounded p-2 overflow-x-auto">
-                                        {item.Sequence && item.Sequence.includes('&') ? (
-                                            <DimerAscii seq={item.Sequence} dotBracket={item.DotBracket || item.Local_DotBracket} raw={item} />
-                                        ) : (
-                                            <HairpinSVG seq={item.Sequence || item.dot_bracket || ''} dotBracket={item.DotBracket || item.Local_DotBracket} />
-                                        )}
-                                    </div>
-                                )}
-                            </div>
-                        );
-                    })}
+                    {displayItems.map((item: any, i: number) => (
+                        <div key={i} className={`flex flex-col gap-2 ${maxItems > 1 && i > 0 ? 'border-t border-zinc-100 dark:border-zinc-800 pt-3' : ''}`}>
+                            {renderItem(item, i, false)}
+                        </div>
+                    ))}
                 </div>
             </div>
         );
@@ -1424,7 +1461,7 @@ export default function FlankingPrimersPanel({
                         </button>
                     </div>
                 </div>
-                <div className="grid grid-cols-6 gap-1 text-[13px] text-zinc-500 dark:text-zinc-400">
+                <div className="grid grid-cols-[repeat(5,minmax(0,1fr))_max-content] gap-1 text-[13px] text-zinc-500 dark:text-zinc-400">
                     <div><span className="text-zinc-600 dark:text-zinc-300">Len</span><br /><span className="font-mono tabular-nums font-medium">{p.length} bp</span></div>
                     <div><span className="text-zinc-600 dark:text-zinc-300" title={searchEngine === 'strider' ? 'Strider duplex Tm' : 'Primer3 Tm'}>Tm</span><br /><span className="font-mono tabular-nums font-medium">{searchEngine === 'strider' ? (p.tm_strider != null ? `${p.tm_strider.toFixed(1)}` : '–') : (p.tm != null ? `${p.tm}` : (p.primer3?.tm ?? '–'))}°C</span></div>
                     <div><span className="text-zinc-600 dark:text-zinc-300" title="IDT Tm">IDT Tm</span><br /><span className="font-mono tabular-nums font-medium">{idtResult?.analyze ? (extractTm(idtResult.analyze)?.toFixed(1) || 'N/A') + '°C' : '–'}</span></div>
@@ -1444,9 +1481,8 @@ export default function FlankingPrimersPanel({
                     <div><span className="text-zinc-600 dark:text-zinc-300" title={searchEngine === 'strider' ? 'Strider homodimer ΔG includes the ~1.9 kcal/mol bimolecular initiation penalty; P3 and IDT numbers do not' : undefined}>Self-dimer</span><br />{(() => {
                         const isStrider = searchEngine === 'strider';
                         const dg = isStrider ? p.strider?.homodimer_dg : p.homodimer?.dg;
-                        const tm = isStrider ? p.strider?.homodimer_tm : p.homodimer?.tm;
                         const dgForColor = dg != null && isStrider ? dg - STRIDER_DIMER_INIT_DG : dg;
-                        return <span className={`font-mono tabular-nums font-medium ${statusDg(dgForColor)}`}>{dg != null ? <>{dg} kcal{tm != null && <> · {tm}°C</>}</> : 'OK'}</span>;
+                        return <span className={`font-mono tabular-nums font-medium whitespace-nowrap ${statusDg(dgForColor)}`}>{dg != null ? `${dg} kcal/mol` : 'OK'}</span>;
                     })()}</div>
                 </div>
 
@@ -1720,12 +1756,16 @@ export default function FlankingPrimersPanel({
                                             const bestHetero = ensDg(r.pairwise);
                                             const fmt = (v: number | null) => v != null ? `${v.toFixed(2)}` : '–';
                                             return (
-                                                <div className="flex items-center gap-2 ml-2 text-sm font-normal text-emerald-800 dark:text-emerald-200">
-                                                    <span>Hairpin ΔG <span className="font-mono tabular-nums">{fmt(bestHairpin)}</span></span>
+                                                <div
+                                                    className="flex items-center gap-2 ml-2 text-sm font-normal text-emerald-800 dark:text-emerald-200"
+                                                    title="Ensemble ΔG: Boltzmann-weighted free energy (-RT ln Z) over ALL competing structures of each kind, from Strider (association-included convention). Always at least as negative as any single structure; the cards below show single-structure ΔGs. Hairpin and self-dimer show the worse of the two primers."
+                                                >
+                                                    <span className="font-medium">Ensemble ΔG (kcal/mol)</span>
+                                                    <span>Hairpin <span className="font-mono tabular-nums">{fmt(bestHairpin)}</span></span>
                                                     <span className="text-zinc-300 dark:text-zinc-600">|</span>
-                                                    <span>Self-dimer ΔG <span className="font-mono tabular-nums">{fmt(bestSelfDimer)}</span></span>
+                                                    <span>Self-dimer <span className="font-mono tabular-nums">{fmt(bestSelfDimer)}</span></span>
                                                     <span className="text-zinc-300 dark:text-zinc-600">|</span>
-                                                    <span>Heterodimer ΔG <span className="font-mono tabular-nums">{fmt(bestHetero)}</span></span>
+                                                    <span>Heterodimer <span className="font-mono tabular-nums">{fmt(bestHetero)}</span></span>
                                                 </div>
                                             );
                                         })()}
@@ -1749,7 +1789,7 @@ export default function FlankingPrimersPanel({
                                                     {renderCompetitionStrip((idtResults || striderPairResults).m2?.competition, "Right (Reverse) Primer Equilibrium")}
                                                 </div>
                                                 <div className="grid grid-cols-1 gap-6">
-                                                    {renderResultCard("HeteroDimer Pairwise", (idtResults || striderPairResults).pairwise, 5)}
+                                                    {renderResultCard("HeteroDimer Pairwise", (idtResults || striderPairResults).pairwise, 5, 0, { grid: true })}
                                                 </div>
                                                 {idtCredentials && !isAnalyzing && (
                                                     <div className="mt-4 flex justify-center">
