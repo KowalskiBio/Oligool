@@ -62,6 +62,8 @@ export const downloadTxt = (content: string, filename: string): void => {
 export interface CompleteReportData {
     jobName: string;
     queryId: string;
+    /** Search engine used for MOLigo picking and flanking primer design. */
+    engineUsed?: 'primer3' | 'strider';
     /** FASTA/GenBank header provided by the user; shown instead of job/query defaults. */
     header?: string;
     /** Full GenBank flat-file header block (LOCUS..FEATURES) to render in the PDF report. */
@@ -142,18 +144,33 @@ export interface CompleteReportData {
     flankingFwdHairpinDg?: number | null;
     /** Primer3 hairpin Tm (°C) of the forward flanking primer. */
     flankingFwdHairpinTm?: number | null;
+    /** Strider hairpin ΔG (kcal/mol, 25 °C) of the forward flanking primer. */
+    flankingFwdHairpinStriderDg?: number | null;
+    /** Strider hairpin Tm (°C) of the forward flanking primer. */
+    flankingFwdHairpinStriderTm?: number | null;
+    /** True when the Strider hairpin Tm rests on a stem under 3 bp (unreliable). */
+    flankingFwdHairpinStriderTmShortStem?: boolean;
     /** Primer3 homodimer ΔG (kcal/mol, 25 °C) of the forward flanking primer. */
     flankingFwdHomodimerDg?: number | null;
     /** Primer3 homodimer Tm (°C) of the forward flanking primer. */
     flankingFwdHomodimerTm?: number | null;
+    /** Strider homodimer ΔG (kcal/mol, 25 °C, association-included) of the forward flanking primer. */
+    flankingFwdHomodimerStriderDg?: number | null;
+    /** Strider homodimer Tm (°C) of the forward flanking primer. */
+    flankingFwdHomodimerStriderTm?: number | null;
 
     flankingRevTmP3?: number | null;
     flankingRevTmStrider?: number | null;
     flankingRevIDTTm?: number;
     flankingRevHairpinDg?: number | null;
     flankingRevHairpinTm?: number | null;
+    flankingRevHairpinStriderDg?: number | null;
+    flankingRevHairpinStriderTm?: number | null;
+    flankingRevHairpinStriderTmShortStem?: boolean;
     flankingRevHomodimerDg?: number | null;
     flankingRevHomodimerTm?: number | null;
+    flankingRevHomodimerStriderDg?: number | null;
+    flankingRevHomodimerStriderTm?: number | null;
 
     /** Primer3 heterodimer ΔG (kcal/mol, 25 °C) of the flanking primer pair. */
     flankingHetDg?: number | null;

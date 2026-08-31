@@ -1789,7 +1789,7 @@ export default function FlankingPrimersPanel({
                                                     {renderCompetitionStrip((idtResults || striderPairResults).m2?.competition, "Right (Reverse) Primer Equilibrium")}
                                                 </div>
                                                 <div className="grid grid-cols-1 gap-6">
-                                                    {renderResultCard("HeteroDimer Pairwise", (idtResults || striderPairResults).pairwise, 5, 0, { grid: true })}
+                                                    {renderResultCard("Hetero-Dimers", (idtResults || striderPairResults).pairwise, 5, 0, { grid: true })}
                                                 </div>
                                                 {idtCredentials && !isAnalyzing && (
                                                     <div className="mt-4 flex justify-center">

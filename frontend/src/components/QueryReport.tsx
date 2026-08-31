@@ -53,13 +53,41 @@ const renderIdtSvg = (item: IdtRawItem, seq1?: string, seq2?: string) => {
         return <p className="text-[13px] text-zinc-500 italic">No structure predicted</p>;
     }
     return (
-        <div className="w-full bg-zinc-50 rounded border border-zinc-200 p-2">
+        <div className="structure-figure w-full bg-zinc-50 rounded border border-zinc-200 p-2">
             {isDimer ? (
                 <DimerAscii seq={seq} dotBracket={db} raw={item} className="print:max-h-none print:overflow-visible" light />
             ) : (
                 <HairpinSVG seq={seq} dotBracket={db} light />
             )}
         </div>
+    );
+};
+
+/** One structure-class metrics line: "Label  P3 ΔG (Tm)  Strider ΔG (Tm)". Each engine is shown only when its data exists. */
+const StructureMetricsRow = ({
+    label,
+    p3Dg,
+    p3Tm,
+    stDg,
+    stTm,
+    stTmShortStem,
+}: {
+    label: string;
+    p3Dg?: number | null;
+    p3Tm?: number | null;
+    stDg?: number | null;
+    stTm?: number | null;
+    stTmShortStem?: boolean;
+}) => {
+    const hasP3 = p3Dg != null || p3Tm != null;
+    const hasStrider = stDg != null || stTm != null;
+    if (!hasP3 && !hasStrider) return null;
+    return (
+        <p className="text-sm text-zinc-600 whitespace-pre-wrap">
+            {label}
+            {hasP3 && <>{'\t'}P3{'\t'}<V>{fmtDG(p3Dg)}</V> (Tm{'\t'}<V>{fmtNum(p3Tm)} °C</V>)</>}
+            {hasStrider && <>{'\t'}Strider{'\t'}<V>{fmtDG(stDg)}</V> (Tm{'\t'}<V>{fmtNum(stTm)} °C</V>{stTmShortStem === true && <span className="font-normal text-amber-600"> (short stem: under 3 bp, Tm unreliable)</span>})</>}
+        </p>
     );
 };
 
@@ -185,6 +213,7 @@ export default function QueryReport({ data }: QueryReportProps) {
                         .query-report .break-avoid { break-inside: avoid; page-break-inside: avoid; }
                         .query-report .break-avoid-item { break-inside: avoid; page-break-inside: avoid; }
                         .query-report .grid > * { break-inside: avoid; page-break-inside: avoid; }
+                        .query-report .structure-figure svg { width: 300px !important; max-height: 150px !important; display: block; margin: 0 auto; }
                     }
                     @media screen {
                         .query-report { display: none !important; }
@@ -195,6 +224,9 @@ export default function QueryReport({ data }: QueryReportProps) {
             <div className="p-6 max-w-5xl mx-auto bg-white text-black">
                 <div className="mb-6 border-b-2 border-zinc-900 pb-4">
                     <h1 className="text-xl font-bold text-zinc-900 tracking-tight">Oligool Complete Design Report</h1>
+                    {data.engineUsed && (
+                        <p className="text-base font-bold text-zinc-700 mt-1">{data.engineUsed === 'strider' ? 'Strider' : 'Primer3'}</p>
+                    )}
                     <p className="text-[13px] text-zinc-500 mt-1">{new Date().toLocaleString()}</p>
                     {data.header && (
                         <p className="text-base font-medium text-zinc-800 mt-2 break-words">{data.header}</p>
@@ -298,8 +330,21 @@ export default function QueryReport({ data }: QueryReportProps) {
                             <p className="font-mono text-sm break-all bg-zinc-50 p-2 rounded border border-zinc-200">{data.flankingFwdSeq}</p>
                             <p className="text-sm text-zinc-600 whitespace-pre-wrap">Length{'\t'}<V>{data.flankingFwdLen ?? data.flankingFwdSeq.length} nt</V> | GC{'\t'}<V>{fmtNum(data.flankingFwdGc)}%</V></p>
                             <p className="text-sm text-zinc-600 whitespace-pre-wrap">Tm{'\t'}P3{'\t'}<V>{fmtNum(data.flankingFwdTmP3)} °C</V>{'\t'}Strider{'\t'}<V>{fmtNum(data.flankingFwdTmStrider)} °C</V>{'\t'}IDT{'\t'}<V>{fmtNum(data.flankingFwdIDTTm)} °C</V></p>
-                            <p className="text-sm text-zinc-600 whitespace-pre-wrap">P3 Hairpin ΔG{'\t'}<V>{fmtDG(data.flankingFwdHairpinDg)}</V> (Tm{'\t'}<V>{fmtNum(data.flankingFwdHairpinTm)} °C</V>)</p>
-                            <p className="text-sm text-zinc-600 whitespace-pre-wrap">P3 Homodimer ΔG{'\t'}<V>{fmtDG(data.flankingFwdHomodimerDg)}</V> (Tm{'\t'}<V>{fmtNum(data.flankingFwdHomodimerTm)} °C</V>)</p>
+                            <StructureMetricsRow
+                                label="Hairpin"
+                                p3Dg={data.flankingFwdHairpinDg}
+                                p3Tm={data.flankingFwdHairpinTm}
+                                stDg={data.flankingFwdHairpinStriderDg}
+                                stTm={data.flankingFwdHairpinStriderTm}
+                                stTmShortStem={data.flankingFwdHairpinStriderTmShortStem}
+                            />
+                            <StructureMetricsRow
+                                label="Self-Dimer"
+                                p3Dg={data.flankingFwdHomodimerDg}
+                                p3Tm={data.flankingFwdHomodimerTm}
+                                stDg={data.flankingFwdHomodimerStriderDg}
+                                stTm={data.flankingFwdHomodimerStriderTm}
+                            />
                         </div>
                     ) : (
                         <p className="text-sm text-zinc-500">No forward flanking primer designed.</p>
@@ -310,17 +355,36 @@ export default function QueryReport({ data }: QueryReportProps) {
                             <p className="font-mono text-sm break-all bg-zinc-50 p-2 rounded border border-zinc-200">{data.flankingRevSeq}</p>
                             <p className="text-sm text-zinc-600 whitespace-pre-wrap">Length{'\t'}<V>{data.flankingRevLen ?? data.flankingRevSeq.length} nt</V> | GC{'\t'}<V>{fmtNum(data.flankingRevGc)}%</V></p>
                             <p className="text-sm text-zinc-600 whitespace-pre-wrap">Tm{'\t'}P3{'\t'}<V>{fmtNum(data.flankingRevTmP3)} °C</V>{'\t'}Strider{'\t'}<V>{fmtNum(data.flankingRevTmStrider)} °C</V>{'\t'}IDT{'\t'}<V>{fmtNum(data.flankingRevIDTTm)} °C</V></p>
-                            <p className="text-sm text-zinc-600 whitespace-pre-wrap">P3 Hairpin ΔG{'\t'}<V>{fmtDG(data.flankingRevHairpinDg)}</V> (Tm{'\t'}<V>{fmtNum(data.flankingRevHairpinTm)} °C</V>)</p>
-                            <p className="text-sm text-zinc-600 whitespace-pre-wrap">P3 Homodimer ΔG{'\t'}<V>{fmtDG(data.flankingRevHomodimerDg)}</V> (Tm{'\t'}<V>{fmtNum(data.flankingRevHomodimerTm)} °C</V>)</p>
+                            <StructureMetricsRow
+                                label="Hairpin"
+                                p3Dg={data.flankingRevHairpinDg}
+                                p3Tm={data.flankingRevHairpinTm}
+                                stDg={data.flankingRevHairpinStriderDg}
+                                stTm={data.flankingRevHairpinStriderTm}
+                                stTmShortStem={data.flankingRevHairpinStriderTmShortStem}
+                            />
+                            <StructureMetricsRow
+                                label="Self-Dimer"
+                                p3Dg={data.flankingRevHomodimerDg}
+                                p3Tm={data.flankingRevHomodimerTm}
+                                stDg={data.flankingRevHomodimerStriderDg}
+                                stTm={data.flankingRevHomodimerStriderTm}
+                            />
                         </div>
                     ) : (
                         <p className="text-sm text-zinc-500">No reverse flanking primer designed.</p>
                     )}
-                    {((data.flankingHetDg != null || data.flankingHetTm != null) || data.ampliconLength != null) && (
+                    {((data.flankingHetDg != null || data.flankingHetTm != null || data.flankingHetStriderDg != null || data.flankingHetStriderTm != null) || data.ampliconLength != null) && (
                         <div>
                             <h3 className="text-sm font-bold text-zinc-700">{(data.flankingFwdName || 'Primer1')} × {(data.flankingRevName || 'Primer2')}</h3>
-                            {(data.flankingHetDg != null || data.flankingHetTm != null) && (
-                                <p className="text-sm text-zinc-600 whitespace-pre-wrap">Heterodimer ΔG{'\t'}<V>{fmtDG(data.flankingHetDg)}</V> (Tm{'\t'}<V>{fmtNum(data.flankingHetTm)} °C</V>){(data.flankingHetStriderDg != null || data.flankingHetStriderTm != null) && <> · Strider ΔG{'\t'}<V>{fmtDG(data.flankingHetStriderDg)}</V> (Tm{'\t'}<V>{fmtNum(data.flankingHetStriderTm)} °C</V>)</>}</p>
+                            {(data.flankingHetDg != null || data.flankingHetTm != null || data.flankingHetStriderDg != null || data.flankingHetStriderTm != null) && (
+                                <StructureMetricsRow
+                                    label="Heterodimer"
+                                    p3Dg={data.flankingHetDg}
+                                    p3Tm={data.flankingHetTm}
+                                    stDg={data.flankingHetStriderDg}
+                                    stTm={data.flankingHetStriderTm}
+                                />
                             )}
                             {data.ampliconLength != null && (
                                 <p className="text-sm text-zinc-600 whitespace-pre-wrap">Amplicon length{'\t'}<V>{data.ampliconLength} bp</V></p>

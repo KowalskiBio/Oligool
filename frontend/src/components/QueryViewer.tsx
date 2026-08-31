@@ -1350,6 +1350,24 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
             return analyze as { IDT_Tm?: number; Tm?: number } | { IDT_Tm?: number; Tm?: number }[];
         };
 
+        // Best Strider value for a structure class (top structure only):
+        // all_* array, then the top-level field, then raw[0].
+        const striderVal = (struct: unknown, key: 'Local_DeltaG' | 'Local_Tm'): number | null | undefined => {
+            if (!struct || typeof struct !== 'object') return undefined;
+            const s = struct as Record<string, unknown>;
+            const all = s[`all_${key}`];
+            if (Array.isArray(all) && all.length > 0 && all[0] != null) return all[0] as number;
+            if (s[key] != null) return s[key] as number;
+            const raw = s.raw;
+            const firstRaw = (Array.isArray(raw) ? raw[0] : raw) as Record<string, unknown> | undefined;
+            return (firstRaw?.[key] as number | undefined) ?? undefined;
+        };
+
+        // Per-primer Strider numbers: design candidate metrics when the Strider
+        // engine produced them, otherwise the on-Use individual Strider analysis.
+        const fwdStriderIndiv = (sf ? fps?.striderResultsIndiv?.[sf.sequence] : undefined) as { hairpin?: unknown; self_dimer?: unknown } | undefined;
+        const revStriderIndiv = (sr ? fps?.striderResultsIndiv?.[sr.sequence] : undefined) as { hairpin?: unknown; self_dimer?: unknown } | undefined;
+
         const flankingFwdSeq = flankingPrimersData?.fwdSeq ?? sf?.sequence;
         const flankingFwdName = flankingPrimersData?.fwdName ?? fps?.fwdName ?? sf?.name;
         const flankingRevSeq = flankingPrimersData?.revSeq ?? sr?.sequence;
@@ -1358,6 +1376,7 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
         return {
             jobName,
             queryId: data.id,
+            engineUsed: searchEngine,
             genbankHeader: genbankHeader && genbankHeader.trim() ? genbankHeader : undefined,
             targetSeq: fullSeq,
             targetStart: data.start,
@@ -1406,15 +1425,25 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
             flankingFwdIDTTm: extractBestTm(indivAnalyzeOf(sf?.sequence)),
             flankingFwdHairpinDg: sf?.hairpin?.dg,
             flankingFwdHairpinTm: sf?.hairpin?.tm,
+            flankingFwdHairpinStriderDg: sf?.strider?.hairpin_dg ?? striderVal(fwdStriderIndiv?.hairpin, 'Local_DeltaG') ?? null,
+            flankingFwdHairpinStriderTm: sf?.hairpin?.tm_strider ?? striderVal(fwdStriderIndiv?.hairpin, 'Local_Tm') ?? null,
+            flankingFwdHairpinStriderTmShortStem: sf?.hairpin?.tm_strider_short_stem === true,
             flankingFwdHomodimerDg: sf?.homodimer?.dg,
             flankingFwdHomodimerTm: sf?.homodimer?.tm,
+            flankingFwdHomodimerStriderDg: sf?.strider?.homodimer_dg ?? striderVal(fwdStriderIndiv?.self_dimer, 'Local_DeltaG') ?? null,
+            flankingFwdHomodimerStriderTm: sf?.strider?.homodimer_tm ?? striderVal(fwdStriderIndiv?.self_dimer, 'Local_Tm') ?? null,
             flankingRevTmP3: sr?.tm,
             flankingRevTmStrider: sr?.tm_strider,
             flankingRevIDTTm: extractBestTm(indivAnalyzeOf(sr?.sequence)),
             flankingRevHairpinDg: sr?.hairpin?.dg,
             flankingRevHairpinTm: sr?.hairpin?.tm,
+            flankingRevHairpinStriderDg: sr?.strider?.hairpin_dg ?? striderVal(revStriderIndiv?.hairpin, 'Local_DeltaG') ?? null,
+            flankingRevHairpinStriderTm: sr?.hairpin?.tm_strider ?? striderVal(revStriderIndiv?.hairpin, 'Local_Tm') ?? null,
+            flankingRevHairpinStriderTmShortStem: sr?.hairpin?.tm_strider_short_stem === true,
             flankingRevHomodimerDg: sr?.homodimer?.dg,
             flankingRevHomodimerTm: sr?.homodimer?.tm,
+            flankingRevHomodimerStriderDg: sr?.strider?.homodimer_dg ?? striderVal(revStriderIndiv?.self_dimer, 'Local_DeltaG') ?? null,
+            flankingRevHomodimerStriderTm: sr?.strider?.homodimer_tm ?? striderVal(revStriderIndiv?.self_dimer, 'Local_Tm') ?? null,
             flankingHetDg: fps?.result?.pair_metrics?.heterodimer?.dg,
             flankingHetTm: fps?.result?.pair_metrics?.heterodimer?.tm,
             flankingHetStriderDg: fps?.result?.pair_metrics?.strider_heterodimer?.dg ?? null,
