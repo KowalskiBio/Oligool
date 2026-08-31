@@ -990,6 +990,13 @@ def _run_strider_analysis(
             # the competition strip splits the monomer pool into
             # unfolded / this MFE hairpin / other folds.
             population_unfolded = None
+            # Shared ensemble accumulators: None until a partition is built.
+            ensemble_dg = None
+            ensemble_dg_native = None
+            population_fraction = None
+            # Full unimolecular enumeration (hairpin path only): reused for
+            # both the partition sum and the suboptimal-structure display.
+            subs_enum: list = []
 
             if seq2:
                 # Use strider's dedicated bimolecular dimer MFE (not the pseudo-
@@ -1034,55 +1041,24 @@ def _run_strider_analysis(
                         # physically meaningful answer, so only reject
                         # non-finite / below-absolute-zero sentinels.
                         mfe_tm = round(res.tm_celsius, 1) if res.tm_celsius is not None and res.tm_celsius > -273.15 else None
-                        try:
-                            # Ensemble math always uses native SantaLucia (eng_native), not the
-                            # `parameter_set` toggle — same rule as the MFE dimer ΔG above.
-                            dimer_pfunc = eng_native.pfunc(seq1, seq2, pair_probs=False)
-                            # pfunc's ensemble ΔG keeps the ~1.96 kcal/mol duplex-init/association
-                            # term (same convention as res.dH/res.dS) — this is the physically
-                            # complete ΔG and is what solve_equilibrium (Part C) must use, since
-                            # stripping the association penalty would understate how hard it
-                            # actually is to dimerize at real concentrations.
-                            ensemble_dg_native = round(float(dimer_pfunc.free_energy), 2)
-                            # Ensemble ΔG is displayed in the same physical
-                            # (association-included) convention as viz_dg above,
-                            # so the two numbers are directly comparable.
-                            ensemble_dg = ensemble_dg_native
-                            # dimer_thermo's dedicated MFE search and pfunc's ensemble DP are two
-                            # independently-implemented energy models (different internal loop/
-                            # coaxial-stacking handling); for very strongly-paired duplexes they can
-                            # disagree by a small margin and (rarely) show the ensemble as *weaker*
-                            # than the MFE structure it must contain. Clamp display to the physical
-                            # invariant ensemble ΔG <= MFE ΔG — matches the population-fraction clamp
-                            # below, which already floors this same gap at 0.
-                            ensemble_dg = min(ensemble_dg, viz_dg)
-                            _diff = max(0.0, viz_dg - ensemble_dg)
-                            population_fraction = round(math.exp(-_diff / (R_GAS * (base_temp + 273.15))), 4)
-                        except Exception:
-                            ensemble_dg_native = None
-                            ensemble_dg = None
-                            population_fraction = None
                     else:
                         viz_struct_raw = None
                         viz_dg = None
                         mfe_tm = None
-                        ensemble_dg_native = None
-                        ensemble_dg = None
-                        population_fraction = None
                 except Exception:
                     viz_struct_raw = None
                     viz_dg = None
                     mfe_tm = None
-                    ensemble_dg_native = None
-                    ensemble_dg = None
-                    population_fraction = None
 
                 subopt_dimers: list[dict] = []
                 if dimer_thermo_subopt is not None:
                     try:
+                        # n is the enumeration cap, not the target: the full
+                        # alignment set is needed for the partition sum below
+                        # (20+20 mers yield ~40 alignments, 60+60 ~400).
                         subopt_res = dimer_thermo_subopt(
                             seq1, seq2,
-                            n=5,
+                            n=3000,
                             sodium_M=mv_m,
                             magnesium_M=effective_mg,
                             material='dna',
@@ -1099,6 +1075,32 @@ def _run_strider_analysis(
                             })
                     except Exception:
                         logging.exception("suboptimal dimer enumeration failed")
+
+                # Enumeration-based dimer partition: sum the Boltzmann weights
+                # of the SAME alignments (same dangles=0 two-state model) that
+                # produce the displayed structures, so the ensemble ΔG, the
+                # per-structure population shares, and the competition solve
+                # all agree with the per-structure ΔGs. pfunc's cofold ensemble
+                # was used here before, but its energy model disagrees with
+                # dimer_thermo by several kcal, which made the shares
+                # meaningless (MFE structure at ~0.1% of "ensemble").
+                _rt_k = R_GAS * (base_temp + 273.15)
+                _dimer_states: dict = {}
+                for _sub in subopt_dimers:
+                    if _sub.get("DeltaG") is not None:
+                        _dimer_states[_sub["DotBracket"]] = float(_sub["DeltaG"])
+                if viz_struct_raw is not None and viz_dg is not None:
+                    _dimer_states.setdefault(_with_div(viz_struct_raw), float(viz_dg))
+                _Z_dim = sum(math.exp(-_dg / _rt_k) for _dg in _dimer_states.values())
+                if _Z_dim > 0:
+                    ensemble_dg = round(-_rt_k * math.log(_Z_dim), 2)
+                    # Association-included by construction: dimer_thermo ΔGs
+                    # keep the bimolecular initiation term.
+                    ensemble_dg_native = ensemble_dg
+                    population_fraction = (
+                        round(min(1.0, math.exp(-(viz_dg - ensemble_dg) / _rt_k)), 4)
+                        if viz_dg is not None else None
+                    )
             else:
                 mfe_result = eng.mfe(seq1)
                 raw_mfe = mfe_result.structure
@@ -1113,23 +1115,29 @@ def _run_strider_analysis(
                 if _valid_paired(raw_mfe):
                     viz_struct_raw = raw_mfe
                     viz_dg = round(float(mfe_result.energy), 2)
+                    # Enumeration-based partition: sum the Boltzmann weights of
+                    # the same dangles=2 structures that are displayed, instead
+                    # of pfunc, whose dangle-free energy model disagrees with
+                    # them by ~1 kcal per structure. That mismatch used to
+                    # inflate Z ~8x, pushing "unfolded" to ~1% and the MFE
+                    # share to ~10% for marginal hairpins. gap=5 enumerates
+                    # every structure with non-negligible weight, including the
+                    # fully-open state, so Z is essentially exact.
                     try:
-                        hairpin_pfunc = eng.pfunc(seq1, pair_probs=False)
-                        ensemble_dg = round(float(hairpin_pfunc.free_energy), 2)
-                        # eng.mfe() defaults to dangles=2 but pfunc() is always dangle-free, so
-                        # the two independently-computed energies can occasionally disagree and
-                        # show the ensemble as *weaker* than its own MFE structure — clamp the
-                        # displayed value to the physical invariant ensemble ΔG <= MFE ΔG.
-                        ensemble_dg = min(ensemble_dg, viz_dg)
-                        # No bimolecular association term for a single strand, so no
-                        # convention shift is needed here (unlike the dimer branch).
-                        ensemble_dg_native = ensemble_dg
-                        _diff = max(0.0, viz_dg - ensemble_dg)
-                        population_fraction = round(math.exp(-_diff / (R_GAS * (base_temp + 273.15))), 4)
+                        subs_enum = eng.subopt(fold_seq, gap=5.0, max_structures=20000)
                     except Exception:
-                        ensemble_dg_native = None
-                        ensemble_dg = None
-                        population_fraction = None
+                        subs_enum = []
+                    _rt_uni = R_GAS * (base_temp + 273.15)
+                    _Z_uni = sum(math.exp(-float(_e) / _rt_uni) for _, _e, _ in subs_enum)
+                    if not any("(" not in _s for _s, _, _ in subs_enum):
+                        _Z_uni += 1.0  # fully-open state missing from the enumeration
+                    _Z_uni = max(_Z_uni, math.exp(-viz_dg / _rt_uni))
+                    ensemble_dg = round(-_rt_uni * math.log(_Z_uni), 2)
+                    # No bimolecular association term for a single strand, so no
+                    # convention shift is needed here (unlike the dimer branch).
+                    ensemble_dg_native = ensemble_dg
+                    population_fraction = round(
+                        math.exp(-(viz_dg - ensemble_dg) / _rt_uni), 4)
                 else:
                     viz_struct_raw = None
                     viz_dg = None
@@ -1175,10 +1183,8 @@ def _run_strider_analysis(
                 item["Ensemble_DeltaG"] = ensemble_dg
                 item["Population_Fraction"] = population_fraction
                 item["Population_Unfolded"] = population_unfolded
-                # Physically-complete (association-term-kept) ensemble ΔG — not
-                # displayed, only fed into the Part C competition solve, which
-                # needs the real bimolecular thermodynamics, not the IDT-matching
-                # display convention.
+                # Association-term-kept ensemble ΔG (kept for API compat; since
+                # the enumeration-based rework it equals Ensemble_DeltaG).
                 item["Ensemble_DeltaG_Native"] = ensemble_dg_native
                 item["SuboptDimers"] = subopt_dimers if is_dimer else []
                 if idt_error is not None:
@@ -1219,9 +1225,10 @@ def _run_strider_analysis(
                 if viz_struct_raw:
                     seen.add(viz_struct_raw)
                 # We render at most 4 suboptimal structures (added >= 4 breaks),
-                # after dedup/positive-energy filters; enumerating 500 wastes
-                # backtrace work — 32 leaves comfortable headroom.
-                subs = eng.subopt(fold_seq, gap=5.0, max_structures=32)
+                # after dedup/positive-energy filters. Reuse the full
+                # enumeration from the partition sum above (subs_enum); it
+                # already contains every structure in the display window.
+                subs = subs_enum
                 added = 0
                 for sub_struct, sub_energy, _ in subs:
                     if added >= 4: break
@@ -1365,11 +1372,13 @@ def _run_strider_analysis(
             return result.get(key)
         return None
 
-    def _competition(seq_a, seq_b, selfdimer_dg, hetero_dg, has_hetero, hairpin_pop_frac, hairpin_unfolded_frac=None):
+    def _competition(seq_a, seq_b, selfdimer_dg, hetero_dg, has_hetero, hairpin_pop_frac,
+                     hairpin_unfolded_frac=None, monomer_a_dg=None, monomer_b_dg=None):
         """Concentration-aware free/hairpin/self-dimer/heterodimer split via
-        strider's mass-action solver. Always uses native SantaLucia params
-        (eng_native) for every complex fed into one solve_equilibrium() call —
-        mixing paramsets across complexes there would be physically incoherent.
+        strider's mass-action solver. Every complex free energy must come from
+        the enumeration-based partition built in add_strider_analysis (same
+        energy model as the displayed structures); pfunc fallbacks are only
+        used if the enumeration value is missing.
         Returns None (rather than raising) if strider is unavailable or the
         Newton solve can't be set up, so this never breaks the rest of the
         response."""
@@ -1377,15 +1386,17 @@ def _run_strider_analysis(
             return None
         try:
             from strider.equilibrium import solve_equilibrium
-            monomer_a = eng_native.pfunc(seq_a, pair_probs=False).free_energy
+            if monomer_a_dg is None:
+                monomer_a_dg = eng_native.pfunc(seq_a, pair_probs=False).free_energy
             complexes = {
-                "A": (["A"], monomer_a),
+                "A": (["A"], monomer_a_dg),
                 "AA": (["A", "A"], selfdimer_dg),
             }
             totals = {"A": oligo_conc_m}
             if has_hetero and hetero_dg is not None:
-                monomer_b = eng_native.pfunc(seq_b, pair_probs=False).free_energy
-                complexes["B"] = (["B"], monomer_b)
+                if monomer_b_dg is None:
+                    monomer_b_dg = eng_native.pfunc(seq_b, pair_probs=False).free_energy
+                complexes["B"] = (["B"], monomer_b_dg)
                 complexes["AB"] = (["A", "B"], hetero_dg)
                 totals["B"] = oligo_conc_m
             else:
@@ -1413,21 +1424,26 @@ def _run_strider_analysis(
             logging.exception("hairpin/dimer competition solve failed")
             return None
 
-    # Ensemble_DeltaG_Native (association-term-kept) — not Ensemble_DeltaG
-    # (the display-only, IDT-stripped value) — is what the mass-action solve
-    # in _competition needs; see the dimer branch of add_strider_analysis.
+    # All ensemble ΔGs fed into the mass-action solve come from the
+    # enumeration-based partitions in add_strider_analysis (association term
+    # kept), so the solve is consistent with the per-structure numbers shown
+    # in the UI.
     _has_hetero = p2_seq is not None and p1_seq != p2_seq
-    _hetero_ens_dg = _first_field(hetero, "Ensemble_DeltaG_Native")
+    _hetero_ens_dg = _first_field(hetero, "Ensemble_DeltaG")
     competition_m1 = _competition(
-        p1_seq, p2_seq, _first_field(m1_selfdimer, "Ensemble_DeltaG_Native"), _hetero_ens_dg, _has_hetero,
+        p1_seq, p2_seq, _first_field(m1_selfdimer, "Ensemble_DeltaG"), _hetero_ens_dg, _has_hetero,
         _first_field(m1_hairpin, "Population_Fraction"),
         _first_field(m1_hairpin, "Population_Unfolded"),
+        monomer_a_dg=_first_field(m1_hairpin, "Ensemble_DeltaG"),
+        monomer_b_dg=_first_field(m2_hairpin, "Ensemble_DeltaG") if p2_seq is not None else None,
     )
     if p2_seq is not None:
         competition_m2 = _competition(
-            p2_seq, p1_seq, _first_field(m2_selfdimer, "Ensemble_DeltaG_Native"), _hetero_ens_dg, _has_hetero,
+            p2_seq, p1_seq, _first_field(m2_selfdimer, "Ensemble_DeltaG"), _hetero_ens_dg, _has_hetero,
             _first_field(m2_hairpin, "Population_Fraction"),
             _first_field(m2_hairpin, "Population_Unfolded"),
+            monomer_a_dg=_first_field(m2_hairpin, "Ensemble_DeltaG"),
+            monomer_b_dg=_first_field(m1_hairpin, "Ensemble_DeltaG"),
         )
     else:
         competition_m2 = None
