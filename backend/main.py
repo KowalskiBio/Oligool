@@ -1238,7 +1238,15 @@ def _run_strider_analysis(
                         "Local_Tm": sub_tm,
                         "Local_Tm_ShortStem": sub_tm_short,
                         "DeltaG": None,
-                        "IDT_Tm": None
+                        "IDT_Tm": None,
+                        # Ensemble share of this structure within the full
+                        # unimolecular partition (same reference as the MFE's
+                        # Population_Fraction), so every displayed structure
+                        # carries a comparable "% of Ensemble".
+                        "Population_Fraction": (
+                            min(1.0, round(math.exp(-(sub_dg - ensemble_dg) / (R_GAS * (base_temp + 273.15))), 4))
+                            if ensemble_dg is not None else None
+                        ),
                     })
                     added += 1
             else:
@@ -1253,6 +1261,14 @@ def _run_strider_analysis(
                     sub["Local_Tm"] = sub.get("Tm")
                     sub["DeltaG"] = None
                     sub["IDT_Tm"] = None
+                    # Ensemble share within the full dimer partition, same
+                    # reference as the MFE item's Population_Fraction, so every
+                    # displayed structure carries a comparable "% of Ensemble"
+                    # even when the subopt enumerator ranks a structure above
+                    # dimer_thermo's own MFE pick (independent searches).
+                    if ensemble_dg is not None and sub["Local_DeltaG"] is not None:
+                        _share = math.exp(-(sub["Local_DeltaG"] - ensemble_dg) / (R_GAS * (base_temp + 273.15)))
+                        sub["Population_Fraction"] = min(1.0, round(_share, 4))
                     final_results.append(sub)
                     seen.add(sub["DotBracket"])
                     added += 1
