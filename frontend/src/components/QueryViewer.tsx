@@ -75,6 +75,8 @@ interface QueryViewerProps {
 interface CompetitionResult {
     P_Free?: number | null;
     P_Hairpin?: number | null;
+    /** Fraction of all strands that are monomeric AND fully unfolded (1/Z). */
+    P_Unfolded?: number | null;
     P_SelfDimer?: number | null;
     P_HeteroDimer?: number | null;
     Converged?: boolean;
@@ -1896,21 +1898,35 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
     };
 
     // Static segmented bar showing the equilibrium population split for one
-    // oligo: free monomer / hairpin / self-dimer / heterodimer, at the
-    // configured oligo concentration. Answers "which fate is this oligo
-    // actually most likely to end up in" on one shared scale, rather than
-    // eyeballing separate hairpin/dimer ΔG numbers.
+    // oligo: unfolded monomer / this MFE hairpin / other folds / self-dimer /
+    // heterodimer, at the configured oligo concentration. Answers "which fate
+    // is this oligo actually most likely to end up in" on one shared scale,
+    // rather than eyeballing separate hairpin/dimer ΔG numbers.
     const renderCompetitionStrip = (competition: CompetitionResult | null | undefined) => {
         if (!competition) return null;
-        // P_Hairpin is a *subset* of P_Free (the fraction of the non-dimerized
-        // population that happens to be in the MFE hairpin fold), not a disjoint
-        // category; subtract it out here so the bar's segments are mutually
-        // exclusive and actually sum to ~100% instead of double-counting it.
+        // P_Hairpin and P_Unfolded are *subsets* of P_Free (the monomeric
+        // population split by the unimolecular ensemble), not disjoint
+        // categories; carve them out here so the bar's segments are mutually
+        // exclusive and actually sum to ~100%.
         const pHairpin = competition.P_Hairpin ?? 0;
-        const pFreeOpen = Math.max(0, (competition.P_Free ?? 0) - pHairpin);
+        const pUnfolded = competition.P_Unfolded;
+        const pFreeTotal = competition.P_Free ?? 0;
+        // With the ensemble split available: Unfolded + Hairpin + Other folds.
+        // Without (pre-P_Unfolded payloads): fall back to the old single
+        // "Free" segment for the whole non-MFE monomer pool.
+        const pOtherFolds = pUnfolded != null
+            ? Math.max(0, pFreeTotal - pHairpin - pUnfolded)
+            : null;
         const segments: { label: string; value: number; className: string }[] = [
-            { label: 'Free', value: pFreeOpen, className: 'bg-zinc-300 dark:bg-zinc-600' },
+            {
+                label: pUnfolded != null ? 'Unfolded' : 'Free',
+                value: pUnfolded != null ? pUnfolded : Math.max(0, pFreeTotal - pHairpin),
+                className: 'bg-zinc-300 dark:bg-zinc-600',
+            },
             { label: 'Hairpin', value: pHairpin, className: 'bg-amber-500' },
+            ...(pOtherFolds != null
+                ? [{ label: 'Other folds', value: pOtherFolds, className: 'bg-amber-200 dark:bg-amber-800' }]
+                : []),
             { label: 'Self-Dimer', value: competition.P_SelfDimer ?? 0, className: 'bg-red-500' },
             { label: 'Cross-Dimer', value: competition.P_HeteroDimer ?? 0, className: 'bg-purple-500' },
         ];
@@ -1918,15 +1934,17 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
         if (shown.length === 0) return null;
         // Distinguish "computed but negligible" (a real number that just rounds
         // to ~0%, e.g. two oligos barely form a heterodimer at this concentration)
-        // from "not applicable" (P_HeteroDimer is null/undefined: single-oligo
+        // from "not applicable" (the field is null/undefined: single-oligo
         // mode, or no pairing was found at all), otherwise a genuinely-tiny-but
         // -real value looks identical to n/a and this exact question comes up.
         const wasComputed: Record<string, boolean> = {
             Hairpin: competition.P_Hairpin !== null && competition.P_Hairpin !== undefined,
             'Self-Dimer': competition.P_SelfDimer !== null && competition.P_SelfDimer !== undefined,
             'Cross-Dimer': competition.P_HeteroDimer !== null && competition.P_HeteroDimer !== undefined,
+            Unfolded: pUnfolded != null,
+            'Other folds': pOtherFolds != null,
         };
-        const negligible = segments.filter(s => s.label !== 'Free' && s.value <= 0.001 && wasComputed[s.label]);
+        const negligible = segments.filter(s => s.value <= 0.001 && wasComputed[s.label]);
 
         return (
             <div className="mb-2">

@@ -985,6 +985,12 @@ def _run_strider_analysis(
             # the dimer path: bimolecular Tms have no MIN_STEM_BP guard).
             mfe_tm_short = False
 
+            # Fraction of the monomeric (hairpin) ensemble that is fully
+            # unfolded, i.e. 1/Z from pfunc. Only computed on the hairpin path;
+            # the competition strip splits the monomer pool into
+            # unfolded / this MFE hairpin / other folds.
+            population_unfolded = None
+
             if seq2:
                 # Use strider's dedicated bimolecular dimer MFE (not the pseudo-
                 # hairpin cofold), which finds real inter-strand helices including
@@ -1144,6 +1150,9 @@ def _run_strider_analysis(
                     return res["tm"], res["short_stem"]
 
                 mfe_tm, mfe_tm_short = _struct_tm(viz_struct_raw, viz_dg)
+                if ensemble_dg is not None:
+                    population_unfolded = round(
+                        math.exp(ensemble_dg / (R_GAS * (base_temp + 273.15))), 4)
 
             viz_struct = _with_div(viz_struct_raw) if viz_struct_raw else None
 
@@ -1165,6 +1174,7 @@ def _run_strider_analysis(
                 item["Local_Tm_ShortStem"] = mfe_tm_short
                 item["Ensemble_DeltaG"] = ensemble_dg
                 item["Population_Fraction"] = population_fraction
+                item["Population_Unfolded"] = population_unfolded
                 # Physically-complete (association-term-kept) ensemble ΔG — not
                 # displayed, only fed into the Part C competition solve, which
                 # needs the real bimolecular thermodynamics, not the IDT-matching
@@ -1339,7 +1349,7 @@ def _run_strider_analysis(
             return result.get(key)
         return None
 
-    def _competition(seq_a, seq_b, selfdimer_dg, hetero_dg, has_hetero, hairpin_pop_frac):
+    def _competition(seq_a, seq_b, selfdimer_dg, hetero_dg, has_hetero, hairpin_pop_frac, hairpin_unfolded_frac=None):
         """Concentration-aware free/hairpin/self-dimer/heterodimer split via
         strider's mass-action solver. Always uses native SantaLucia params
         (eng_native) for every complex fed into one solve_equilibrium() call —
@@ -1369,12 +1379,16 @@ def _run_strider_analysis(
             p_selfdimer = 2 * result.concentrations.get("AA", 0.0) / total_a
             p_hetero = result.concentrations.get("AB", 0.0) / total_a if has_hetero else 0.0
             p_free = result.strand_free.get("A", 0.0) / total_a
-            # Compose with Part B's population fraction: "of the monomer not
-            # sequestered in a dimer, X% is in the reported MFE hairpin fold."
+            # Compose with Part B's population fractions: "of the monomer not
+            # sequestered in a dimer, X% is in the reported MFE hairpin fold",
+            # and Y% is fully unfolded (1/Z); the rest of the monomer pool sits
+            # in other suboptimal folds.
             p_hairpin = p_free * hairpin_pop_frac if hairpin_pop_frac is not None else None
+            p_unfolded = p_free * hairpin_unfolded_frac if hairpin_unfolded_frac is not None else None
             return {
                 "P_Free": round(p_free, 4),
                 "P_Hairpin": round(p_hairpin, 4) if p_hairpin is not None else None,
+                "P_Unfolded": round(p_unfolded, 4) if p_unfolded is not None else None,
                 "P_SelfDimer": round(p_selfdimer, 4),
                 "P_HeteroDimer": round(p_hetero, 4) if has_hetero else None,
                 "Converged": bool(result.converged),
@@ -1391,11 +1405,13 @@ def _run_strider_analysis(
     competition_m1 = _competition(
         p1_seq, p2_seq, _first_field(m1_selfdimer, "Ensemble_DeltaG_Native"), _hetero_ens_dg, _has_hetero,
         _first_field(m1_hairpin, "Population_Fraction"),
+        _first_field(m1_hairpin, "Population_Unfolded"),
     )
     if p2_seq is not None:
         competition_m2 = _competition(
             p2_seq, p1_seq, _first_field(m2_selfdimer, "Ensemble_DeltaG_Native"), _hetero_ens_dg, _has_hetero,
             _first_field(m2_hairpin, "Population_Fraction"),
+            _first_field(m2_hairpin, "Population_Unfolded"),
         )
     else:
         competition_m2 = None

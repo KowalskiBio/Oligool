@@ -27,6 +27,8 @@ interface IdtStructureResult {
 export interface CompetitionResult {
     P_Free?: number | null;
     P_Hairpin?: number | null;
+    /** Fraction of all strands that are monomeric AND fully unfolded (1/Z). */
+    P_Unfolded?: number | null;
     P_SelfDimer?: number | null;
     P_HeteroDimer?: number | null;
     Converged?: boolean;

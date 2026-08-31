@@ -735,11 +735,26 @@ export default function FlankingPrimersPanel({
 
     const renderCompetitionStrip = (competition: any, label: string) => {
         if (!competition) return null;
+        // P_Hairpin and P_Unfolded are subsets of P_Free (the monomeric
+        // population split by the unimolecular ensemble); carve them out so the
+        // segments are mutually exclusive and sum to ~100%. Without P_Unfolded
+        // (pre-split payloads) fall back to a single "Free" segment.
         const pHairpin = competition.P_Hairpin ?? 0;
-        const pFreeOpen = Math.max(0, (competition.P_Free ?? 0) - pHairpin);
+        const pUnfolded = competition.P_Unfolded ?? null;
+        const pFreeTotal = competition.P_Free ?? 0;
+        const pOtherFolds = pUnfolded != null
+            ? Math.max(0, pFreeTotal - pHairpin - pUnfolded)
+            : null;
         const segments: { label: string; value: number; className: string }[] = [
-            { label: 'Free', value: pFreeOpen, className: 'bg-zinc-300 dark:bg-zinc-600' },
+            {
+                label: pUnfolded != null ? 'Unfolded' : 'Free',
+                value: pUnfolded != null ? pUnfolded : Math.max(0, pFreeTotal - pHairpin),
+                className: 'bg-zinc-300 dark:bg-zinc-600',
+            },
             { label: 'Hairpin', value: pHairpin, className: 'bg-amber-500' },
+            ...(pOtherFolds != null
+                ? [{ label: 'Other folds', value: pOtherFolds, className: 'bg-amber-200 dark:bg-amber-800' }]
+                : []),
             { label: 'Self-Dimer', value: competition.P_SelfDimer ?? 0, className: 'bg-red-500' },
             { label: 'Cross-Dimer', value: competition.P_HeteroDimer ?? 0, className: 'bg-purple-500' },
         ];
@@ -749,8 +764,10 @@ export default function FlankingPrimersPanel({
             Hairpin: competition.P_Hairpin !== null && competition.P_Hairpin !== undefined,
             'Self-Dimer': competition.P_SelfDimer !== null && competition.P_SelfDimer !== undefined,
             'Cross-Dimer': competition.P_HeteroDimer !== null && competition.P_HeteroDimer !== undefined,
+            Unfolded: pUnfolded != null,
+            'Other folds': pOtherFolds != null,
         };
-        const negligible = segments.filter(s => s.label !== 'Free' && s.value <= 0.001 && wasComputed[s.label]);
+        const negligible = segments.filter(s => s.value <= 0.001 && wasComputed[s.label]);
 
         return (
             <div className="mb-2">
@@ -816,6 +833,7 @@ export default function FlankingPrimersPanel({
             const itemLocalTmShort = item.Local_Tm_ShortStem === true;
             const hasStructure = !!(item.DotBracket || item.Local_DotBracket || item.Bonds);
             const itemIsDimer = String(item.Sequence ?? item.DotBracket ?? item.Local_DotBracket ?? '').includes('&');
+            const itemPopFrac = item.Population_Fraction ?? null;
             const dgRow = (
                 <>
                     <span>IDT ΔG: <span className={`font-mono tabular-nums ${getIdtStatusColor(itemDg ?? undefined)}`}>{itemDg != null ? `${itemDg > 0 ? '+' : ''}${itemDg.toFixed(2)}` : '–'}</span></span>
@@ -827,6 +845,11 @@ export default function FlankingPrimersPanel({
                     <span>IDT Tm: <span className="font-mono tabular-nums text-zinc-500">{itemIdtTm != null ? `${Number(itemIdtTm).toFixed(1)}°C` : '–'}</span></span>
                     <span>Strider Tm: <span className="font-mono tabular-nums text-zinc-500">{itemLocalTm != null ? `${itemLocalTm.toFixed(1)}°C` : '–'}</span>{itemLocalTm != null && itemLocalTmShort && <span title="Hairpin stem under 3 bp: two-state Tm is unreliable (marginal structure)" className="ml-1 text-amber-600 dark:text-amber-400 font-bold">*</span>}</span>
                 </>
+            );
+            const popFracRow = itemPopFrac != null && (
+                <div className="flex justify-end opacity-80">
+                    <span title="Share of the full structural ensemble this MFE structure represents"><span className="font-mono tabular-nums text-blue-500 dark:text-blue-400">{(itemPopFrac * 100).toFixed(itemPopFrac < 0.01 ? 2 : 0)}%</span> of Ensemble</span>
+                </div>
             );
             return (
                 <div className="flex flex-col gap-2">
@@ -845,6 +868,7 @@ export default function FlankingPrimersPanel({
                                 </div>
                             )}
                             <div className={`flex gap-x-3 justify-end opacity-80 ${gridMode ? 'flex-wrap' : ''}`}>{tmRow}</div>
+                            {popFracRow}
                         </div>
                     )}
                     {/* Structure below provenance. */}
@@ -1391,7 +1415,7 @@ export default function FlankingPrimersPanel({
             const mergedHairpinRaw = idtItems.map((item: any, i: number) => {
                 const sItem = striderItems[i];
                 if (!sItem) return item;
-                return { ...item, Local_DeltaG: sItem.Local_DeltaG, Local_Tm: sItem.Local_Tm, Local_DotBracket: sItem.Local_DotBracket ?? sItem.DotBracket };
+                return { ...item, Local_DeltaG: sItem.Local_DeltaG, Local_Tm: sItem.Local_Tm, Local_DotBracket: sItem.Local_DotBracket ?? sItem.DotBracket, Population_Fraction: sItem.Population_Fraction ?? item.Population_Fraction };
             });
             const mergedSelfDimerRaw = (() => {
                 const idtDimerItems = (Array.isArray(idtResult.self_dimer?.raw) ? idtResult.self_dimer.raw : [idtResult.self_dimer?.raw]).filter(Boolean);
@@ -1399,7 +1423,7 @@ export default function FlankingPrimersPanel({
                 return idtDimerItems.map((item: any, i: number) => {
                     const sItem = striderDimerItems[i];
                     if (!sItem) return item;
-                    return { ...item, Local_DeltaG: sItem.Local_DeltaG, Local_Tm: sItem.Local_Tm, Local_DotBracket: sItem.Local_DotBracket ?? sItem.DotBracket };
+                    return { ...item, Local_DeltaG: sItem.Local_DeltaG, Local_Tm: sItem.Local_Tm, Local_DotBracket: sItem.Local_DotBracket ?? sItem.DotBracket, Population_Fraction: sItem.Population_Fraction ?? item.Population_Fraction };
                 });
             })();
             return {
