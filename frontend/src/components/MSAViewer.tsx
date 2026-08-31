@@ -127,7 +127,7 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
 
     const [labelWidth, setLabelWidth] = useState(140);
     const [isResizingLabel, setIsResizingLabel] = useState(false);
-    const [oligoSelection, setOligoSelection] = useState<{ startCol: number; endCol: number } | null>(null);
+    const [oligoSelection, setOligoSelection] = useState<{ startCol: number; endCol: number; mode?: 'select' | 'zoom' } | null>(null);
 
     const [viewFraction, setViewFraction] = useState(1);
     const [viewMode, setViewMode] = useState<'bars' | 'letters'>('bars');
@@ -1328,13 +1328,16 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
             const selX2 = Math.min(labelWidth + seqAreaW, labelWidth + (e + 1) * cellW - scrollLeft);
             if (selX2 > selX1) {
                 const trackH = MAIN_GC_TRACK_H + MAIN_MSA_TRACK_H;
-                ctx.fillStyle = 'rgba(251, 191, 36, 0.25)';
+                const isZoomDrag = oligoSelection.mode === 'zoom';
+                const fillColor = isZoomDrag ? 'rgba(74, 222, 128, 0.25)' : 'rgba(251, 191, 36, 0.25)';
+                const strokeColor = isZoomDrag ? '#22c55e' : '#f59e0b';
+                ctx.fillStyle = fillColor;
                 ctx.fillRect(selX1, stickyY, selX2 - selX1, trackH);
-                ctx.strokeStyle = '#f59e0b';
+                ctx.strokeStyle = strokeColor;
                 ctx.lineWidth = 1.5;
                 ctx.strokeRect(selX1 + 0.5, stickyY + 0.5, selX2 - selX1 - 1, trackH - 1);
                 // label bp range
-                ctx.fillStyle = '#f59e0b';
+                ctx.fillStyle = strokeColor;
                 ctx.font = 'bold 9px ui-monospace, SFMono-Regular, monospace';
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'top';
@@ -1769,14 +1772,15 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
         const startClientX = e.clientX;
         const mouseX = mouseXCanvas - labelWidth;
         const startC = Math.max(0, Math.min(anchorLen - 1, Math.floor((scrollLeft + mouseX) / cellW)));
-        setOligoSelection({ startCol: startC, endCol: startC });
+        const dragMode: 'select' | 'zoom' = e.button === 2 ? 'zoom' : 'select';
+        setOligoSelection({ startCol: startC, endCol: startC, mode: dragMode });
 
         const colAt = (clientX: number) =>
             Math.max(0, Math.min(anchorLen - 1, Math.floor((scrollLeft + clientX - rect.left - labelWidth) / cellW)));
 
         // ── RIGHT BUTTON: zoom to dragged column range ───────────────────
         if (e.button === 2) {
-            const onMove = (ev: MouseEvent) => setOligoSelection({ startCol: startC, endCol: colAt(ev.clientX) });
+            const onMove = (ev: MouseEvent) => setOligoSelection({ startCol: startC, endCol: colAt(ev.clientX), mode: 'zoom' });
             const onUp = (ev: MouseEvent) => {
                 document.removeEventListener('mousemove', onMove);
                 document.removeEventListener('mouseup', onUp);
@@ -1801,7 +1805,7 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
         }
 
         // ── LEFT BUTTON: primer click or oligo region selection ──────────
-        const onMove = (ev: MouseEvent) => setOligoSelection({ startCol: startC, endCol: colAt(ev.clientX) });
+        const onMove = (ev: MouseEvent) => setOligoSelection({ startCol: startC, endCol: colAt(ev.clientX), mode: 'select' });
         const onUp = (ev: MouseEvent) => {
             document.removeEventListener('mousemove', onMove);
             document.removeEventListener('mouseup', onUp);
