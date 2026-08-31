@@ -985,10 +985,11 @@ def _run_strider_analysis(
             # the dimer path: bimolecular Tms have no MIN_STEM_BP guard).
             mfe_tm_short = False
 
-            # Fraction of the monomeric (hairpin) ensemble that is fully
-            # unfolded, i.e. 1/Z from pfunc. Only computed on the hairpin path;
-            # the competition strip splits the monomer pool into
-            # unfolded / this MFE hairpin / other folds.
+            # Fraction of the monomeric (hairpin) ensemble that is unfolded or
+            # merely transient (open state plus all ΔG >= 0 microstates).
+            # Only computed on the hairpin path; the competition strip splits
+            # the monomer pool into unfolded / this MFE hairpin / other folds
+            # (favorable, ΔG < 0, non-MFE structures).
             population_unfolded = None
             # Shared ensemble accumulators: None until a partition is built.
             ensemble_dg = None
@@ -1128,16 +1129,31 @@ def _run_strider_analysis(
                     except Exception:
                         subs_enum = []
                     _rt_uni = R_GAS * (base_temp + 273.15)
-                    _Z_uni = sum(math.exp(-float(_e) / _rt_uni) for _, _e, _ in subs_enum)
+                    _Z_uni = 0.0
+                    _neg_w = 0.0
+                    for _s, _e, _ in subs_enum:
+                        _w = math.exp(-float(_e) / _rt_uni)
+                        _Z_uni += _w
+                        if float(_e) < 0.0:
+                            _neg_w += _w
                     if not any("(" not in _s for _s, _, _ in subs_enum):
                         _Z_uni += 1.0  # fully-open state missing from the enumeration
-                    _Z_uni = max(_Z_uni, math.exp(-viz_dg / _rt_uni))
+                    _mfe_w = math.exp(-viz_dg / _rt_uni)
+                    _Z_uni = max(_Z_uni, _mfe_w)
+                    _neg_w = max(_neg_w, _mfe_w)
                     ensemble_dg = round(-_rt_uni * math.log(_Z_uni), 2)
                     # No bimolecular association term for a single strand, so no
                     # convention shift is needed here (unlike the dimer branch).
                     ensemble_dg_native = ensemble_dg
-                    population_fraction = round(
-                        math.exp(-(viz_dg - ensemble_dg) / _rt_uni), 4)
+                    population_fraction = round(_mfe_w / _Z_uni, 4)
+                    # Unfolded share of the monomer ensemble: the fully-open
+                    # state plus every thermodynamically unfavourable (ΔG >= 0)
+                    # transient microstate. A structure with positive ΔG is a
+                    # random-coil fluctuation, not a stable fold; counting these
+                    # as "other folds" made weak-hairpin primers look ~80%
+                    # structured when their only favorable fold is barely below
+                    # 0 kcal/mol.
+                    population_unfolded = round(max(0.0, (_Z_uni - _neg_w) / _Z_uni), 4)
                 else:
                     viz_struct_raw = None
                     viz_dg = None
@@ -1158,9 +1174,6 @@ def _run_strider_analysis(
                     return res["tm"], res["short_stem"]
 
                 mfe_tm, mfe_tm_short = _struct_tm(viz_struct_raw, viz_dg)
-                if ensemble_dg is not None:
-                    population_unfolded = round(
-                        math.exp(ensemble_dg / (R_GAS * (base_temp + 273.15))), 4)
 
             viz_struct = _with_div(viz_struct_raw) if viz_struct_raw else None
 
