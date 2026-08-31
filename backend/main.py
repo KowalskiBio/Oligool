@@ -373,6 +373,103 @@ def strider_duplex_tm(seq, *, mv_conc, dv_conc, dntp_conc, dna_conc):
     return round(tm, 1)
 
 
+# Below this stem length (bp) a two-state hairpin Tm is unreliable: the helix is
+# marginally stable and dS is dominated by loop initiation, so dH/dS swings by
+# tens of degrees on small perturbations.  Mirrors strider's MIN_STEM_BP (#14).
+# Oligool's policy is to still REPORT such Tms but flag them, rather than hide
+# them (strider #14+ refuses to compute them, so we recompute locally).
+SHORT_STEM_WARN_BP = 3
+
+
+def _short_stem_two_state_tm(seq, structure, mv_m, mg_m, paramset_obj):
+    """Two-state Tm for a single-hairpin structure whose stem is below strider's
+    MIN_STEM_BP, which strider #14+ refuses to score.
+
+    Replicates hairpin_thermo's arithmetic for exactly this case: the "auto"
+    salt policy uses the per-base-pair correction below Tan-Chen's 6 bp fitted
+    range (every stem below 3 bp is in that regime), then
+    dS = (dH - dG37)/T_ref and Tm = dH/dS.  Verified to reproduce pre-#14
+    hairpin_thermo values exactly (TATGCCACATGCCCGGAATTA, both paramsets).
+    Returns None for multiloops (not ours to recompute) or degenerate dS
+    (genuinely undefined, not merely short).
+    """
+    from strider.thermo.structure_thermo import (
+        parse_hairpin_pairs, structure_enthalpy, structure_free_energy,
+    )
+    from strider.thermo.salt import dg_per_bp_salt
+    from strider.thermo.hairpin import T_REF
+    pairs = parse_hairpin_pairs(structure)
+    if not pairs:
+        return None
+    n = len(pairs)
+    kw = {"paramset": paramset_obj} if paramset_obj is not None else {}
+    dG37 = structure_free_energy(seq, structure, "dna", dangles=2, **kw) \
+        + n * dg_per_bp_salt(mv_m, mg_m, material="dna")
+    dH = structure_enthalpy(seq, structure, "dna", dangles=2, **kw)
+    dS = (dH - dG37) / T_REF
+    if abs(dS) < 1e-6:
+        return None
+    return dH / dS - 273.15
+
+
+def strider_hairpin_analysis(seq, *, mv_conc, dv_conc, dntp_conc,
+                              structure=None, parameter_set="native"):
+    """Hairpin Tm + short-stem flag from strider's unimolecular two-state model.
+
+    Folds the sequence at 25 °C (unless ``structure`` is given, mirroring the
+    MOLigo path that scores its own fold), then computes the Tm via
+    hairpin_thermo (Mg2+-aware, concentration-independent).  Returns
+    ``{"tm": float | None, "short_stem": bool}``; tm is None when strider is
+    unavailable or no stable hairpin exists (same ``t > 1.0`` display policy
+    as before).
+
+    Version-tolerant across the strider #14 hairpin guards: pre-#14 strider
+    returns short-stem (< SHORT_STEM_WARN_BP bp) Tms directly, which we flag
+    via HairpinThermo.n_pairs; #14+ raises ``ValueError`` for them, in which
+    case the Tm is recomputed locally (_short_stem_two_state_tm) and flagged,
+    so the UI can warn instead of silently dropping the value.
+    """
+    if _strider_melting_temperature is None or not seq:
+        return {"tm": None, "short_stem": False}
+    try:
+        from strider.thermo.hairpin import hairpin_thermo
+        mv_m = float(mv_conc) / 1000.0
+        mg_m = max(0.0, float(dv_conc) - float(dntp_conc)) / 1000.0
+        paramset_obj = None
+        if parameter_set != "native":
+            from strider.thermo.parameters import load_parameters
+            paramset_obj = load_parameters(parameter_set)
+        if structure is None:
+            eng = _thermo_engine_cached('dna', 25.0, mv_m, mg_m, parameter_set)
+            mfe = eng.mfe(seq)
+            if '(' not in mfe.structure:
+                return {"tm": None, "short_stem": False}
+            structure = mfe.structure
+        kw = {"paramset": paramset_obj} if paramset_obj is not None else {}
+        try:
+            res = hairpin_thermo(seq, sodium_M=mv_m, magnesium_M=mg_m,
+                                 structure=structure, dangles=2, **kw)
+            t = res.tm_celsius
+            n_pairs = getattr(res, "n_pairs", None)
+            short = n_pairs is not None and n_pairs < SHORT_STEM_WARN_BP
+        except ValueError as e:
+            msg = str(e)
+            if "stem is" in msg and "bp" in msg:
+                # strider #14+: stem below MIN_STEM_BP.  Oligool reports it
+                # with a warning instead of hiding it.
+                t = _short_stem_two_state_tm(seq, structure, mv_m, mg_m, paramset_obj)
+                if t is None:
+                    return {"tm": None, "short_stem": False}
+                short = True
+            else:
+                raise
+        return {"tm": round(t, 1) if t and t > 1.0 else None,
+                "short_stem": bool(short)}
+    except Exception:
+        logging.exception("strider hairpin_tm failed for %s", seq)
+        return {"tm": None, "short_stem": False}
+
+
 def strider_hairpin_tm(seq, *, mv_conc, dv_conc, dntp_conc):
     """Hairpin Tm (°C) from strider's unimolecular two-state model.
 
@@ -380,23 +477,8 @@ def strider_hairpin_tm(seq, *, mv_conc, dv_conc, dntp_conc):
     via hairpin_thermo (Mg2+-aware, concentration-independent). Returns None
     when strider is unavailable or no stable hairpin structure exists.
     """
-    if _strider_melting_temperature is None or not seq:
-        return None
-    try:
-        from strider.thermo.hairpin import hairpin_thermo
-        mv_m = float(mv_conc) / 1000.0
-        mg_m = max(0.0, float(dv_conc) - float(dntp_conc)) / 1000.0
-        eng = _thermo_engine_cached('dna', 25.0, mv_m, mg_m)
-        mfe = eng.mfe(seq)
-        if '(' not in mfe.structure:
-            return None
-        res = hairpin_thermo(seq, sodium_M=mv_m, magnesium_M=mg_m,
-                             structure=mfe.structure, dangles=2)
-        t = res.tm_celsius
-        return round(t, 1) if t and t > 1.0 else None
-    except Exception:
-        logging.exception("strider hairpin_tm failed for %s", seq)
-        return None
+    return strider_hairpin_analysis(seq, mv_conc=mv_conc, dv_conc=dv_conc,
+                                    dntp_conc=dntp_conc)["tm"]
 
 
 class MoligizeRequest(BaseModel):
@@ -900,6 +982,10 @@ def _run_strider_analysis(
             def _valid_paired(s):
                 return '(' in s and s.count('(') == s.count(')')
 
+            # Short-stem warning flag for the hairpin two-state Tm (never set on
+            # the dimer path: bimolecular Tms have no MIN_STEM_BP guard).
+            mfe_tm_short = False
+
             if seq2:
                 # Use strider's dedicated bimolecular dimer MFE (not the pseudo-
                 # hairpin cofold), which finds real inter-strand helices including
@@ -1041,17 +1127,18 @@ def _run_strider_analysis(
                     population_fraction = None
 
                 # Tm: unimolecular two-state for hairpins via hairpin_thermo.
+                # Short-stem (< 3 bp) structures are reported WITH a warning
+                # flag (Local_Tm_ShortStem) instead of being dropped: pre-#14
+                # strider scores them directly, #14+ refuses and we recompute
+                # (strider_hairpin_analysis handles both strider versions).
                 def _struct_tm(structure, energy):
-                    try:
-                        res = hairpin_thermo(fold_seq, sodium_M=mv_m,
-                                             magnesium_M=effective_mg, structure=structure,
-                                             paramset=_paramset_obj, dangles=2)
-                        t = res.tm_celsius
-                    except Exception:
-                        t = None
-                    return round(t, 1) if t and t > 1.0 else None
+                    res = strider_hairpin_analysis(
+                        fold_seq, mv_conc=mv_conc, dv_conc=mg_conc,
+                        dntp_conc=dntp_conc, structure=structure,
+                        parameter_set=parameter_set)
+                    return res["tm"], res["short_stem"]
 
-                mfe_tm = _struct_tm(viz_struct_raw, viz_dg)
+                mfe_tm, mfe_tm_short = _struct_tm(viz_struct_raw, viz_dg)
 
             viz_struct = _with_div(viz_struct_raw) if viz_struct_raw else None
 
@@ -1070,6 +1157,7 @@ def _run_strider_analysis(
                 item["Sequence"] = display_seq
                 item["Local_DeltaG"] = viz_dg
                 item["Local_Tm"] = mfe_tm
+                item["Local_Tm_ShortStem"] = mfe_tm_short
                 item["Ensemble_DeltaG"] = ensemble_dg
                 item["Population_Fraction"] = population_fraction
                 # Physically-complete (association-term-kept) ensemble ΔG — not
@@ -1127,11 +1215,13 @@ def _run_strider_analysis(
                     if float(sub_energy) >= 0: continue
                     seen.add(sub_struct)
                     sub_dg = round(float(sub_energy), 2)
+                    sub_tm, sub_tm_short = _struct_tm(sub_struct, sub_dg)
                     final_results.append({
                         "DotBracket": _with_div(sub_struct),
                         "Sequence": display_seq,
                         "Local_DeltaG": sub_dg,
-                        "Local_Tm": _struct_tm(sub_struct, sub_dg),
+                        "Local_Tm": sub_tm,
+                        "Local_Tm_ShortStem": sub_tm_short,
                         "DeltaG": None,
                         "IDT_Tm": None
                     })
@@ -1206,6 +1296,7 @@ def _run_strider_analysis(
             top_local_dgs = [item.get("Local_DeltaG") for item in scored_items[:5]]
             top_idt_tms = [item.get("IDT_Tm") for item in scored_items[:5]]
             top_local_tms = [item.get("Local_Tm") for item in scored_items[:5]]
+            top_local_tms_short = [bool(item.get("Local_Tm_ShortStem")) for item in scored_items[:5]]
             top_ensemble_dgs = [item.get("Ensemble_DeltaG") for item in scored_items[:5]]
             top_pop_fracs = [item.get("Population_Fraction") for item in scored_items[:5]]
 
@@ -1217,6 +1308,7 @@ def _run_strider_analysis(
                 "all_Population_Fraction": top_pop_fracs,
                 "all_IDT_Tm": top_idt_tms,
                 "all_Local_Tm": top_local_tms,
+                "all_Local_Tm_ShortStem": top_local_tms_short,
                 "raw": top_items
             }
 
@@ -1705,13 +1797,14 @@ def design_flanking_primers(req: FlankingPrimerParams):
         except TypeError: hp = primer3.bindings.calc_hairpin(s)
         try: hd = primer3.bindings.calc_homodimer(s, temp_c=25.0, **kwargs)
         except TypeError: hd = primer3.bindings.calc_homodimer(s)
+        _hp_strider = strider_hairpin_analysis(s, mv_conc=kwargs["mv_conc"], dv_conc=kwargs["dv_conc"], dntp_conc=kwargs["dntp_conc"])
         return {
             "sequence":   s,
             "length":     len(s),
             "gc_percent": _round(_gc(s), 1),
             "tm":         _round(tm, 1),
             "tm_strider": strider_duplex_tm(s, **kwargs),
-            "hairpin":  {"structure_found": bool(getattr(hp, "structure_found", False)), "tm": _round(getattr(hp, "tm", None), 1), "dg": _round((getattr(hp, "dg", None) or 0) / 1000, 2), "tm_strider": strider_hairpin_tm(s, mv_conc=kwargs["mv_conc"], dv_conc=kwargs["dv_conc"], dntp_conc=kwargs["dntp_conc"])},
+            "hairpin":  {"structure_found": bool(getattr(hp, "structure_found", False)), "tm": _round(getattr(hp, "tm", None), 1), "dg": _round((getattr(hp, "dg", None) or 0) / 1000, 2), "tm_strider": _hp_strider["tm"], "tm_strider_short_stem": _hp_strider["short_stem"]},
             "homodimer":{"structure_found": bool(getattr(hd, "structure_found", False)), "tm": _round(getattr(hd, "tm", None), 1), "dg": _round((getattr(hd, "dg", None) or 0) / 1000, 2)},
         }
 

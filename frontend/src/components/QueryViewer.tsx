@@ -1743,7 +1743,7 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                                 <span>IDT Tm: <span className={`font-mono tabular-nums ${getTmColor(itemIdtTmVal)}`}>{Number(itemIdtTmVal).toFixed(1)}°C</span></span>
                             )}
                             {itemLocalTmVal !== undefined && itemLocalTmVal !== null && (
-                                <span>Local Tm: <span className={`font-mono tabular-nums ${getTmColor(itemLocalTmVal)}`}>{Number(itemLocalTmVal).toFixed(1)}°C</span></span>
+                                <span>Local Tm: <span className={`font-mono tabular-nums ${getTmColor(itemLocalTmVal)}`}>{Number(itemLocalTmVal).toFixed(1)}°C</span>{item?.Local_Tm_ShortStem === true && <span title="Hairpin stem under 3 bp: two-state Tm is unreliable (marginal structure)" className="ml-1 text-amber-600 dark:text-amber-400 font-bold">*</span>}</span>
                             )}
                         </div>
                         {itemPopFrac !== undefined && itemPopFrac !== null && (

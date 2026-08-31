@@ -135,3 +135,46 @@ def test_cache_separation_by_engine(client: TestClient, fixture_seq: str) -> Non
         for p in primer3_res[side]["primers"]:
             assert "strider" not in p, "primer3 primer must not carry strider sub-block"
     assert strider_res.get("engine") == "strider"
+
+
+# ── short-stem hairpin Tm: reported with a warning flag, not dropped ─────────
+
+try:
+    import strider  # noqa: F401
+    _HAVE_STRIDER = True
+except ImportError:  # pragma: no cover
+    _HAVE_STRIDER = False
+
+
+@pytest.mark.skipif(not _HAVE_STRIDER, reason="strider-dna not installed")
+def test_short_stem_hairpin_reported_with_flag() -> None:
+    """A 2 bp-stem hairpin must be reported WITH short_stem=True, not hidden.
+
+    TATGCCACATGCCCGGAATTA folds to a 2 bp stem at 25 C: pre-#14 strider scores
+    it directly, #14+ refuses (we recompute locally), and either way Oligool's
+    policy is to show the Tm plus the warning flag.
+    """
+    res = main_module.strider_hairpin_analysis(
+        "TATGCCACATGCCCGGAATTA", mv_conc=50.0, dv_conc=3.0, dntp_conc=0.8
+    )
+    assert res["tm"] is not None, "short-stem Tm must be reported, not dropped"
+    assert res["tm"] == pytest.approx(32.6, abs=0.2)
+    assert res["short_stem"] is True
+
+
+@pytest.mark.skipif(not _HAVE_STRIDER, reason="strider-dna not installed")
+def test_normal_hairpin_not_flagged() -> None:
+    res = main_module.strider_hairpin_analysis(
+        "CTCGTGGCAAACGTATGCGG", mv_conc=50.0, dv_conc=3.0, dntp_conc=0.8
+    )
+    assert res["tm"] is not None
+    assert res["short_stem"] is False
+
+
+@pytest.mark.skipif(not _HAVE_STRIDER, reason="strider-dna not installed")
+def test_no_hairpin_returns_none_unflagged() -> None:
+    res = main_module.strider_hairpin_analysis(
+        "AAAAAAAAAAAAAAAAAAAA", mv_conc=50.0, dv_conc=3.0, dntp_conc=0.8
+    )
+    assert res["tm"] is None
+    assert res["short_stem"] is False

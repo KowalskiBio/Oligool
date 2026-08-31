@@ -815,6 +815,7 @@ export default function FlankingPrimersPanel({
                         const itemLocalDg = item.Local_DeltaG ?? null;
                         const itemIdtTm = item.IDT_Tm ?? null;
                         const itemLocalTm = item.Local_Tm ?? null;
+                        const itemLocalTmShort = item.Local_Tm_ShortStem === true;
                         const hasStructure = !!(item.DotBracket || item.Local_DotBracket || item.Bonds);
                         return (
                             <div key={i} className={`flex flex-col gap-2 ${maxItems > 1 && i > 0 ? 'border-t border-zinc-100 dark:border-zinc-800 pt-3' : ''}`}>
@@ -832,7 +833,7 @@ export default function FlankingPrimersPanel({
                                         </div>
                                         <div className="flex gap-3 justify-end opacity-80">
                                             <span>IDT Tm: <span className="font-mono tabular-nums text-zinc-500">{itemIdtTm != null ? `${Number(itemIdtTm).toFixed(1)}°C` : '–'}</span></span>
-                                            <span>Strider Tm: <span className="font-mono tabular-nums text-zinc-500">{itemLocalTm != null ? `${itemLocalTm.toFixed(1)}°C` : '–'}</span></span>
+                                            <span>Strider Tm: <span className="font-mono tabular-nums text-zinc-500">{itemLocalTm != null ? `${itemLocalTm.toFixed(1)}°C` : '–'}</span>{itemLocalTm != null && itemLocalTmShort && <span title="Hairpin stem under 3 bp: two-state Tm is unreliable (marginal structure)" className="ml-1 text-amber-600 dark:text-amber-400 font-bold">*</span>}</span>
                                         </div>
                                     </div>
                                 )}
@@ -1418,16 +1419,17 @@ export default function FlankingPrimersPanel({
                     <div><span className="text-zinc-600 dark:text-zinc-300" title={searchEngine === 'strider' ? 'Strider duplex Tm' : 'Primer3 Tm'}>Tm</span><br /><span className="font-mono tabular-nums font-medium">{searchEngine === 'strider' ? (p.tm_strider != null ? `${p.tm_strider.toFixed(1)}` : '–') : (p.tm != null ? `${p.tm}` : (p.primer3?.tm ?? '–'))}°C</span></div>
                     <div><span className="text-zinc-600 dark:text-zinc-300" title="IDT Tm">IDT Tm</span><br /><span className="font-mono tabular-nums font-medium">{idtResult?.analyze ? (extractTm(idtResult.analyze)?.toFixed(1) || 'N/A') + '°C' : '–'}</span></div>
                     <div><span className="text-zinc-600 dark:text-zinc-300">GC</span><br /><span className="font-mono tabular-nums font-medium">{p.gc_percent ?? p.primer3?.gc_percent ?? '–'}%</span></div>
-                    <div><span className="text-zinc-600 dark:text-zinc-300">Hairpin Tm</span><br />{(() => {
+                    <div><span className="text-zinc-600 dark:text-zinc-300" title="Strider two-state hairpin Tm">Hairpin Tm</span><br />{(() => {
                         const isStrider = searchEngine === 'strider';
                         const tmStrider = p.hairpin?.tm_strider;
+                        const tmStriderShort = p.hairpin?.tm_strider_short_stem === true;
                         const tmP3 = p.primer3?.hairpin_th ?? p.hairpin?.tm;
                         const hasStructure = p.hairpin?.structure_found || (p.hairpin?.dg != null && p.hairpin.dg < 0);
                         const indivHairpinTm = indivResult?.hairpin?.Local_Tm ?? null;
                         const tm = isStrider ? (tmStrider ?? indivHairpinTm) : tmP3;
                         const validTm = tm != null && tm !== 0;
                         const showTm = hasStructure && validTm;
-                        return <span className={`font-mono tabular-nums font-medium ${showTm ? 'text-amber-500' : 'text-emerald-500'}`}>{showTm ? `${tm}°C` : 'None'}</span>;
+                        return <span className={`font-mono tabular-nums font-medium ${showTm ? 'text-amber-500' : 'text-emerald-500'}`}>{showTm ? <>{tm}°C{isStrider && tmStriderShort && <span title="Hairpin stem under 3 bp: two-state Tm is unreliable (marginal structure)" className="text-amber-600 dark:text-amber-400 font-bold"> *</span>}</> : 'None'}</span>;
                     })()}</div>
                     <div><span className="text-zinc-600 dark:text-zinc-300">Self-dimer</span><br /><span className={`font-mono tabular-nums font-medium ${statusDg(searchEngine === 'strider' ? p.strider?.homodimer_dg : p.homodimer?.dg)}`}>{searchEngine === 'strider' ? (p.strider?.homodimer_dg != null ? `${p.strider.homodimer_dg} kcal` : 'OK') : (p.homodimer?.dg !== null && p.homodimer?.dg !== undefined ? `${p.homodimer.dg} kcal` : 'OK')}</span></div>
                 </div>

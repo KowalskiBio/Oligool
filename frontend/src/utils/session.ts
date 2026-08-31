@@ -101,7 +101,7 @@ export interface FlankingDesignedPrimer {
     gc_percent: number;
     tm: number | null;
     tm_strider: number | null;
-    hairpin: { structure_found: boolean; tm: number | null; dg: number | null; tm_strider?: number | null };
+    hairpin: { structure_found: boolean; tm: number | null; dg: number | null; tm_strider?: number | null; tm_strider_short_stem?: boolean };
     homodimer: { structure_found: boolean; tm: number | null; dg: number | null };
     strider?: { hairpin_dg: number | null; homodimer_dg: number | null };
     primer3: { tm: number | null; gc_percent: number | null; self_any: number | null; self_end: number | null; hairpin_th: number | null };

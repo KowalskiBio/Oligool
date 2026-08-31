@@ -159,7 +159,7 @@ const StructureSection = ({
                                 {fmtDG(idtDg) !== 'N/A' && <span>IDT ΔG{'\t'}<span className="font-mono tabular-nums font-bold text-zinc-900">{fmtDG(idtDg)}</span></span>}
                                 {fmtDG(localDg) !== 'N/A' && <span>Strider ΔG{'\t'}<span className="font-mono tabular-nums font-bold text-zinc-900">{fmtDG(localDg)}</span></span>}
                                 {fmtNum(idtTm) !== 'N/A' && <span>IDT Tm{'\t'}<span className="font-mono tabular-nums font-bold text-zinc-900">{fmtNum(idtTm)} °C</span></span>}
-                                {fmtNum(localTm) !== 'N/A' && <span>Local Tm{'\t'}<span className="font-mono tabular-nums font-bold text-zinc-900">{fmtNum(localTm)} °C</span></span>}
+                                {fmtNum(localTm) !== 'N/A' && <span>Local Tm{'\t'}<span className="font-mono tabular-nums font-bold text-zinc-900">{fmtNum(localTm)} °C</span>{item.Local_Tm_ShortStem === true && <span className="font-normal text-amber-600"> (short stem: under 3 bp, Tm unreliable)</span>}</span>}
                             </div>
                             {renderIdtSvg(item, seq1, seq2)}
                         </div>
