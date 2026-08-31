@@ -62,6 +62,8 @@ interface QueryViewerProps {
     onParameterSetChange?: (value: string) => void;
     /** Search engine for MOLigo quick search and flanking primer picking. */
     searchEngine?: 'primer3' | 'strider';
+    /** Competition strip style: monolithic Free vs Unfolded/Other folds split. */
+    equilibriumSplit?: 'two-way' | 'three-way';
     // MSA Viewer props, forwarded to FlankingPrimersPanel
     alignment?: string;
     navigateTarget?: { colStart: number; colEnd: number; ts: number } | null;
@@ -146,7 +148,7 @@ function EditableOligoName({ value, onChange, className, editing, onEditingChang
     );
 }
 
-const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function QueryViewer({ data, jobName, genbankHeader, onGenbankHeaderChange, onPrimersUpdate, onFlankingPrimersUpdate, flankingPanelState, onFlankingPanelStateChange, onNavigateTo, oligoRegion, autofindRegion, idtCredentials, onParameterSetChange, searchEngine, alignment, navigateTarget, isDarkMode, importedSession, onSaveSession }, ref) {
+const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function QueryViewer({ data, jobName, genbankHeader, onGenbankHeaderChange, onPrimersUpdate, onFlankingPrimersUpdate, flankingPanelState, onFlankingPanelStateChange, onNavigateTo, oligoRegion, autofindRegion, idtCredentials, onParameterSetChange, searchEngine, equilibriumSplit, alignment, navigateTarget, isDarkMode, importedSession, onSaveSession }, ref) {
     const API_BASE = ((import.meta.env.VITE_API_BASE as string) || '');
     const [copyFeedback, setCopyFeedback] = useState('');
 
@@ -1911,16 +1913,17 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
         const pHairpin = competition.P_Hairpin ?? 0;
         const pUnfolded = competition.P_Unfolded;
         const pFreeTotal = competition.P_Free ?? 0;
-        // With the ensemble split available: Unfolded + Hairpin + Other folds.
-        // Without (pre-P_Unfolded payloads): fall back to the old single
-        // "Free" segment for the whole non-MFE monomer pool.
-        const pOtherFolds = pUnfolded != null
-            ? Math.max(0, pFreeTotal - pHairpin - pUnfolded)
+        // Three-way mode (with an ensemble-split payload available): Unfolded +
+        // Hairpin + Other folds. Two-way mode (or pre-split payloads): the old
+        // single "Free" segment for the whole non-MFE monomer pool.
+        const useSplit = equilibriumSplit !== 'two-way' && pUnfolded != null;
+        const pOtherFolds = useSplit
+            ? Math.max(0, pFreeTotal - pHairpin - pUnfolded!)
             : null;
         const segments: { label: string; value: number; className: string }[] = [
             {
-                label: pUnfolded != null ? 'Unfolded' : 'Free',
-                value: pUnfolded != null ? pUnfolded : Math.max(0, pFreeTotal - pHairpin),
+                label: useSplit ? 'Unfolded' : 'Free',
+                value: useSplit ? pUnfolded! : Math.max(0, pFreeTotal - pHairpin),
                 className: 'bg-zinc-300 dark:bg-zinc-600',
             },
             { label: 'Hairpin', value: pHairpin, className: 'bg-amber-500' },
@@ -1941,7 +1944,7 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
             Hairpin: competition.P_Hairpin !== null && competition.P_Hairpin !== undefined,
             'Self-Dimer': competition.P_SelfDimer !== null && competition.P_SelfDimer !== undefined,
             'Cross-Dimer': competition.P_HeteroDimer !== null && competition.P_HeteroDimer !== undefined,
-            Unfolded: pUnfolded != null,
+            Unfolded: useSplit,
             'Other folds': pOtherFolds != null,
         };
         const negligible = segments.filter(s => s.value <= 0.001 && wasComputed[s.label]);
@@ -3008,6 +3011,7 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                     restoredState={flankingPanelState ?? null}
                     onPanelStateChange={onFlankingPanelStateChange}
                     searchEngine={searchEngine}
+                    equilibriumSplit={equilibriumSplit}
                     onParameterSetChange={onParameterSetChange}
                     redesignNonce={flankDesignNonce}
                 />

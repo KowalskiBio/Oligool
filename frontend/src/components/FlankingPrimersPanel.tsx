@@ -40,6 +40,8 @@ interface Props {
     /** Publishes durable panel state upward so session saves capture the user's primer work. */
     onPanelStateChange?: (state: FlankingPanelState) => void;
     searchEngine?: 'primer3' | 'strider';
+    /** Competition strip style: monolithic Free vs Unfolded/Other folds split. */
+    equilibriumSplit?: 'two-way' | 'three-way';
     onParameterSetChange?: (value: string) => void;
     /** Bumped by the parent when the user explicitly asks for a fresh design ("Proceed with the Design"). */
     redesignNonce?: number;
@@ -69,7 +71,7 @@ export default function FlankingPrimersPanel({
     p1Start, p1End, p2Start, p2End,
     alignment, oligoPrimers, navigateTarget, isDarkMode,
     idtCredentials, gappedData, onFlankingPrimersUpdate,
-    restoredState, onPanelStateChange, searchEngine, onParameterSetChange, redesignNonce
+    restoredState, onPanelStateChange, searchEngine, equilibriumSplit, onParameterSetChange, redesignNonce
 }: Props) {
     // Primer3 params : initialized from a restored session when present
     const rp = restoredState?.params ?? FLANKING_PANEL_DEFAULTS.params;
@@ -742,13 +744,17 @@ export default function FlankingPrimersPanel({
         const pHairpin = competition.P_Hairpin ?? 0;
         const pUnfolded = competition.P_Unfolded ?? null;
         const pFreeTotal = competition.P_Free ?? 0;
-        const pOtherFolds = pUnfolded != null
-            ? Math.max(0, pFreeTotal - pHairpin - pUnfolded)
+        // Three-way mode (with an ensemble-split payload available): Unfolded +
+        // Hairpin + Other folds. Two-way mode (or pre-split payloads): the old
+        // single "Free" segment for the whole non-MFE monomer pool.
+        const useSplit = equilibriumSplit !== 'two-way' && pUnfolded != null;
+        const pOtherFolds = useSplit
+            ? Math.max(0, pFreeTotal - pHairpin - pUnfolded!)
             : null;
         const segments: { label: string; value: number; className: string }[] = [
             {
-                label: pUnfolded != null ? 'Unfolded' : 'Free',
-                value: pUnfolded != null ? pUnfolded : Math.max(0, pFreeTotal - pHairpin),
+                label: useSplit ? 'Unfolded' : 'Free',
+                value: useSplit ? pUnfolded! : Math.max(0, pFreeTotal - pHairpin),
                 className: 'bg-zinc-300 dark:bg-zinc-600',
             },
             { label: 'Hairpin', value: pHairpin, className: 'bg-amber-500' },
@@ -764,7 +770,7 @@ export default function FlankingPrimersPanel({
             Hairpin: competition.P_Hairpin !== null && competition.P_Hairpin !== undefined,
             'Self-Dimer': competition.P_SelfDimer !== null && competition.P_SelfDimer !== undefined,
             'Cross-Dimer': competition.P_HeteroDimer !== null && competition.P_HeteroDimer !== undefined,
-            Unfolded: pUnfolded != null,
+            Unfolded: useSplit,
             'Other folds': pOtherFolds != null,
         };
         const negligible = segments.filter(s => s.value <= 0.001 && wasComputed[s.label]);

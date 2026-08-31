@@ -55,6 +55,9 @@ function App() {
   const [searchEngine, setSearchEngine] = useState<'primer3' | 'strider'>(
     () => localStorage.getItem('search_engine') === 'strider' ? 'strider' : 'primer3'
   );
+  const [equilibriumSplit, setEquilibriumSplit] = useState<'two-way' | 'three-way'>(
+    () => localStorage.getItem('equilibrium_split') === 'two-way' ? 'two-way' : 'three-way'
+  );
   const [showSettings, setShowSettings] = useState(false);
   const [settingsTab, setSettingsTab] = useState<'account' | 'engine' | 'theme'>('account');
   const [maxHitsPreset, setMaxHitsPreset] = useState(() => localStorage.getItem('max_hits_preset') || '50');
@@ -153,6 +156,7 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
   useEffect(() => { localStorage.setItem('idt_mg_conc', idtMgConc); }, [idtMgConc]);
   useEffect(() => { localStorage.setItem('parameter_set', parameterSet); }, [parameterSet]);
   useEffect(() => { localStorage.setItem('search_engine', searchEngine); }, [searchEngine]);
+  useEffect(() => { localStorage.setItem('equilibrium_split', equilibriumSplit); }, [equilibriumSplit]);
   useEffect(() => { localStorage.setItem('idt_region', idtRegion); }, [idtRegion]);
   useEffect(() => {
     localStorage.setItem('autofind_treat_indels_as_mismatches', autofindTreatIndelsAsMismatches.toString());
@@ -925,6 +929,35 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                         Tm and oligo picks follow the selected engine's model
                       </p>
                     </div>
+                    <div className="flex items-center gap-3 flex-wrap mt-4">
+                      <label className="text-[13px] font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider w-24">
+                        Equilibrium
+                      </label>
+                      <div
+                        className="flex items-center rounded-md border border-zinc-300 dark:border-zinc-700 overflow-hidden"
+                        title="How the monomer pool is shown in the competition strips: Two-way folds Free, Hairpin and dimers into one view; Three-way additionally splits Free into Unfolded and Other folds"
+                      >
+                        {([
+                          ['two-way', 'Two-way'],
+                          ['three-way', 'Three-way'],
+                        ] as const).map(([value, label], idx) => (
+                          <button
+                            key={value}
+                            onClick={() => setEquilibriumSplit(value)}
+                            className={`px-2.5 py-1 text-[13px] font-medium transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent-700 dark:focus-visible:outline-accent-300 ${idx > 0 ? 'border-l border-zinc-300 dark:border-zinc-700 ' : ''}${
+                              equilibriumSplit === value
+                                ? 'bg-accent-700/10 dark:bg-accent-300/10 text-accent-800 dark:text-accent-200'
+                                : 'bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700'
+                            }`}
+                          >
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+                      <p className="text-[13px] text-zinc-500 dark:text-zinc-400">
+                        Two-way: Free / Hairpin / dimers. Three-way: Free is split into Unfolded and Other folds
+                      </p>
+                    </div>
                   </div>
                 )}
                 {settingsTab === 'theme' && (
@@ -1494,6 +1527,7 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                   }}
                   onParameterSetChange={setParameterSet}
                   searchEngine={searchEngine}
+                  equilibriumSplit={equilibriumSplit}
                   alignment={alignment}
                   navigateTarget={navigateTarget}
                   isDarkMode={isDarkMode}
@@ -1518,12 +1552,125 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
             <div className="card shadow-xl max-w-lg w-full max-h-[80vh] overflow-y-auto p-6" onClick={e => e.stopPropagation()}>
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
-                  <span className="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-accent-700/10 dark:bg-accent-300/10 text-accent-700 dark:text-accent-300 text-[13px] font-bold">v0.9.9</span>
+                  <span className="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-accent-700/10 dark:bg-accent-300/10 text-accent-700 dark:text-accent-300 text-[13px] font-bold">v0.10.0</span>
                   <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">Co je nového</h2>
                 </div>
                 <button onClick={() => setShowWhatsNew(false)} className="text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-200 text-xl leading-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-700 dark:focus-visible:outline-accent-300">&times;</button>
               </div>
               <div className="space-y-4 text-sm text-zinc-700 dark:text-zinc-300">
+                <section className="flex gap-3">
+                  <svg className="h-5 w-5 flex-shrink-0 mt-0.5 text-accent-700 dark:text-accent-300" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M3 5a2 2 0 012-2h10a2 2 0 012 2v10a2 2 0 01-2 2H5a2 2 0 01-2-2V5zm3.293 1.293a1 1 0 011.414 0L10 8.586l2.293-2.293a1 1 0 111.414 1.414L11.414 10l2.293 2.293a1 1 0 01-1.414 1.414L10 11.414l-2.293 2.293a1 1 0 01-1.414-1.414L8.586 10 6.293 7.707a1 1 0 010-1.414z" clipRule="evenodd" /></svg>
+                  <div>
+                    <h3 className="font-semibold text-accent-700 dark:text-accent-300 mb-1">New setting: Equilibrium split, Two-way or Three-way</h3>
+                    <p>
+                      In Settings (the gear, Engine tab) there is a new <b>Equilibrium</b> toggle next to the
+                      search engine picker. <b>Two-way</b> is the classic view: the strip shows Free, Hairpin,
+                      Self-Dimer and Cross-Dimer. <b>Three-way</b> additionally splits the free monomer pool
+                      into <b>Unfolded</b> and <b>Other folds</b>, so you can see how much of the primer is
+                      truly open, how much sits in the strongest hairpin, and how much occupies other
+                      favorable folds. The choice applies to every competition strip in the app (MOLigo
+                      stability grids and both flanking primer equilibrium bars), it recalculates instantly
+                      (switch it mid-analysis and the bars redraw from the equilibrium already solved, no
+                      re-analysis needed), and it survives restarts.
+                    </p>
+                  </div>
+                </section>
+                <section className="flex gap-3">
+                  <svg className="h-5 w-5 flex-shrink-0 mt-0.5 text-accent-700 dark:text-accent-300" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4c0 .275.111.535.308.73l2.5 2.5a1 1 0 001.414-1.414L11 9.586V6z" clipRule="evenodd" /></svg>
+                  <div>
+                    <h3 className="font-semibold text-accent-700 dark:text-accent-300 mb-1">Every structure now shows its share of the ensemble</h3>
+                    <p>
+                      Each hairpin and dimer card carries a <b>% of Ensemble</b> line: the probability that a
+                      molecule is in that exact structure, computed from the same Boltzmann math as the
+                      equilibrium strips. The numbers are finally self-consistent: the share of the best
+                      structure, the shares of the suboptimal ones, and the Unfolded/Other folds split all
+                      come from one partition, and they add up. Previously only the MFE structure carried a
+                      share, and that share was computed against a different energy model than the displayed
+                      ΔGs, which is why it could read as a nonsensical 4% or 0.2% for structures that
+                      clearly dominate.
+                    </p>
+                  </div>
+                </section>
+                <section className="flex gap-3">
+                  <svg className="h-5 w-5 flex-shrink-0 mt-0.5 text-accent-700 dark:text-accent-300" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M11.3 1.046A1 1 0 0112 2v5h4a1 1 0 01.82 1.573l-7 10A1 1 0 018 18v-5H4a1 1 0 01-.82-1.573l7-10a1 1 0 011.12-.38z" clipRule="evenodd" /></svg>
+                  <div>
+                    <h3 className="font-semibold text-accent-700 dark:text-accent-300 mb-1">Thermodynamics overhaul: ensembles computed from the structures you see</h3>
+                    <p>
+                      The big fix of this release. Ensemble percentages used to come from a partition
+                      function (pfunc) that runs on a slightly different energy model than the structures
+                      drawn on screen. The two models disagreed by several kcal/mol, which inflated the
+                      partition up to ~800x on the dimer side: a dominant self-dimer showed as 4% of its own
+                      ensemble and a -0.36 kcal/mol hairpin looked like 99% of the strand was folded into
+                      something. The partition is now summed directly from the Boltzmann weights of the very
+                      structures that are enumerated and displayed, so every number in the panel tells the
+                      same story. "Unfolded" was also redefined: the fully open state plus all transient,
+                      thermodynamically unfavorable (ΔG &gt;= 0) microstates. A wobbly one-base-pair contact
+                      with positive ΔG is a random-coil flicker, not a fold, and no longer inflates the
+                      "Other folds" segment.
+                    </p>
+                  </div>
+                </section>
+                <section className="flex gap-3">
+                  <svg className="h-5 w-5 flex-shrink-0 mt-0.5 text-accent-700 dark:text-accent-300" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-8-4a1 1 0 000 2 2 2 0 012 2c0 .7-.36 1.3-.9 1.66l-1.6.94A3.5 3.5 0 109 15.5h2a1 1 0 100-2H9a1.5 1.5 0 100 3 5.5 5.5 0 11-2.87-10.2A4 4 0 0110 6z" clipRule="evenodd" /></svg>
+                  <div>
+                    <h3 className="font-semibold text-accent-700 dark:text-accent-300 mb-1">A primer on ensembles, MFE, ΔG and Tm (and what the strips mean)</h3>
+                    <p className="mb-2">
+                      <b>The ensemble.</b> Your tube does not contain one molecule with one shape; it contains
+                      an astronomical number of copies, each constantly flickering between every possible
+                      fold. Think of it as a lottery. Every structure a strand can form is a lottery ticket,
+                      and nature hands out tickets according to one rule: a structure with free energy ΔG
+                      gets exp(-ΔG/RT) tickets, where RT (~0.6 kcal/mol at room temperature) is the scale of
+                      thermal jostling. A structure 1.2 kcal/mol more favorable than another holds ~7.5x
+                      more tickets. The collection of all tickets for all structures is the <b>ensemble</b>,
+                      and every probability we show (% of Ensemble, Unfolded, Hairpin, Other folds) is just
+                      "how many tickets does this state hold out of all tickets".
+                    </p>
+                    <p className="mb-2">
+                      <b>MFE, the deepest chair.</b> The MFE (minimum free energy) structure is the single
+                      most stable fold, the deepest, most comfortable chair in the room. But comfort of the
+                      best chair does not tell you how many people sit in it: if the room is full of decent
+                      chairs (many suboptimal folds within ~1 kcal/mol), the crowd spreads out. That is why
+                      the MFE hairpin can hold, say, 60% of the ensemble rather than 100%, and the "% of
+                      Ensemble" badge on each card tells you exactly how the crowd is distributed.
+                    </p>
+                    <p className="mb-2">
+                      <b>ΔG versus Tm.</b> Gibbs free energy (ΔG, kcal/mol) answers "who is winning right
+                      now, at this temperature": negative means the fold pays out energy, the more negative
+                      the more it dominates. Tm (melting temperature) answers a different question: "at what
+                      temperature does the race end in a tie?" (50% folded, 50% unfolded). ΔG is a snapshot
+                      of the balance at the assay temperature; Tm is the tipping point where that balance
+                      flips. A hairpin with ΔG = -1.8 kcal/mol at 25 °C is comfortably formed (its Tm is well
+                      above 25 °C); a hairpin with ΔG = -0.3 is barely distinguishable from random noise,
+                      because RT alone (~0.6) outweighs it, and its Tm sits below the assay temperature.
+                    </p>
+                    <p>
+                      <b>Two-state versus three-state.</b> The classic two-state picture assumes exactly two
+                      populations: the folded hairpin and everything else (Free). It is the model behind
+                      every ΔG and Tm on the cards, and it is perfectly fine for answering "will this
+                      structure form at all?". The three-way strip uses the full ensemble to additionally
+                      split that "everything else" into what is genuinely unfolded (open chain or transient
+                      flickers) and what is caught in other real, favorable folds. If you want one number
+                      per question ("is my primer free?"), use Two-way. If you want to see where the free
+                      pool actually lives, use Three-way. Both views come from the same solve, so they
+                      always agree with each other and with the per-structure percentages.
+                    </p>
+                  </div>
+                </section>
+                <section className="flex gap-3">
+                  <svg className="h-5 w-5 flex-shrink-0 mt-0.5 text-accent-700 dark:text-accent-300" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L12.414 3H15a2 2 0 012 2v8a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 6a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z" clipRule="evenodd" /></svg>
+                  <div>
+                    <h3 className="font-semibold text-accent-700 dark:text-accent-300 mb-1">PDF report is now engine-true</h3>
+                    <p>
+                      The report labels every thermodynamic number with the engine that produced it. When the
+                      search engine is Strider, the report header says Engine: Strider, flanking primer
+                      structure rows carry Strider dimer Tms taken from the live analysis (falling back to
+                      the design values when needed), and the heterodimer card is titled Hetero-Dimers with
+                      correctly numbered structure boxes across both rows. When Primer3 is the engine the
+                      report keeps the Primer3 numbers, instead of silently mixing engines as before.
+                      Structure figures are capped to fit the page width in print.
+                    </p>
+                  </div>
+                </section>
                 <section className="flex gap-3">
                   <svg className="h-5 w-5 flex-shrink-0 mt-0.5 text-accent-700 dark:text-accent-300" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" /></svg>
                   <div>
