@@ -1980,7 +1980,10 @@ def design_flanking_primers(req: FlankingPrimerParams):
         results["pair_metrics"] = {
             "heterodimer": {
                 "structure_found": bool(getattr(het, "structure_found", False)),
-                "tm": _round(getattr(het, "tm", None), 1) if getattr(het, "tm", None) is not None and -50.0 < float(getattr(het, "tm", None)) < 200.0 else None,
+                # Same sentinel-only rule as the Strider dimer Tms: weak dimers
+                # legitimately melt far below 0 °C; only reject non-finite /
+                # below-absolute-zero sentinels.
+                "tm": _round(getattr(het, "tm", None), 1) if getattr(het, "tm", None) is not None and float(getattr(het, "tm", None)) > -273.15 else None,
                 "dg": _round((getattr(het, "dg", None) or 0) / 1000, 2),
             }
         }

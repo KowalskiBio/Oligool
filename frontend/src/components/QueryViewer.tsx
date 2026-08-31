@@ -1363,10 +1363,14 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
             return (firstRaw?.[key] as number | undefined) ?? undefined;
         };
 
-        // Per-primer Strider numbers: design candidate metrics when the Strider
-        // engine produced them, otherwise the on-Use individual Strider analysis.
+        // Per-primer Strider numbers: the live individual analysis (same source
+        // as the app's Structural Analysis cards) first, design candidate
+        // metrics as fallback.
         const fwdStriderIndiv = (sf ? fps?.striderResultsIndiv?.[sf.sequence] : undefined) as { hairpin?: unknown; self_dimer?: unknown } | undefined;
         const revStriderIndiv = (sr ? fps?.striderResultsIndiv?.[sr.sequence] : undefined) as { hairpin?: unknown; self_dimer?: unknown } | undefined;
+        // Live pair Strider analysis (auto-refreshes on selection/params/mount),
+        // same source as the app's Hetero-Dimers grid.
+        const pairStrider = fps?.pairStriderResults as { pairwise?: unknown } | null | undefined;
 
         const flankingFwdSeq = flankingPrimersData?.fwdSeq ?? sf?.sequence;
         const flankingFwdName = flankingPrimersData?.fwdName ?? fps?.fwdName ?? sf?.name;
@@ -1425,29 +1429,29 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
             flankingFwdIDTTm: extractBestTm(indivAnalyzeOf(sf?.sequence)),
             flankingFwdHairpinDg: sf?.hairpin?.dg,
             flankingFwdHairpinTm: sf?.hairpin?.tm,
-            flankingFwdHairpinStriderDg: sf?.strider?.hairpin_dg ?? striderVal(fwdStriderIndiv?.hairpin, 'Local_DeltaG') ?? null,
-            flankingFwdHairpinStriderTm: sf?.hairpin?.tm_strider ?? striderVal(fwdStriderIndiv?.hairpin, 'Local_Tm') ?? null,
+            flankingFwdHairpinStriderDg: striderVal(fwdStriderIndiv?.hairpin, 'Local_DeltaG') ?? sf?.strider?.hairpin_dg ?? null,
+            flankingFwdHairpinStriderTm: striderVal(fwdStriderIndiv?.hairpin, 'Local_Tm') ?? sf?.hairpin?.tm_strider ?? null,
             flankingFwdHairpinStriderTmShortStem: sf?.hairpin?.tm_strider_short_stem === true,
             flankingFwdHomodimerDg: sf?.homodimer?.dg,
             flankingFwdHomodimerTm: sf?.homodimer?.tm,
-            flankingFwdHomodimerStriderDg: sf?.strider?.homodimer_dg ?? striderVal(fwdStriderIndiv?.self_dimer, 'Local_DeltaG') ?? null,
-            flankingFwdHomodimerStriderTm: sf?.strider?.homodimer_tm ?? striderVal(fwdStriderIndiv?.self_dimer, 'Local_Tm') ?? null,
+            flankingFwdHomodimerStriderDg: striderVal(fwdStriderIndiv?.self_dimer, 'Local_DeltaG') ?? sf?.strider?.homodimer_dg ?? null,
+            flankingFwdHomodimerStriderTm: striderVal(fwdStriderIndiv?.self_dimer, 'Local_Tm') ?? sf?.strider?.homodimer_tm ?? null,
             flankingRevTmP3: sr?.tm,
             flankingRevTmStrider: sr?.tm_strider,
             flankingRevIDTTm: extractBestTm(indivAnalyzeOf(sr?.sequence)),
             flankingRevHairpinDg: sr?.hairpin?.dg,
             flankingRevHairpinTm: sr?.hairpin?.tm,
-            flankingRevHairpinStriderDg: sr?.strider?.hairpin_dg ?? striderVal(revStriderIndiv?.hairpin, 'Local_DeltaG') ?? null,
-            flankingRevHairpinStriderTm: sr?.hairpin?.tm_strider ?? striderVal(revStriderIndiv?.hairpin, 'Local_Tm') ?? null,
+            flankingRevHairpinStriderDg: striderVal(revStriderIndiv?.hairpin, 'Local_DeltaG') ?? sr?.strider?.hairpin_dg ?? null,
+            flankingRevHairpinStriderTm: striderVal(revStriderIndiv?.hairpin, 'Local_Tm') ?? sr?.hairpin?.tm_strider ?? null,
             flankingRevHairpinStriderTmShortStem: sr?.hairpin?.tm_strider_short_stem === true,
             flankingRevHomodimerDg: sr?.homodimer?.dg,
             flankingRevHomodimerTm: sr?.homodimer?.tm,
-            flankingRevHomodimerStriderDg: sr?.strider?.homodimer_dg ?? striderVal(revStriderIndiv?.self_dimer, 'Local_DeltaG') ?? null,
-            flankingRevHomodimerStriderTm: sr?.strider?.homodimer_tm ?? striderVal(revStriderIndiv?.self_dimer, 'Local_Tm') ?? null,
+            flankingRevHomodimerStriderDg: striderVal(revStriderIndiv?.self_dimer, 'Local_DeltaG') ?? sr?.strider?.homodimer_dg ?? null,
+            flankingRevHomodimerStriderTm: striderVal(revStriderIndiv?.self_dimer, 'Local_Tm') ?? sr?.strider?.homodimer_tm ?? null,
             flankingHetDg: fps?.result?.pair_metrics?.heterodimer?.dg,
             flankingHetTm: fps?.result?.pair_metrics?.heterodimer?.tm,
-            flankingHetStriderDg: fps?.result?.pair_metrics?.strider_heterodimer?.dg ?? null,
-            flankingHetStriderTm: fps?.result?.pair_metrics?.strider_heterodimer?.tm ?? null,
+            flankingHetStriderDg: striderVal(pairStrider?.pairwise, 'Local_DeltaG') ?? fps?.result?.pair_metrics?.strider_heterodimer?.dg ?? null,
+            flankingHetStriderTm: striderVal(pairStrider?.pairwise, 'Local_Tm') ?? fps?.result?.pair_metrics?.strider_heterodimer?.tm ?? null,
             contextMap: buildContextMap(),
         };
     };
