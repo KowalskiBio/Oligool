@@ -10,9 +10,23 @@ set -euo pipefail
 # it silently ships a pure-Python wheel.  Export it here so the extension is
 # always built, regardless of how this script was invoked.
 export PATH="$HOME/.cargo/bin:$PATH"
-cd "$(dirname "$0")/.."
+SCRIPT_PATH="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"
+cd "$(dirname "$SCRIPT_PATH")/.."
 
 git pull --ff-only
+
+# `git pull` can rewrite THIS file. Bash does not reliably reread a script's
+# own remaining lines after its underlying file changes mid-execution: we've
+# seen it keep the pre-pull text of the hardcoded strider pin below, silently
+# reinstalling a stale version even though `git pull` had already fetched the
+# new one. Re-exec fresh from disk (by absolute path, since cwd has since
+# changed) once, right after the pull, so every line after this point is
+# guaranteed to come from the just-pulled file. The guard env var stops this
+# from looping.
+if [ -z "${OLIGOOL_UPDATE_REEXECED:-}" ]; then
+  export OLIGOOL_UPDATE_REEXECED=1
+  exec bash "$SCRIPT_PATH" "$@"
+fi
 
 if [ -d backend/venv ]; then
   backend/venv/bin/pip install -r backend/requirements.txt
