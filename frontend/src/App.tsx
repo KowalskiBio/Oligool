@@ -56,7 +56,7 @@ function App() {
     () => localStorage.getItem('search_engine') === 'strider' ? 'strider' : 'primer3'
   );
   const [equilibriumSplit, setEquilibriumSplit] = useState<'two-way' | 'three-way'>(
-    () => localStorage.getItem('equilibrium_split') === 'two-way' ? 'two-way' : 'three-way'
+    () => localStorage.getItem('equilibrium_split') === 'three-way' ? 'three-way' : 'two-way'
   );
   const [showSettings, setShowSettings] = useState(false);
   const [settingsTab, setSettingsTab] = useState<'account' | 'engine' | 'theme'>('account');
@@ -1564,7 +1564,7 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                     <h3 className="font-semibold text-accent-700 dark:text-accent-300 mb-1">New setting: Equilibrium split, Two-way or Three-way</h3>
                     <p>
                       In Settings (the gear, Engine tab) there is a new <b>Equilibrium</b> toggle next to the
-                      search engine picker. <b>Two-way</b> is the classic view: the strip shows Free, Hairpin,
+                      search engine picker. <b>Two-way</b> (the default) is the classic view: the strip shows Free, Hairpin,
                       Self-Dimer and Cross-Dimer. <b>Three-way</b> additionally splits the free monomer pool
                       into <b>Unfolded</b> and <b>Other folds</b>, so you can see how much of the primer is
                       truly open, how much sits in the strongest hairpin, and how much occupies other
