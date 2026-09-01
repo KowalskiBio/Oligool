@@ -5,15 +5,23 @@ pydantic
 primer3-py
 pywebview>=4.0.0
 requests>=2.25.0
-# Stacked feature branch on the KowalskiBio fork, containing in order:
-#   1. native-tm  — Rust/PyO3 accelerator (strider._native) for Tm/salt kernels   [PR #11]
-#   2. native-dp  — native Rust port of the dimer MFE candidate DP                [PR #12]
-#   3. mathews2004-dangles — corrected Mathews 2004 paramset (stack/bulge/interior
+# All four of the KowalskiBio fork's stacked feature branches are now merged
+# upstream into EmilioVenegas/strider main, in order:
+#   1. native-tm  : Rust/PyO3 accelerator (strider._native) for Tm/salt kernels   [PR #11]
+#   2. native-dp  : native Rust port of the dimer MFE candidate DP                [PR #12]
+#   3. mathews2004-dangles: corrected Mathews 2004 paramset (stack/bulge/interior
 #      key conventions verified vs ViennaRNA eval), paramset threading on
 #      hairpin/dimer APIs, name resolution, dangles=2 exterior stacks           [PR #13]
-# main.py uses all three: dimer ΔG no-init reporting needs DUPLEX_INIT_ from the
+#   4. hairpin-behavior: 25C default fold, MIN_STEM_BP=3 guard (rejects hairpin
+#      stems under 3bp instead of an unstable two-state Tm; matches
+#      SHORT_STEM_WARN_BP in backend/main.py), degenerate-dS/Tm-ceiling guards,
+#      multiloop stem-loop splitting, dimer dangles=0|2 flag (default 0)       [PR #14]
+# main.py uses all four: dimer ΔG no-init reporting needs DUPLEX_INIT_ from the
 # dimer module; parameter_set threading needs the corrected paramset + plumbing;
-# hairpins need dangles=2 for IDT-consistent reports.  NOTE: pip will NOT
-# reinstall a git-VCS dep whose version is unchanged — update_vm.sh force-
-# reinstalls this package exactly because of that.
-strider-dna @ git+https://github.com/KowalskiBio/strider.git@mathews2004-dangles
+# hairpins need dangles=2 for IDT-consistent reports; dimer calls now pass
+# dangles=2 explicitly too, since PR #14 changed the dimer default to 0 (was
+# always-on before the flag existed). No fork-only work remains, so this now
+# pins straight to upstream. NOTE: pip will NOT reinstall a git-VCS dep whose
+# version is unchanged, so update_vm.sh force-reinstalls this package exactly
+# because of that.
+strider-dna @ git+https://github.com/EmilioVenegas/strider.git@c695359dbc24d4c059fccef4b8e12e60850709ad

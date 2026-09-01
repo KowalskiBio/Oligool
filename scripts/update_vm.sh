@@ -20,7 +20,7 @@ if [ -d backend/venv ]; then
   # ("Requirement already satisfied"), silently leaving stale strider builds
   # in place when only the branch content moved.  Force-reinstall just it.
   backend/venv/bin/pip install --force-reinstall --no-deps \
-    "strider-dna @ git+https://github.com/KowalskiBio/strider.git@mathews2004-dangles"
+    "strider-dna @ git+https://github.com/EmilioVenegas/strider.git@c695359dbc24d4c059fccef4b8e12e60850709ad"
 fi
 
 if command -v npm >/dev/null 2>&1; then

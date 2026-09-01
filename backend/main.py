@@ -1027,6 +1027,7 @@ def _run_strider_analysis(
                         structure=None,
                         strand_conc_M=oligo_conc_m,
                         salt_model='auto',
+                        dangles=2,
                     )
                     raw_mfe = res.structure
                     if _valid_paired(raw_mfe):
@@ -1065,6 +1066,7 @@ def _run_strider_analysis(
                             material='dna',
                             strand_conc_M=oligo_conc_m,
                             salt_model='auto',
+                            dangles=2,
                         )
                         for r in subopt_res:
                             subopt_dimers.append({
@@ -1755,7 +1757,8 @@ def _design_single_side_strider(flank_seq, *, is_left, min_size, max_size, min_g
         homodimer_tm = None
         try:
             res = dimer_thermo(primer_seq, primer_seq, sodium_M=sodium_m, magnesium_M=magnesium_m,
-                               material='dna', structure=None, strand_conc_M=dna / 1e9, salt_model='auto')
+                               material='dna', structure=None, strand_conc_M=dna / 1e9, salt_model='auto',
+                               dangles=2)
             # Reported value is the physical (association-included) ΔG, same
             # convention as Local_DeltaG everywhere else. The scoring penalty
             # below keeps using the initiation-stripped value so the candidate
