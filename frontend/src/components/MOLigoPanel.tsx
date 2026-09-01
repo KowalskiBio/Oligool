@@ -90,7 +90,7 @@ export default function MOLigoPanel(props: MOLigoProps) {
     const fwdRCSeq = reverseComplement(fwdPrimer || "");
 
     const leftOligoSeq = (revPrimer || "") + moligo2Seq;
-    const rightOligoSeq = moligo1Seq + (tagSeq || "").toLowerCase() + (fwdPrimer || "");
+    const rightOligoSeq = moligo1Seq + (tagSeq || "").toLowerCase() + fwdRCSeq;
 
     const copyToClipboard = (text: string, label: string) => {
         if (!navigator.clipboard) return;
@@ -143,24 +143,31 @@ export default function MOLigoPanel(props: MOLigoProps) {
             <div className="mt-4">
                 <div className="max-w-[85rem] mx-auto px-2 md:px-6 grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-5">
 
-                    {/* Reverse Primer Input Box */}
+                    {/* Forward Primer Input Box */}
                     <div className="card p-3 flex flex-col h-full">
                         <div className="flex justify-between items-start mb-2">
                             <div className="eyebrow flex items-center gap-1.5">
-                                <span className="status-dot bg-purple-500" />
-                                Universal Reverse Primer
+                                <span className="status-dot bg-pink-500" />
+                                Universal Forward Primer
                             </div>
-                            <span className="text-[13px] font-mono tabular-nums text-zinc-400">{revLen}nt</span>
+                            <span className="text-[13px] font-mono tabular-nums text-zinc-400">{fwdLen}nt</span>
                         </div>
-                        <div className="flex-1 bg-zinc-50 dark:bg-zinc-800/60 p-2 rounded-md border border-zinc-200 dark:border-zinc-700">
+                        <div className="flex-1 bg-zinc-50 dark:bg-zinc-800/60 p-2 rounded-md border border-zinc-200 dark:border-zinc-700 flex flex-col">
                             <textarea
-                                className="w-full h-full min-h-[2.5rem] text-sm font-mono bg-transparent border-none outline-none resize-none text-zinc-700 dark:text-zinc-300 p-0 focus:ring-0"
-                                value={revPrimer || ""}
-                                onChange={(e) => onRevChange?.(e.target.value.toUpperCase().replace(/[^ATCGUatcgu]/g, ''))}
-                                placeholder="Enter reverse primer..."
+                                className="w-full flex-1 min-h-[2.5rem] text-sm font-mono bg-transparent border-none outline-none resize-none text-zinc-700 dark:text-zinc-300 p-0 focus:ring-0"
+                                value={fwdPrimer || ""}
+                                onChange={(e) => onFwdChange?.(e.target.value.toUpperCase().replace(/[^ATCGUatcgu]/g, ''))}
+                                placeholder="Enter forward primer..."
                                 spellCheck={false}
                             />
                         </div>
+                        {fwdLen > 0 && (
+                            <div className="mt-3 border-t border-zinc-100 dark:border-zinc-700 pt-2 flex items-center justify-between">
+                                <span className="text-[13px] text-zinc-500 font-mono truncate">
+                                    RC: {fwdRCSeq}
+                                </span>
+                            </div>
+                        )}
                     </div>
 
                     {/* TAG Picker & Manual Input Box */}
@@ -202,31 +209,24 @@ export default function MOLigoPanel(props: MOLigoProps) {
                         </div>
                     </div>
 
-                    {/* Forward Primer Input Box */}
+                    {/* Reverse Primer Input Box */}
                     <div className="card p-3 flex flex-col h-full">
                         <div className="flex justify-between items-start mb-2">
                             <div className="eyebrow flex items-center gap-1.5">
-                                <span className="status-dot bg-pink-500" />
-                                Universal Forward Primer
+                                <span className="status-dot bg-purple-500" />
+                                Universal Reverse Primer
                             </div>
-                            <span className="text-[13px] font-mono tabular-nums text-zinc-400">{fwdLen}nt</span>
+                            <span className="text-[13px] font-mono tabular-nums text-zinc-400">{revLen}nt</span>
                         </div>
-                        <div className="flex-1 bg-zinc-50 dark:bg-zinc-800/60 p-2 rounded-md border border-zinc-200 dark:border-zinc-700 flex flex-col">
+                        <div className="flex-1 bg-zinc-50 dark:bg-zinc-800/60 p-2 rounded-md border border-zinc-200 dark:border-zinc-700">
                             <textarea
-                                className="w-full flex-1 min-h-[2.5rem] text-sm font-mono bg-transparent border-none outline-none resize-none text-zinc-700 dark:text-zinc-300 p-0 focus:ring-0"
-                                value={fwdPrimer || ""}
-                                onChange={(e) => onFwdChange?.(e.target.value.toUpperCase().replace(/[^ATCGUatcgu]/g, ''))}
-                                placeholder="Enter forward primer..."
+                                className="w-full h-full min-h-[2.5rem] text-sm font-mono bg-transparent border-none outline-none resize-none text-zinc-700 dark:text-zinc-300 p-0 focus:ring-0"
+                                value={revPrimer || ""}
+                                onChange={(e) => onRevChange?.(e.target.value.toUpperCase().replace(/[^ATCGUatcgu]/g, ''))}
+                                placeholder="Enter reverse primer..."
                                 spellCheck={false}
                             />
                         </div>
-                        {fwdLen > 0 && (
-                            <div className="mt-3 border-t border-zinc-100 dark:border-zinc-700 pt-2 flex items-center justify-between">
-                                <span className="text-[13px] text-zinc-500 font-mono truncate">
-                                    RC: {fwdRCSeq}
-                                </span>
-                            </div>
-                        )}
                     </div>
                 </div>
 
