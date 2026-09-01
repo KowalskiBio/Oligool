@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "scripts/check-em-dash-hook.sh",
+            "timeout": 15,
+            "statusMessage": "Checking for em dashes..."
+          }
+        ]
+      }
+    ]
+  }
+}
