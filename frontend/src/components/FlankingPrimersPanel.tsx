@@ -1709,7 +1709,7 @@ export default function FlankingPrimersPanel({
                                 {loading ? (
                                     <span className="flex items-center justify-center gap-2">
                                         <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
-                                        Designing with Primer3…
+                                        {`Designing with ${searchEngine === 'strider' ? 'Strider' : 'Primer3'}…`}
                                     </span>
                                 ) : 'Design Flanking Primers'}
                             </button>
