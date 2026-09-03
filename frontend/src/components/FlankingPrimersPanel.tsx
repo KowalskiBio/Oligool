@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import MSAViewer from './MSAViewer';
 import DimerAscii from './DimerAscii';
 import HairpinSVG from './HairpinSVG';
+import type { CompetitionResult } from './MOLigoPanel';
 import { FLANKING_PANEL_DEFAULTS, type FlankingPanelState, type FlankingDesignedPrimer, type FlankingDesignResult } from '../utils/session';
 
 type DesignedPrimer = FlankingDesignedPrimer;
@@ -490,6 +491,52 @@ export default function FlankingPrimersPanel({
     // Strider pair results (local-only, no IDT API call). Auto-fires on selection.
     const [striderPairResults, setStriderPairResults] = useState<any>(restoredState?.pairStriderResults ?? null);
     const [isAnalyzingStriderPair, setIsAnalyzingStriderPair] = useState(false);
+
+    // Equilibrium-strip temperature. 25 (the analysis reference) means "use the
+    // pair's own solve"; any other value triggers a debounced refetch.
+    const [equilibriumTempInput, setEquilibriumTempInput] = useState('25');
+    const [tempPairCompetition, setTempPairCompetition] = useState<{ m1: CompetitionResult | null; m2: CompetitionResult | null } | null>(null);
+    const [isTempSolving, setIsTempSolving] = useState(false);
+    const tempCompRunRef = useRef(0);
+
+    useEffect(() => {
+        const p1 = selFwd?.sequence;
+        const p2 = selRev?.sequence;
+        const t = parseFloat(equilibriumTempInput);
+        if (!p1 || !p2 || !(idtResults || striderPairResults) || !isFinite(t) || t === 25) {
+            setTempPairCompetition(null);
+            return;
+        }
+        const runId = ++tempCompRunRef.current;
+        const timer = setTimeout(async () => {
+            setIsTempSolving(true);
+            try {
+                const res = await fetch(((import.meta.env.VITE_API_BASE as string) || "") + '/strider/competition', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        p1_seq: p1,
+                        p2_seq: p2,
+                        mg_conc: dvConc,
+                        mv_conc: mvConc,
+                        dntp_conc: dntpConc,
+                        oligo_conc: dnaConc / 1000,
+                        temp: t,
+                        parameter_set: idtCredentials?.parameterSet || 'mathews2004-dna',
+                    })
+                });
+                if (!res.ok) return;
+                const data = await res.json();
+                if (runId === tempCompRunRef.current) {
+                    setTempPairCompetition({ m1: data.m1?.competition ?? null, m2: data.m2?.competition ?? null });
+                }
+            } catch (err) {
+                if (runId === tempCompRunRef.current) console.error(err);
+            } finally { if (runId === tempCompRunRef.current) setIsTempSolving(false); }
+        }, 500);
+        return () => clearTimeout(timer);
+    }, [equilibriumTempInput, selFwd?.sequence, selRev?.sequence, idtResults, striderPairResults, dvConc, mvConc, dntpConc, dnaConc, idtCredentials?.parameterSet]);
+
 
     // Stale-run guard: only the latest invocation may mutate analysis state.
     const pairRunRef = useRef(0);
@@ -1820,8 +1867,33 @@ export default function FlankingPrimersPanel({
                                         ) : (idtResults || striderPairResults) ? (
                                             <div>
                                                 <div className="mb-4 space-y-3">
-                                                    {renderCompetitionStrip((idtResults || striderPairResults).m1?.competition, "Left (Forward) Primer Equilibrium")}
-                                                    {renderCompetitionStrip((idtResults || striderPairResults).m2?.competition, "Right (Reverse) Primer Equilibrium")}
+                                                    <div
+                                                        className="flex justify-end items-center gap-1 text-[13px] text-zinc-500 dark:text-zinc-400"
+                                                        title="Temperature for the equilibrium strips (Free / Hairpin / dimer split). Structure cards and ΔG values stay at the 25 °C reference."
+                                                    >
+                                                        <span>Equilibrium at</span>
+                                                        <input
+                                                            type="number"
+                                                            min={0}
+                                                            max={99}
+                                                            step={1}
+                                                            value={equilibriumTempInput}
+                                                            onChange={e => setEquilibriumTempInput(e.target.value)}
+                                                            className="input w-16 px-1.5 py-0.5 text-[13px] font-mono tabular-nums"
+                                                        />
+                                                        <span>°C</span>
+                                                        {isTempSolving && <div className="w-3 h-3 border-2 border-zinc-300 dark:border-zinc-600 border-t-zinc-600 dark:border-t-zinc-300 rounded-full animate-spin" />}
+                                                    </div>
+                                                    {(() => {
+                                                        const eqTemp = parseFloat(equilibriumTempInput);
+                                                        const tempSuffix = tempPairCompetition && isFinite(eqTemp) && eqTemp !== 25 ? ` (${eqTemp}°C)` : '';
+                                                        return (
+                                                            <>
+                                                                {renderCompetitionStrip(tempPairCompetition?.m1 ?? (idtResults || striderPairResults).m1?.competition, `Left (Forward) Primer Equilibrium${tempSuffix}`)}
+                                                                {renderCompetitionStrip(tempPairCompetition?.m2 ?? (idtResults || striderPairResults).m2?.competition, `Right (Reverse) Primer Equilibrium${tempSuffix}`)}
+                                                            </>
+                                                        );
+                                                    })()}
                                                 </div>
                                                 <div className="grid grid-cols-1 gap-6">
                                                     {renderResultCard("Hetero-Dimers", (idtResults || striderPairResults).pairwise, 5, 0, { grid: true })}

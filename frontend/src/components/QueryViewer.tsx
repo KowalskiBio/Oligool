@@ -163,6 +163,13 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
     const [striderResults, setStriderResults] = useState<IdtData | null>(null);
     const [striderAnalyzedSeqs, setStriderAnalyzedSeqs] = useState<{ p1: string; p2: string } | null>(null);
 
+    // Equilibrium-strip temperature. 25 (the analysis reference) means "use the
+    // panel's own solve"; any other value triggers a debounced refetch.
+    const [equilibriumTempInput, setEquilibriumTempInput] = useState('25');
+    const [tempCompetition, setTempCompetition] = useState<{ m1: CompetitionResult | null; m2: CompetitionResult | null } | null>(null);
+    const [isTempSolving, setIsTempSolving] = useState(false);
+    const tempCompRunRef = useRef(0);
+
     // Controls - Shift Logic
     const [moligo1Shift, setMoligo1Shift] = useState(() => Number(localStorage.getItem('moligo1_shift')) || 0);
     const [moligo2Shift, setMoligo2Shift] = useState(() => Number(localStorage.getItem('moligo2_shift')) || 0);
@@ -236,6 +243,46 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
     const [showAdvanced, setShowAdvanced] = useState(false);
     const [_paramsNotMet, setParamsNotMet] = useState(false); // kept for future warning UI
     const [isAutoSearchNeeded, setIsAutoSearchNeeded] = useState(true);
+
+    // Re-solve the equilibrium strips at the user's temperature via
+    // /strider/competition. Structures and ΔG cards stay at 25 °C.
+    useEffect(() => {
+        const seqs = striderAnalyzedSeqs || idtAnalyzedSeqs;
+        const t = parseFloat(equilibriumTempInput);
+        if (!seqs || !(striderResults || idtResults) || !isFinite(t) || t === 25) {
+            setTempCompetition(null);
+            return;
+        }
+        const runId = ++tempCompRunRef.current;
+        const timer = setTimeout(async () => {
+            setIsTempSolving(true);
+            try {
+                const res = await fetch(API_BASE + '/strider/competition', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        p1_seq: seqs.p1,
+                        p2_seq: seqs.p2,
+                        mg_conc: Number(idtAdvancedParams.mg_conc),
+                        mv_conc: Number(idtAdvancedParams.mv_conc),
+                        dntp_conc: Number(idtAdvancedParams.dntp_conc),
+                        oligo_conc: Number(idtAdvancedParams.oligo_conc),
+                        temp: t,
+                        parameter_set: idtCredentials?.parameterSet || 'mathews2004-dna',
+                    })
+                });
+                if (!res.ok) return;
+                const data = await res.json();
+                if (runId === tempCompRunRef.current) {
+                    setTempCompetition({ m1: data.m1?.competition ?? null, m2: data.m2?.competition ?? null });
+                }
+            } catch (err) {
+                console.error(err);
+            } finally { if (runId === tempCompRunRef.current) setIsTempSolving(false); }
+        }, 500);
+        return () => clearTimeout(timer);
+    }, [equilibriumTempInput, striderAnalyzedSeqs, idtAnalyzedSeqs, striderResults, idtResults, idtAdvancedParams, idtCredentials?.parameterSet, API_BASE]);
+
     const lastShiftsApplied = useRef({ s1: 0, s2: 0 });
     const prevDataRef = useRef(data);
     const fixedContextRef = useRef<{ fullSeq: string; gappedSeq: string; start: number; end: number; offset: number } | null>(null);
@@ -2005,14 +2052,14 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
         <div className={`grid grid-cols-1 md:grid-cols-3 gap-3 transition-opacity duration-200 ${isLoading ? 'opacity-40' : 'opacity-100'}`}>
             <div className="bg-zinc-50 dark:bg-zinc-900/40 p-3 rounded border border-zinc-100 dark:border-zinc-800">
                 <div className="text-[13px] font-bold text-zinc-500 uppercase mb-1">Oligo 2 Stability</div>
-                {renderCompetitionStrip(results.m2.competition)}
+                {renderCompetitionStrip(tempCompetition?.m2 ?? results.m2.competition)}
                 {renderIdtCard("Hairpin ΔG", results.m2.hairpin, seqs?.p2 ?? primers?.p2.seq)}
                 {renderIdtCard("Self-Dimer ΔG", results.m2.self_dimer, seqs?.p2 ?? primers?.p2.seq)}
                 <div className="text-[13px] text-zinc-400 mt-1 italic">kcal/mol</div>
             </div>
             <div className="bg-zinc-50 dark:bg-zinc-900/40 p-3 rounded border border-zinc-100 dark:border-zinc-800">
                 <div className="text-[13px] font-bold text-zinc-500 uppercase mb-1">Oligo 1 Stability</div>
-                {renderCompetitionStrip(results.m1.competition)}
+                {renderCompetitionStrip(tempCompetition?.m1 ?? results.m1.competition)}
                 {renderIdtCard("Hairpin ΔG", results.m1.hairpin, seqs?.p1 ?? primers?.p1.seq)}
                 {renderIdtCard("Self-Dimer ΔG", results.m1.self_dimer, seqs?.p1 ?? primers?.p1.seq)}
                 <div className="text-[13px] text-zinc-400 mt-1 italic">kcal/mol</div>
@@ -2947,6 +2994,23 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                                         </button>
                                     )}
                                     {isIdtLoading && <div className="animate-pulse text-[13px] text-blue-700 dark:text-blue-400 font-medium">Analyzing with IDT API...</div>}
+                                    <label
+                                        className="flex items-center gap-1 text-[13px] text-zinc-500 dark:text-zinc-400 whitespace-nowrap"
+                                        title="Temperature for the equilibrium strips (Free / Hairpin / dimer split). Structure cards and ΔG values stay at the 25 °C reference."
+                                    >
+                                        Equilibrium at
+                                        <input
+                                            type="number"
+                                            min={0}
+                                            max={99}
+                                            step={1}
+                                            value={equilibriumTempInput}
+                                            onChange={e => setEquilibriumTempInput(e.target.value)}
+                                            className="input w-16 px-1.5 py-0.5 text-[13px] font-mono tabular-nums"
+                                        />
+                                        °C
+                                        {isTempSolving && <div className="w-3 h-3 border-2 border-zinc-300 dark:border-zinc-600 border-t-zinc-600 dark:border-t-zinc-300 rounded-full animate-spin" />}
+                                    </label>
                                 </div>
                             </div>
                             {idtError && <div className="text-[13px] text-red-500 bg-red-50 dark:bg-red-900/20 p-2 rounded mb-3 border border-red-100 dark:border-red-900/30">Error: {idtError}</div>}
