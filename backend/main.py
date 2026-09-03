@@ -1734,6 +1734,8 @@ class FlankingPrimerParams(BaseModel):
     manual_left_end: Optional[int] = None
     manual_right_start: Optional[int] = None
     manual_right_end: Optional[int] = None
+    # Excluded Regions (Optional): absolute [start, end) ranges primers must not overlap
+    excluded_regions: List[List[int]] = []
     engine: Literal["primer3", "strider"] = "primer3"
 
 
@@ -1871,6 +1873,22 @@ def design_flanking_primers(req: FlankingPrimerParams):
         "dna_conc":  req.dna_conc,
     }
 
+    excluded = sorted(
+        (int(r[0]), int(r[1])) for r in req.excluded_regions if len(r) == 2 and int(r[1]) > int(r[0])
+    )
+
+    def _is_excluded(start, end):
+        return any(start < xe and xs < end for xs, xe in excluded)
+
+    def _p3_excluded_region(win_start, win_end):
+        regions = []
+        for xs, xe in excluded:
+            s = max(xs, win_start)
+            e = min(xe, win_end)
+            if e > s:
+                regions.append([s - win_start, e - s])
+        return regions or None
+
     overlap_buffer_factor = 5
     primers_request_count = req.num_return * overlap_buffer_factor
 
@@ -1972,8 +1990,10 @@ def design_flanking_primers(req: FlankingPrimerParams):
                     therm_kwargs=therm, num_candidates=25)
         results["forward"]["explain"] = f"strider: {sres['considered']} considered, {sres['ok_tm']} ok tm, {sres['folded']} folded"
         for cand in sres["candidates"][:primers_request_count]:
-            a = _analyze(cand["sequence"])
             abs_start = up_start + cand["start"]
+            if _is_excluded(abs_start, abs_start + cand["length"]):
+                continue
+            a = _analyze(cand["sequence"])
             a["interval"] = [abs_start, abs_start + cand["length"]]
             a["position"] = [cand["start"], cand["length"]]
             a["primer3"] = {
@@ -1989,10 +2009,12 @@ def design_flanking_primers(req: FlankingPrimerParams):
         up_args = dict(p3_global)
         up_args.update({"PRIMER_PICK_LEFT_PRIMER": 1, "PRIMER_PICK_RIGHT_PRIMER": 0,
                         "PRIMER_PRODUCT_SIZE_RANGE": [[50, 50000]]})
-        up_res = primer3.design_primers(
-            {"SEQUENCE_ID": "upstream", "SEQUENCE_TEMPLATE": upstream,
-             "SEQUENCE_INCLUDED_REGION": [0, len(upstream)]},
-            up_args)
+        up_seq_args = {"SEQUENCE_ID": "upstream", "SEQUENCE_TEMPLATE": upstream,
+                       "SEQUENCE_INCLUDED_REGION": [0, len(upstream)]}
+        up_exclude = _p3_excluded_region(up_start, up_start + len(upstream))
+        if up_exclude:
+            up_seq_args["SEQUENCE_EXCLUDE_REGION"] = up_exclude
+        up_res = primer3.design_primers(up_seq_args, up_args)
         n_l = int(up_res.get("PRIMER_LEFT_NUM_RETURNED", 0) or 0)
         results["forward"]["num_returned"] = n_l
         results["forward"]["explain"] = up_res.get("PRIMER_LEFT_EXPLAIN", "")
@@ -2004,6 +2026,8 @@ def design_flanking_primers(req: FlankingPrimerParams):
                 start, length = int(pos[0]), int(pos[1])
                 # Convert local upstream coords → absolute coords in full_seq
                 abs_start = up_start + start
+                if _is_excluded(abs_start, abs_start + length):
+                    continue
                 a["interval"] = [abs_start, abs_start + length]
                 a["position"] = [start, length]
             a["primer3"] = {
@@ -2026,8 +2050,10 @@ def design_flanking_primers(req: FlankingPrimerParams):
                     therm_kwargs=therm, num_candidates=25)
         results["reverse"]["explain"] = f"strider: {sres['considered']} considered, {sres['ok_tm']} ok tm, {sres['folded']} folded"
         for cand in sres["candidates"][:primers_request_count]:
-            a = _analyze(cand["sequence"])
             abs_start = down_start + cand["start"]
+            if _is_excluded(abs_start, abs_start + cand["length"]):
+                continue
+            a = _analyze(cand["sequence"])
             a["interval"] = [abs_start, abs_start + cand["length"]]
             a["position"] = [cand["start"], cand["length"]]
             a["primer3"] = {
@@ -2043,10 +2069,12 @@ def design_flanking_primers(req: FlankingPrimerParams):
         down_args = dict(p3_global)
         down_args.update({"PRIMER_PICK_LEFT_PRIMER": 0, "PRIMER_PICK_RIGHT_PRIMER": 1,
                           "PRIMER_PRODUCT_SIZE_RANGE": [[50, 50000]]})
-        down_res = primer3.design_primers(
-            {"SEQUENCE_ID": "downstream", "SEQUENCE_TEMPLATE": downstream,
-             "SEQUENCE_INCLUDED_REGION": [0, len(downstream)]},
-            down_args)
+        down_seq_args = {"SEQUENCE_ID": "downstream", "SEQUENCE_TEMPLATE": downstream,
+                         "SEQUENCE_INCLUDED_REGION": [0, len(downstream)]}
+        down_exclude = _p3_excluded_region(down_start, down_start + len(downstream))
+        if down_exclude:
+            down_seq_args["SEQUENCE_EXCLUDE_REGION"] = down_exclude
+        down_res = primer3.design_primers(down_seq_args, down_args)
         n_r = int(down_res.get("PRIMER_RIGHT_NUM_RETURNED", 0) or 0)
         results["reverse"]["num_returned"] = n_r
         results["reverse"]["explain"] = down_res.get("PRIMER_RIGHT_EXPLAIN", "")
@@ -2058,6 +2086,8 @@ def design_flanking_primers(req: FlankingPrimerParams):
                 right_end, length = int(pos[0]), int(pos[1])
                 local_start = right_end - length + 1
                 abs_start = down_start + local_start
+                if _is_excluded(abs_start, abs_start + length):
+                    continue
                 a["interval"] = [abs_start, abs_start + length]
                 a["position"] = [local_start, length]
             a["primer3"] = {
