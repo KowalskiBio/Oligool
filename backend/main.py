@@ -1664,6 +1664,44 @@ def analyze_strider_oligos(request: StriderAnalyzeRequest):
     )
 
 
+class StriderCompetitionRequest(BaseModel):
+    p1_seq: str
+    p2_seq: Optional[str] = None
+    mg_conc: float = 10.0
+    mv_conc: float = 50.0
+    dntp_conc: float = 0.8
+    oligo_conc: float = 0.25
+    temp: float = 25.0
+    parameter_set: str = "mathews2004-dna"
+
+
+@app.post("/strider/competition")
+def analyze_strider_competition(request: StriderCompetitionRequest):
+    """Equilibrium population split recomputed at an arbitrary temperature.
+
+    Runs the same Strider pipeline as /strider/analyze (folding, ensemble
+    ΔGs, mass-action solve) at ``temp`` °C and returns only the competition
+    dicts, so the UI can preview the equilibrium strips at e.g. the annealing
+    temperature while the rest of the panel stays anchored at 25 °C.
+    """
+    result = _run_strider_analysis(
+        p1_seq=request.p1_seq,
+        p2_seq=request.p2_seq,
+        mv_conc=request.mv_conc,
+        mg_conc=request.mg_conc,
+        dntp_conc=request.dntp_conc,
+        oligo_conc=request.oligo_conc,
+        base_temp=request.temp,
+        parameter_set=request.parameter_set,
+    )
+    m1 = result.get("m1") or {}
+    m2 = result.get("m2") or {}
+    return {
+        "m1": {"competition": m1.get("competition")},
+        "m2": {"competition": m2.get("competition")},
+    }
+
+
 # ────────────────────────────────────────────────────────────────
 # Flanking Primers Design  (ported from Primerool)
 # ────────────────────────────────────────────────────────────────
