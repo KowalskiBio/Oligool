@@ -35,11 +35,15 @@ interface MSAViewerProps {
     primers?: { p1: { start: number, end: number }, p2: { start: number, end: number } } | null;
     /** Flanking primers designed in the lower panel, drawn as distinct bars in the minimap */
     flankingPrimers?: { fwd: { start: number; end: number } | null; rev: { start: number; end: number } | null } | null;
+    /** Excluded (forbidden) regions in gapped column coords, drawn in red in the ruler and minimap */
+    excludedRegions?: { start: number; end: number }[] | null;
+    /** When true, shift+left-drag marks an exclusion region instead of a normal selection */
+    enableExcludeSelect?: boolean;
     isDarkMode?: boolean;
     /** When set, MSA will zoom/pan to show these global gapped column indices */
     navigateTarget?: { colStart: number; colEnd: number; ts: number } | null;
     /** Called when user drag-selects a region in the GC%/MSA header for oligo placement */
-    onOligoRegionSelect?: (startCol: number, endCol: number) => void;
+    onOligoRegionSelect?: (startCol: number, endCol: number, opts?: { excluded?: boolean }) => void;
     /** Called when user clicks a clean region proposed by autofind: zoom to that region */
     onAutofindRegionSelect?: (startCol: number, endCol: number) => void;
     /** Called when user clicks on a flanking primer bar in the minimap: zoom to that primer */
@@ -83,7 +87,7 @@ const MINIMAP_HEIGHT = MINIMAP_GC_H + MINIMAP_RULER_H + 50 + MINIMAP_HANDLE_H;
 const MAIN_GC_TRACK_H = 40;
 const MAIN_MSA_TRACK_H = 30;
 
-const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVisibleQueryChange, primers, flankingPrimers, isDarkMode, navigateTarget, onOligoRegionSelect, onAutofindRegionSelect, onFlankingPrimerClick, selectedAccessions, onSelectionChange, restoredRegion, showAutofindUI = true, autofindTreatIndelsAsMismatches = false, onAutofindTreatIndelsAsMismatchesChange, blastRid = '', hitRanges = {}, maxHeight }, ref) => {
+const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVisibleQueryChange, primers, flankingPrimers, excludedRegions, enableExcludeSelect, isDarkMode, navigateTarget, onOligoRegionSelect, onAutofindRegionSelect, onFlankingPrimerClick, selectedAccessions, onSelectionChange, restoredRegion, showAutofindUI = true, autofindTreatIndelsAsMismatches = false, onAutofindTreatIndelsAsMismatchesChange, blastRid = '', hitRanges = {}, maxHeight }, ref) => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const hoverOverlayRef = useRef<HTMLCanvasElement>(null);
     const minimapRef = useRef<HTMLCanvasElement>(null);
@@ -127,7 +131,7 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
 
     const [labelWidth, setLabelWidth] = useState(140);
     const [isResizingLabel, setIsResizingLabel] = useState(false);
-    const [oligoSelection, setOligoSelection] = useState<{ startCol: number; endCol: number; mode?: 'select' | 'zoom' } | null>(null);
+    const [oligoSelection, setOligoSelection] = useState<{ startCol: number; endCol: number; mode?: 'select' | 'zoom' | 'exclude' } | null>(null);
 
     const [viewFraction, setViewFraction] = useState(1);
     const [viewMode, setViewMode] = useState<'bars' | 'letters'>('bars');
@@ -337,6 +341,13 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
             rev: flankingPrimers.rev ? gappedRangeToAnchor(anchorCols, flankingPrimers.rev.start, flankingPrimers.rev.end) : null,
         };
     }, [flankingPrimers, anchorCols]);
+
+    const excludedRegionsA = useMemo(() => {
+        if (!excludedRegions || excludedRegions.length === 0) return null;
+        return excludedRegions
+            .filter(r => r.end > r.start)
+            .map(r => gappedRangeToAnchor(anchorCols, r.start, r.end));
+    }, [excludedRegions, anchorCols]);
 
     const restoredA = useMemo(() => {
         if (!restoredRegion) return null;
@@ -754,6 +765,17 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
             }
         }
 
+        // Excluded regions, drawn as red bars above the flanking primer bars
+        if (excludedRegionsA) {
+            for (const ex of excludedRegionsA) {
+                if (ex.end <= ex.start) continue;
+                const xx = MINIMAP_LABEL_W + (ex.start / anchorLen) * mmSeqW;
+                const xw = Math.max(2, ((ex.end - ex.start) / anchorLen) * mmSeqW);
+                ctx.fillStyle = '#ef4444'; // red-500
+                ctx.fillRect(xx, MINIMAP_GC_H, xw, 3);
+            }
+        }
+
         if (restoredA && restoredA.start < restoredA.end) {
             const rx = MINIMAP_LABEL_W + Math.max(0, (restoredA.start / anchorLen) * mmSeqW);
             const rw = Math.max(2, ((restoredA.end - restoredA.start) / anchorLen) * mmSeqW);
@@ -768,7 +790,7 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
         ctx.fillRect(MINIMAP_LABEL_W - 1, 0, 1, MINIMAP_HEIGHT);
 
         staticMinimapDrawnRef.current = true;
-    }, [sequences, querySeq, anchorLen, anchorCols, insertEntries, availableWidth, gcContent, primersA, flankingPrimersA, isDark, restoredA, lightMatchBars]);
+    }, [sequences, querySeq, anchorLen, anchorCols, insertEntries, availableWidth, gcContent, primersA, flankingPrimersA, excludedRegionsA, isDark, restoredA, lightMatchBars]);
 
     const drawMinimap = useCallback(() => {
         const cvs = minimapRef.current;
@@ -1333,8 +1355,9 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
             if (selX2 > selX1) {
                 const trackH = MAIN_GC_TRACK_H + MAIN_MSA_TRACK_H;
                 const isZoomDrag = oligoSelection.mode === 'zoom';
-                const fillColor = isZoomDrag ? 'rgba(74, 222, 128, 0.25)' : 'rgba(251, 191, 36, 0.25)';
-                const strokeColor = isZoomDrag ? '#22c55e' : '#f59e0b';
+                const isExcludeDrag = oligoSelection.mode === 'exclude';
+                const fillColor = isZoomDrag ? 'rgba(74, 222, 128, 0.25)' : isExcludeDrag ? 'rgba(239, 68, 68, 0.25)' : 'rgba(251, 191, 36, 0.25)';
+                const strokeColor = isZoomDrag ? '#22c55e' : isExcludeDrag ? '#ef4444' : '#f59e0b';
                 ctx.fillStyle = fillColor;
                 ctx.fillRect(selX1, stickyY, selX2 - selX1, trackH);
                 ctx.strokeStyle = strokeColor;
@@ -1434,6 +1457,29 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
             }
         }
 
+        /* ── Excluded region markers in main ruler (red stripes) ── */
+        if (excludedRegionsA) {
+            for (const ex of excludedRegionsA) {
+                if (ex.end <= ex.start) continue;
+                const xx = labelWidth + ex.start * cellW - scrollLeft;
+                const xw = Math.max(2, (ex.end - ex.start) * cellW);
+                const xwC = Math.min(xw, labelWidth + seqAreaW - xx);
+                if (xwC <= 0) continue;
+                ctx.fillStyle = 'rgba(239, 68, 68, 0.2)';
+                ctx.fillRect(xx, rulerY, xwC, RULER_HEIGHT - 4);
+                ctx.fillStyle = '#ef4444';
+                ctx.fillRect(xx, rulerY, xwC, 3);
+                ctx.fillRect(xx, rulerY + RULER_HEIGHT - 7, xwC, 3);
+                if (xwC > 24) {
+                    ctx.fillStyle = '#dc2626';
+                    ctx.font = 'bold 8px ui-monospace, SFMono-Regular, monospace';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText('EXCL', xx + xwC / 2, rulerY + RULER_HEIGHT / 2);
+                }
+            }
+        }
+
         ctx.restore(); /* end clip */
 
         /* ── labels (drawn OUTSIDE clip so they're never obscured) ── */
@@ -1506,7 +1552,7 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
             hoverCvs.style.width = `${availableWidth}px`;
             hoverCvs.style.height = `${canvasH}px`;
         }
-    }, [sequences, querySeq, scrollLeft, scrollTop, cellW, seqAreaW, availableWidth, totalH, anchorLen, anchorCols, insertEntries, insertsByRow, viewMode, primersA, flankingPrimersA, gcContent, isDarkMode, oligoSelection, autofindBoundaryRow, restoredA, lightMatchBars]);
+    }, [sequences, querySeq, scrollLeft, scrollTop, cellW, seqAreaW, availableWidth, totalH, anchorLen, anchorCols, insertEntries, insertsByRow, viewMode, primersA, flankingPrimersA, excludedRegionsA, gcContent, isDarkMode, oligoSelection, autofindBoundaryRow, restoredA, lightMatchBars]);
 
     /* ── lightweight hover overlay (draws only a thin line) ── */
     const drawHoverOverlay = useCallback(() => {
@@ -1776,7 +1822,8 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
         const startClientX = e.clientX;
         const mouseX = mouseXCanvas - labelWidth;
         const startC = Math.max(0, Math.min(anchorLen - 1, Math.floor((scrollLeft + mouseX) / cellW)));
-        const dragMode: 'select' | 'zoom' = e.button === 2 ? 'zoom' : 'select';
+        const excludeDrag = e.button === 0 && e.shiftKey && (enableExcludeSelect ?? false);
+        const dragMode: 'select' | 'zoom' | 'exclude' = e.button === 2 ? 'zoom' : (excludeDrag ? 'exclude' : 'select');
         setOligoSelection({ startCol: startC, endCol: startC, mode: dragMode });
         suppressClickAfterDragRef.current = false;
 
@@ -1810,7 +1857,7 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
         }
 
         // ── LEFT BUTTON: primer click or oligo region selection ──────────
-        const onMove = (ev: MouseEvent) => setOligoSelection({ startCol: startC, endCol: colAt(ev.clientX), mode: 'select' });
+        const onMove = (ev: MouseEvent) => setOligoSelection({ startCol: startC, endCol: colAt(ev.clientX), mode: excludeDrag ? 'exclude' : 'select' });
         const onUp = (ev: MouseEvent) => {
             document.removeEventListener('mousemove', onMove);
             document.removeEventListener('mouseup', onUp);
@@ -1841,14 +1888,16 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
                 const s = Math.min(prev.startCol, prev.endCol);
                 const e2 = Math.max(prev.startCol, prev.endCol);
                 // oligoSelection is tracked in anchor indices; consumers expect gapped columns
-                if (e2 - s >= 5 && onOligoRegionSelect) onOligoRegionSelect(anchorCols[s], anchorCols[e2]);
+                if (e2 - s >= 5 && onOligoRegionSelect) {
+                    onOligoRegionSelect(anchorCols[s], anchorCols[e2], prev.mode === 'exclude' ? { excluded: true } : undefined);
+                }
                 return null; // clear rectangle after committing
             });
         };
         document.addEventListener('mousemove', onMove);
         document.addEventListener('mouseup', onUp);
         e.preventDefault();
-    }, [labelWidth, anchorLen, anchorCols, scrollLeft, cellW, availableWidth, onOligoRegionSelect, flankingPrimers, flankingPrimersA, onFlankingPrimerClick]);
+    }, [labelWidth, anchorLen, anchorCols, scrollLeft, cellW, availableWidth, onOligoRegionSelect, flankingPrimers, flankingPrimersA, onFlankingPrimerClick, enableExcludeSelect]);
 
     const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
         if (suppressClickAfterDragRef.current) {
