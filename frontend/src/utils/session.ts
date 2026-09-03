@@ -130,6 +130,8 @@ export interface FlankingPanelState {
         leftStart: number | null; leftEnd: number | null;
         rightStart: number | null; rightEnd: number | null;
     };
+    /** Shift-dragged regions primers must not overlap, as [start, end) raw-seq coords. */
+    exclusions?: [number, number][];
     result: FlankingDesignResult | null;
     /** The candidates the user clicked "Use" on (null when unused). */
     selFwd: FlankingDesignedPrimer | null;
@@ -283,6 +285,7 @@ export const FLANKING_PANEL_DEFAULTS: FlankingPanelState = {
     },
     showAdv: false,
     manual: { leftStart: null, leftEnd: null, rightStart: null, rightEnd: null },
+    exclusions: [],
     result: null,
     selFwd: null,
     selRev: null,
@@ -346,6 +349,12 @@ function normalizeFlankingPanel(panel: unknown): FlankingPanelState | null {
             rightStart: numOrNull(manual.rightStart),
             rightEnd: numOrNull(manual.rightEnd),
         },
+        exclusions: Array.isArray(p.exclusions)
+            ? p.exclusions
+                .filter((r: unknown): r is [number, number] =>
+                    Array.isArray(r) && r.length === 2 && r.every((n) => typeof n === 'number' && Number.isFinite(n) && n >= 0))
+                .map((r: [number, number]) => [Math.floor(r[0]), Math.ceil(r[1])])
+            : [],
         result: (p.result && typeof p.result === 'object' ? p.result : null) as FlankingDesignResult | null,
         selFwd: normalizeFlankingPrimer(p.selFwd),
         selRev: normalizeFlankingPrimer(p.selRev),

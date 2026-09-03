@@ -132,6 +132,32 @@ export default function FlankingPrimersPanel({
     const [manualRightStart, setManualRightStart] = useState<number | null>(restoredState?.manual.rightStart ?? null);
     const [manualRightEnd, setManualRightEnd] = useState<number | null>(restoredState?.manual.rightEnd ?? null);
 
+    // Regions the user marked as forbidden for primer design (shift+drag or the
+    // Exclude toggle). Raw-seq coordinates, [start, end).
+    const [excludedRegions, setExcludedRegions] = useState<[number, number][]>(restoredState?.exclusions ?? []);
+    const [excludeMode, setExcludeMode] = useState(false);
+    const shiftDownRef = useRef(false);
+
+    const addExclusion = useCallback((startRaw: number, endRaw: number) => {
+        if (!(endRaw > startRaw)) return;
+        setExcludedRegions(prev => {
+            let s = startRaw, e = endRaw;
+            const kept: [number, number][] = [];
+            for (const [xs, xe] of prev) {
+                if (xs <= e && s <= xe) {
+                    s = Math.min(s, xs);
+                    e = Math.max(e, xe);
+                } else {
+                    kept.push([xs, xe]);
+                }
+            }
+            kept.push([s, e]);
+            kept.sort((a, b) => a[0] - b[0]);
+            return kept;
+        });
+        setExcludeMode(false);
+    }, []);
+
     const handleRegionSelect = (startCol: number, endCol: number) => {
         const mStart = Math.min(p1Start, p2Start);
         const mEnd = Math.max(p1End, p2End);
@@ -148,7 +174,7 @@ export default function FlankingPrimersPanel({
     const handleMouseUp = () => {
         const sel = window.getSelection();
         if (!sel || sel.isCollapsed) return;
-        
+
         const getIdx = (node: Node | null) => {
             if (!node) return null;
             const element = node.nodeType === Node.TEXT_NODE ? node.parentElement : node as HTMLElement;
@@ -162,7 +188,13 @@ export default function FlankingPrimersPanel({
         if (anchorIdx !== null && focusIdx !== null) {
             const startCol = Math.min(anchorIdx, focusIdx);
             const endCol = Math.max(anchorIdx, focusIdx) + 1; // inclusive
-            handleRegionSelect(startCol, endCol);
+            const wasShift = shiftDownRef.current;
+            shiftDownRef.current = false;
+            if (wasShift || excludeMode) {
+                addExclusion(startCol, endCol);
+            } else {
+                handleRegionSelect(startCol, endCol);
+            }
             sel.removeAllRanges();
         }
     };
@@ -202,10 +234,14 @@ export default function FlankingPrimersPanel({
         return manual;
     };
 
+    // Latest-run guard: an aborted design (superseded, or torn down by an
+    // effect cleanup with no successor) must not leave loading stuck on.
+    const designRunRef = useRef(0);
     const design = async (signal?: AbortSignal, manual: ManualRegionCoords = {
         leftStart: manualLeftStart, leftEnd: manualLeftEnd,
         rightStart: manualRightStart, rightEnd: manualRightEnd,
     }) => {
+        const runId = ++designRunRef.current;
         setLoading(true); setError(''); setResult(null); setSelFwd(null); setSelRev(null);
         try {
             const res = await fetch(API + '/flanking_primers/design', {
@@ -222,6 +258,7 @@ export default function FlankingPrimersPanel({
                     mv_conc: mvConc, dv_conc: dvConc, dntp_conc: dntpConc, dna_conc: dnaConc,
                     manual_left_start: manual.leftStart, manual_left_end: manual.leftEnd,
                     manual_right_start: manual.rightStart, manual_right_end: manual.rightEnd,
+                    excluded_regions: excludedRegions,
                 }),
             });
             if (!res.ok) { const e = await res.json(); throw new Error(e.detail || 'Design failed'); }
@@ -229,7 +266,7 @@ export default function FlankingPrimersPanel({
         } catch (e: any) {
             if (e?.name === 'AbortError') return;
             setError(e.message);
-        } finally { if (!signal?.aborted) setLoading(false); }
+        } finally { if (designRunRef.current === runId) setLoading(false); }
     };
 
     // Auto-design when the MOLigo bounds change from user dragging it in the upper viewer.
@@ -237,12 +274,16 @@ export default function FlankingPrimersPanel({
     // pointer settles and abort any in-flight request before issuing a new one.
     const prevOligoRef = useRef({ start: oligoStart, end: oligoEnd });
     const prevEngineRef = useRef(searchEngine);
+    const prevExclusionsRef = useRef<string>(JSON.stringify(restoredState?.exclusions ?? []));
     const designAbortRef = useRef<AbortController | null>(null);
     const designDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     useEffect(() => {
         const oligoChanged = prevOligoRef.current.start !== oligoStart || prevOligoRef.current.end !== oligoEnd;
         const engineChanged = prevEngineRef.current !== searchEngine;
-        if (!oligoChanged && !engineChanged) return;
+        const exclusionsKey = JSON.stringify(excludedRegions);
+        const exclusionsChanged = prevExclusionsRef.current !== exclusionsKey;
+        if (!oligoChanged && !engineChanged && !exclusionsChanged) return;
+        prevExclusionsRef.current = exclusionsKey;
         if (engineChanged) {
             setStriderResultsIndiv({});
             setIdtResultsIndiv({});
@@ -265,7 +306,7 @@ export default function FlankingPrimersPanel({
             design(ac.signal, manual);
         }, 300);
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [oligoStart, oligoEnd, searchEngine, manualLeftStart, manualLeftEnd, manualRightStart, manualRightEnd]);
+    }, [oligoStart, oligoEnd, searchEngine, manualLeftStart, manualLeftEnd, manualRightStart, manualRightEnd, excludedRegions]);
 
     // "Proceed with the Design" bumps redesignNonce: that click means "recalculate
     // around the oligo now", so it runs one design even when the bounds did not
@@ -292,132 +333,6 @@ export default function FlankingPrimersPanel({
         designAbortRef.current?.abort();
     }, []);
 
-    const designManual = async () => {
-        if (manualLeftStart === null && manualRightStart === null) {
-            setError("Select a manual region in the sequence below first.");
-            return;
-        }
-
-        setError('');
-        setLoading(true);
-
-        const revComp = (s: string) => {
-            const map: any = { A: 'T', T: 'A', C: 'G', G: 'C', a: 't', t: 'a', c: 'g', g: 'c' };
-            return s.split('').reverse().map(c => map[c] || c).join('');
-        };
-
-        const calcGC = (seq: string) => {
-            if (!seq) return 0;
-            const gc = seq.match(/[GCgc]/g)?.length || 0;
-            return Number(((gc / seq.length) * 100).toFixed(1));
-        };
-
-        const newResult: DesignResult = {
-            forward: { num_returned: 0, explain: "", primers: [] },
-            reverse: { num_returned: 0, explain: "", primers: [] },
-            pair_metrics: null
-        };
-
-        let fwdSeq: string | null = null;
-        let revSeq: string | null = null;
-        let fwdPrimerObj: DesignedPrimer | null = null;
-        let revPrimerObj: DesignedPrimer | null = null;
-
-        if (manualLeftStart !== null && manualLeftEnd !== null) {
-            fwdSeq = rawSeq.substring(manualLeftStart, manualLeftEnd).toUpperCase();
-            const gc = calcGC(fwdSeq);
-            fwdPrimerObj = {
-                sequence: fwdSeq,
-                length: fwdSeq.length,
-                interval: [manualLeftStart, manualLeftEnd] as [number, number],
-                tm: null, tm_strider: null, gc_percent: gc,
-                primer3: { tm: null, gc_percent: gc, self_any: null, self_end: null, hairpin_th: null },
-                hairpin: { structure_found: false, tm: null, dg: null },
-                homodimer: { structure_found: false, tm: null, dg: null }
-            };
-            newResult.forward.primers.push(fwdPrimerObj);
-            newResult.forward.num_returned = 1;
-        }
-
-        if (manualRightStart !== null && manualRightEnd !== null) {
-            const fwdStrandSeq = rawSeq.substring(manualRightStart, manualRightEnd).toUpperCase();
-            revSeq = revComp(fwdStrandSeq);
-            const gc = calcGC(revSeq);
-            revPrimerObj = {
-                sequence: revSeq,
-                length: revSeq.length,
-                interval: [manualRightStart, manualRightEnd] as [number, number],
-                tm: null, tm_strider: null, gc_percent: gc,
-                primer3: { tm: null, gc_percent: gc, self_any: null, self_end: null, hairpin_th: null },
-                hairpin: { structure_found: false, tm: null, dg: null },
-                homodimer: { structure_found: false, tm: null, dg: null }
-            };
-            newResult.reverse.primers.push(revPrimerObj);
-            newResult.reverse.num_returned = 1;
-        }
-
-        setResult(newResult);
-
-        if (fwdPrimerObj) {
-            setSelFwd(fwdPrimerObj);
-            setAnalyzingStriderIndiv(prev => ({ ...prev, [fwdPrimerObj.sequence]: true }));
-            analyzeStriderIndividual(fwdPrimerObj.sequence);
-        } else {
-            setSelFwd(null);
-        }
-
-        if (revPrimerObj) {
-            setSelRev(revPrimerObj);
-            setAnalyzingStriderIndiv(prev => ({ ...prev, [revPrimerObj.sequence]: true }));
-            analyzeStriderIndividual(revPrimerObj.sequence);
-        } else {
-            setSelRev(null);
-        }
-
-        try {
-            const analyses: Promise<void>[] = [];
-            if (fwdPrimerObj) {
-                analyses.push((async () => {
-                    const data = await analyzePrimerP3(fwdPrimerObj!.sequence);
-                    fwdPrimerObj!.tm = data.tm;
-                    fwdPrimerObj!.tm_strider = data.tm_strider ?? null;
-                    fwdPrimerObj!.gc_percent = data.gc_percent;
-                    fwdPrimerObj!.primer3 = {
-                        tm: data.tm,
-                        gc_percent: data.gc_percent,
-                        self_any: null,
-                        self_end: null,
-                        hairpin_th: data.hairpin.tm
-                    };
-                    fwdPrimerObj!.hairpin = data.hairpin;
-                    fwdPrimerObj!.homodimer = data.homodimer;
-                })());
-            }
-            if (revPrimerObj) {
-                analyses.push((async () => {
-                    const data = await analyzePrimerP3(revPrimerObj!.sequence);
-                    revPrimerObj!.tm = data.tm;
-                    revPrimerObj!.tm_strider = data.tm_strider ?? null;
-                    revPrimerObj!.gc_percent = data.gc_percent;
-                    revPrimerObj!.primer3 = {
-                        tm: data.tm,
-                        gc_percent: data.gc_percent,
-                        self_any: null,
-                        self_end: null,
-                        hairpin_th: data.hairpin.tm
-                    };
-                    revPrimerObj!.hairpin = data.hairpin;
-                    revPrimerObj!.homodimer = data.homodimer;
-                })());
-            }
-            await Promise.all(analyses);
-            setResult({ ...newResult });
-        } catch (e: any) {
-            setError(e.message || 'Primer3 Tm analysis failed');
-        } finally {
-            setLoading(false);
-        }
-    };
 
     // Nav target set when user clicks a flanking primer bar in the minimap
     const [primerNavTarget, setPrimerNavTarget] = useState<{ colStart: number; colEnd: number; ts: number } | null>(null);
@@ -469,9 +384,13 @@ export default function FlankingPrimersPanel({
     // Called when user drags a region in the lower bar of the main canvas.
     // Inlines the left/right oligo boundary check directly so p1Start/p2Start etc.
     // are always current (avoids stale-closure bug from calling handleRegionSelect).
-    const handleMSARegionSelect = useCallback((startCol: number, endCol: number) => {
+    const handleMSARegionSelect = useCallback((startCol: number, endCol: number, opts?: { excluded?: boolean }) => {
         const startRaw = mapFullGappedToRaw(startCol);
         const endRaw   = mapFullGappedToRaw(endCol);
+        if (opts?.excluded || excludeMode) {
+            addExclusion(Math.min(startRaw, endRaw), Math.max(startRaw, endRaw));
+            return;
+        }
         const mStart = Math.min(p1Start, p2Start);
         const mEnd   = Math.max(p1End,   p2End);
         if (endRaw <= mStart) {
@@ -481,7 +400,7 @@ export default function FlankingPrimersPanel({
             setManualRightStart(startRaw);
             setManualRightEnd(endRaw);
         }
-    }, [mapFullGappedToRaw, p1Start, p1End, p2Start, p2End]);
+    }, [mapFullGappedToRaw, p1Start, p1End, p2Start, p2End, excludeMode, addExclusion]);
 
     const [isAnalyzing, setIsAnalyzing] = useState(false);
     const [idtResults, setIdtResults] = useState<any>(restoredState?.pairIdtResults ?? null);
@@ -1022,6 +941,114 @@ export default function FlankingPrimersPanel({
         return Number(((seq.match(/[GCgc]/g)?.length || 0) / seq.length * 100).toFixed(1));
     };
 
+    // Largest sub-interval of [regionStart, regionEnd) not covered by any
+    // exclusion: the fallback single primer when the engine finds no candidate.
+    const largestAllowedInterval = useCallback((regionStart: number, regionEnd: number): [number, number] | null => {
+        const clipped = excludedRegions
+            .filter(([s, e]) => e > regionStart && s < regionEnd)
+            .map(([s, e]) => [Math.max(s, regionStart), Math.min(e, regionEnd)] as [number, number])
+            .sort((a, b) => a[0] - b[0]);
+        let best: [number, number] | null = null;
+        let cursor = regionStart;
+        for (const [xs, xe] of clipped) {
+            if (xs > cursor && (!best || xs - cursor > best[1] - best[0])) best = [cursor, xs];
+            cursor = Math.max(cursor, xe);
+        }
+        if (regionEnd > cursor && (!best || regionEnd - cursor > best[1] - best[0])) best = [cursor, regionEnd];
+        return best && best[1] > best[0] ? best : null;
+    }, [excludedRegions]);
+
+    const buildFixedPrimer = useCallback(async (interval: [number, number], side: 'fwd' | 'rev'): Promise<DesignedPrimer> => {
+        const fwdStrandSeq = rawSeq.substring(interval[0], interval[1]).toUpperCase();
+        const seq = side === 'fwd' ? fwdStrandSeq : revComp(fwdStrandSeq);
+        const gc = calcGCLocal(seq);
+        const p: DesignedPrimer = {
+            sequence: seq,
+            length: seq.length,
+            interval: [interval[0], interval[1]],
+            tm: null, tm_strider: null, gc_percent: gc,
+            primer3: { tm: null, gc_percent: gc, self_any: null, self_end: null, hairpin_th: null },
+            hairpin: { structure_found: false, tm: null, dg: null },
+            homodimer: { structure_found: false, tm: null, dg: null },
+        };
+        try {
+            const data = await analyzePrimerP3(seq);
+            p.tm = data.tm;
+            p.tm_strider = data.tm_strider ?? null;
+            p.gc_percent = data.gc_percent;
+            p.primer3 = { tm: data.tm, gc_percent: data.gc_percent, self_any: null, self_end: null, hairpin_th: data.hairpin.tm };
+            p.hairpin = data.hairpin;
+            p.homodimer = data.homodimer;
+        } catch (e: any) {
+            setError(e.message || 'Primer3 Tm analysis failed');
+        }
+        return p;
+    }, [rawSeq, revComp, analyzePrimerP3]);
+
+    const designManual = async () => {
+        if (manualLeftStart === null && manualRightStart === null) {
+            setError("Select a manual region in the sequence below first.");
+            return;
+        }
+
+        setError('');
+        setLoading(true);
+        setSelFwd(null);
+        setSelRev(null);
+
+        try {
+            const res = await fetch(API + '/flanking_primers/design', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    full_seq: rawSeq, oligo_start: oligoStart, oligo_end: oligoEnd,
+                    engine: searchEngine,
+                    flank_window: flankWindow,
+                    opt_size: optSize, min_size: minSize, max_size: maxSize,
+                    opt_tm: optTm, min_tm: minTm, max_tm: maxTm,
+                    min_gc: minGc, max_gc: maxGc, num_return: numReturn,
+                    mv_conc: mvConc, dv_conc: dvConc, dntp_conc: dntpConc, dna_conc: dnaConc,
+                    manual_left_start: manualLeftStart, manual_left_end: manualLeftEnd,
+                    manual_right_start: manualRightStart, manual_right_end: manualRightEnd,
+                    excluded_regions: excludedRegions,
+                }),
+            });
+            if (!res.ok) { const e = await res.json(); throw new Error(e.detail || 'Design failed'); }
+            const data: DesignResult = await res.json();
+
+            // No candidate fits (region too short, params too strict, exclusions
+            // in the way): fall back to a single fixed primer on the largest
+            // still-allowed stretch of the region.
+            const fwdFallback = data.forward.primers.length === 0 && manualLeftStart !== null && manualLeftEnd !== null
+                ? largestAllowedInterval(manualLeftStart, manualLeftEnd) : null;
+            const revFallback = data.reverse.primers.length === 0 && manualRightStart !== null && manualRightEnd !== null
+                ? largestAllowedInterval(manualRightStart, manualRightEnd) : null;
+
+            if (fwdFallback) {
+                data.forward.primers.push(await buildFixedPrimer(fwdFallback, 'fwd'));
+                data.forward.num_returned = 1;
+                data.forward.explain = 'No candidate passed the parameters: fixed primer from the allowed part of the region.';
+            }
+            if (revFallback) {
+                data.reverse.primers.push(await buildFixedPrimer(revFallback, 'rev'));
+                data.reverse.num_returned = 1;
+                data.reverse.explain = 'No candidate passed the parameters: fixed primer from the allowed part of the region.';
+            }
+            if (data.forward.primers.length === 0 && manualLeftStart !== null && !fwdFallback) {
+                data.forward.explain = 'No primers found: the region is fully covered by exclusions.';
+            }
+            if (data.reverse.primers.length === 0 && manualRightStart !== null && !revFallback) {
+                data.reverse.explain = 'No primers found: the region is fully covered by exclusions.';
+            }
+
+            setResult(data);
+        } catch (e: any) {
+            setError(e.message || 'Design failed');
+        } finally {
+            setLoading(false);
+        }
+    };
+
     // These must be above liveFwdInterval/liveRevInterval which reference them
     const fwdInterval = selFwd?.interval as [number, number] | undefined;
     const revInterval = selRev?.interval as [number, number] | undefined;
@@ -1252,6 +1279,11 @@ export default function FlankingPrimersPanel({
         };
     }, [activeFwd, activeRev, mapRawToFullGapped]);
 
+    const excludedRegionsForMSA = useMemo(() => {
+        if (excludedRegions.length === 0) return null;
+        return excludedRegions.map(([s, e]) => ({ start: mapRawToFullGapped(s), end: mapRawToFullGapped(e) }));
+    }, [excludedRegions, mapRawToFullGapped]);
+
     // Propagate the selection up to App (for the MSA highlight + session save).
     // Guard the FIRST emission: this panel remounts fresh on session load (its
     // parent QueryViewer is keyed by the import nonce), so without this guard the
@@ -1286,6 +1318,7 @@ export default function FlankingPrimersPanel({
             params: { flankWindow, optSize, minSize, maxSize, optTm, minTm, maxTm, minGc, maxGc, numReturn, mvConc, dvConc, dntpConc, dnaConc },
             showAdv,
             manual: { leftStart: manualLeftStart, leftEnd: manualLeftEnd, rightStart: manualRightStart, rightEnd: manualRightEnd },
+            exclusions: excludedRegions,
             result,
             selFwd: withResolvedInterval(selFwd, 'fwd'),
             selRev: withResolvedInterval(selRev, 'rev'),
@@ -1297,7 +1330,7 @@ export default function FlankingPrimersPanel({
             pairStriderResults: striderPairResults,
         });
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [onPanelStateChange, rawSeq, flankWindow, optSize, minSize, maxSize, optTm, minTm, maxTm, minGc, maxGc, numReturn, showAdv, mvConc, dvConc, dntpConc, dnaConc, manualLeftStart, manualLeftEnd, manualRightStart, manualRightEnd, result, selFwd, selRev, fwdName, revName, idtResultsIndiv, idtResults, striderResultsIndiv, striderPairResults]);
+    }, [onPanelStateChange, rawSeq, flankWindow, optSize, minSize, maxSize, optTm, minTm, maxTm, minGc, maxGc, numReturn, showAdv, mvConc, dvConc, dntpConc, dnaConc, manualLeftStart, manualLeftEnd, manualRightStart, manualRightEnd, excludedRegions, result, selFwd, selRev, fwdName, revName, idtResultsIndiv, idtResults, striderResultsIndiv, striderPairResults]);
 
     const gappedOligoPrimers = oligoPrimers ? {
         p1: { start: mapToGapped(oligoPrimers.p1.start), end: mapToGapped(oligoPrimers.p1.end) },
@@ -1377,12 +1410,14 @@ export default function FlankingPrimersPanel({
                                     const isP2 = i >= p2Start && i < p2End;
                                     const isFwd = liveFwdInterval && i >= liveFwdInterval[0] && i < liveFwdInterval[1];
                                     const isRev = liveRevInterval && i >= liveRevInterval[0] && i < liveRevInterval[1];
+                                    const isExcluded = excludedRegions.some(([s, e]) => i >= s && i < e);
 
                                     let cn = 'text-zinc-500 dark:text-zinc-400';
                                     let handlers: React.HTMLAttributes<HTMLSpanElement> = {};
 
                                     if (isP1) cn = 'bg-green-200 dark:bg-green-900/40 text-green-900 dark:text-green-300 font-medium';
                                     if (isP2) cn = 'bg-amber-200 dark:bg-amber-900/40 text-amber-900 dark:text-amber-300 font-medium';
+                                    if (isExcluded && !isFwd && !isRev) cn = 'bg-red-200 dark:bg-red-900/50 text-red-800 dark:text-red-300 font-medium';
 
                                     if (isFwd && liveFwdInterval) {
                                         const isEdge = i === liveFwdInterval[0] || i === liveFwdInterval[1] - 1;
@@ -1613,6 +1648,8 @@ export default function FlankingPrimersPanel({
                     alignment={alignment}
                     primers={gappedOligoPrimers}
                     flankingPrimers={flankingPrimersForMSA}
+                    excludedRegions={excludedRegionsForMSA}
+                    enableExcludeSelect
                     isDarkMode={isDarkMode}
                     navigateTarget={primerNavTarget ?? navigateTarget}
                     onFlankingPrimerClick={handleFlankingPrimerClick}
@@ -1647,8 +1684,9 @@ export default function FlankingPrimersPanel({
                             <span><span className="inline-block w-2.5 h-2.5 bg-green-400 rounded-sm mr-1 align-middle" />Oligo 1</span>
                             {selFwd && <span><span className="inline-block w-2.5 h-2.5 bg-emerald-400 rounded-sm mr-1 align-middle" />Left Flanking</span>}
                             {selRev && <span><span className="inline-block w-2.5 h-2.5 bg-accent-400 rounded-sm mr-1 align-middle" />Right Flanking</span>}
+                            {excludedRegions.length > 0 && <span><span className="inline-block w-2.5 h-2.5 bg-red-500 rounded-sm mr-1 align-middle" />Excluded</span>}
                         </div>
-                        <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-3 flex-wrap">
                             {ampliconBp != null && (
                                 <span
                                     className="font-mono tabular-nums text-emerald-600 dark:text-emerald-400 font-semibold whitespace-nowrap text-[13px] tracking-wider"
@@ -1657,9 +1695,18 @@ export default function FlankingPrimersPanel({
                                     Amplicon: {ampliconBp.toLocaleString()} bp
                                 </span>
                             )}
+                            <button
+                                onClick={() => setExcludeMode(v => !v)}
+                                title="Mark the next drag as an excluded region (primers will not use it). Same as holding Shift while dragging."
+                                className={`text-[13px] font-medium px-2 py-0.5 rounded-md border transition-colors ${excludeMode
+                                    ? 'bg-red-600 border-red-600 text-white'
+                                    : 'border-red-500/40 text-red-600 dark:text-red-400 hover:bg-red-500/10'}`}
+                            >
+                                {excludeMode ? 'Exclude: drag region' : 'Exclude region'}
+                            </button>
                             {/* Manual Region Indicators in the legend bar */}
-                            {(manualLeftStart !== null || manualRightStart !== null) && (
-                                <div className="flex gap-1 items-center">
+                            {(manualLeftStart !== null || manualRightStart !== null || excludedRegions.length > 0) && (
+                                <div className="flex gap-1 items-center flex-wrap">
                                     {manualLeftStart !== null && (
                                         <div className="bg-zinc-100 dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 text-[13px] font-medium px-2 py-0.5 rounded-md border border-zinc-200 dark:border-zinc-800 flex items-center gap-2 tabular-nums">
                                             <span className="status-dot bg-emerald-500" />
@@ -1674,6 +1721,13 @@ export default function FlankingPrimersPanel({
                                             <button onClick={() => { setManualRightStart(null); setManualRightEnd(null); }} className="hover:text-red-500">Clear</button>
                                         </div>
                                     )}
+                                    {excludedRegions.map(([s, e], i) => (
+                                        <div key={`${s}-${e}-${i}`} className="bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-300 text-[13px] font-medium px-2 py-0.5 rounded-md border border-red-200 dark:border-red-900 flex items-center gap-2 tabular-nums">
+                                            <span className="status-dot bg-red-500" />
+                                            <span>Excluded: {s}-{e}</span>
+                                            <button onClick={() => setExcludedRegions(prev => prev.filter((_, j) => j !== i))} className="hover:text-red-500">Clear</button>
+                                        </div>
+                                    ))}
                                 </div>
                             )}
                         </div>
@@ -1689,6 +1743,7 @@ export default function FlankingPrimersPanel({
                     
                     <div
                         ref={containerRef}
+                        onMouseDown={e => { shiftDownRef.current = e.shiftKey; }}
                         onMouseUp={handleMouseUp}
                         className="p-4 overflow-y-auto bg-white dark:bg-zinc-900 relative rounded-b-lg"
                     >
@@ -1766,6 +1821,7 @@ export default function FlankingPrimersPanel({
                                 ) : 'Design Flanking Primers'}
                             </button>
                             <button onClick={designManual} disabled={loading || (manualLeftStart === null && manualRightStart === null)}
+                                title="Design candidate primers inside the selected manual region(s), respecting excluded regions. Falls back to one fixed primer when no candidate fits."
                                 className="btn-secondary font-medium text-sm px-4 py-2.5 whitespace-nowrap disabled:cursor-not-allowed">
                                 Manual
                             </button>
@@ -2013,6 +2069,7 @@ export default function FlankingPrimersPanel({
                                         alignment={previewPrimer.msaAlignment}
                                         primers={gappedOligoPrimers}
                                         flankingPrimers={previewPrimer.msaFlanking}
+                                        excludedRegions={excludedRegionsForMSA}
                                         isDarkMode={isDarkMode}
                                         navigateTarget={previewPrimer.msaNav}
                                         showAutofindUI={false}
