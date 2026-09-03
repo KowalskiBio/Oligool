@@ -175,7 +175,7 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
     const [renamingOligo, setRenamingOligo] = useState<'oligo1' | 'oligo2' | null>(null);
 
     // Interactive Sequence Table Drag State
-    const [dragState, setDragState] = useState<{ id: 'p1' | 'p2', type: 'move' | 'left' | 'right', startX: number, deltaChars: number, initShift1: number, initShift2: number, initLen: number } | null>(null);
+    const [dragState, setDragState] = useState<{ id: 'p1' | 'p2', type: 'move' | 'left' | 'right' | 'middle', startX: number, deltaChars: number, initShift1: number, initShift2: number, initLen: number } | null>(null);
     const containerRef = useRef<HTMLDivElement>(null);
     const charWidthRef = useRef<number>(7); // Approximation of monospace char width in px
     const [seqLineLength, setSeqLineLength] = useState(120);
@@ -1091,7 +1091,7 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
     if (!data) return null;
     const rawSeq = data.seq.replace(/-/g, '');
 
-    const handleSeqMouseDown = (e: React.MouseEvent, id: 'p1' | 'p2', type: 'move' | 'left' | 'right') => {
+    const handleSeqMouseDown = (e: React.MouseEvent, id: 'p1' | 'p2', type: 'move' | 'left' | 'right' | 'middle') => {
         e.preventDefault();
         e.stopPropagation();
 
@@ -1146,6 +1146,17 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                         }
                         const { id, type } = dragState;
                         if (type === 'move') { p1S += D; p1E += D; p2S += D; p2E += D; }
+                        else if (type === 'middle') {
+                            // Seam drag: junction slides, outer edges (p2S, p1E) stay fixed.
+                            // Clamp D by both length limits (10-60 nt each) and sequence
+                            // bounds so both edges always move by the same amount.
+                            const p2Len = p2E - p2S;
+                            const p1Len = p1E - p1S;
+                            const dLo = Math.max(10 - p2Len, p1Len - 60, -p1S);
+                            const dHi = Math.min(60 - p2Len, p1Len - 10, fs.length - p2E);
+                            const dm = Math.max(dLo, Math.min(dHi, D));
+                            p2E += dm; p1S += dm;
+                        }
                         else if (id === 'p1') {
                             if (type === 'left') p1S += D; else p1E += D;
                             if (p1E - p1S < 10) { if (type === 'left') p1S = p1E - 10; else p1E = p1S + 10; }
@@ -1227,6 +1238,14 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
         if (dragState.type === 'move') {
             liveP1Start += D; liveP1End += D;
             liveP2Start += D; liveP2End += D;
+        } else if (dragState.type === 'middle') {
+            // Same clamps as the commit path so the preview never jumps on release.
+            const p2Len = liveP2End - liveP2Start;
+            const p1Len = liveP1End - liveP1Start;
+            const dLo = Math.max(10 - p2Len, p1Len - 60, -liveP1Start);
+            const dHi = Math.min(60 - p2Len, p1Len - 10, fullSeq.length - liveP2End);
+            const dm = Math.max(dLo, Math.min(dHi, D));
+            liveP2End += dm; liveP1Start += dm;
         } else if (dragState.id === 'p1') {
             if (dragState.type === 'left') { liveP1Start += D; }
             else if (dragState.type === 'right') { liveP1End += D; }
@@ -1509,7 +1528,7 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
         }
 
         return (
-            <div className="font-mono text-[13px] leading-relaxed space-y-1" style={{ cursor: dragState ? 'grabbing' : 'auto' }}>
+            <div className="font-mono text-[13px] leading-relaxed space-y-1" style={{ cursor: dragState ? (dragState.type === 'middle' ? 'ew-resize' : 'grabbing') : 'auto' }}>
                 {lines.map((lineStr, lineIdx) => {
                     const lineAbsStart = viewStart + lineIdx * seqLineLength;
                     const posStr = String(lineAbsStart + 1).padStart(6, ' '); // 1-indexed
@@ -1526,14 +1545,19 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                                     const isP2 = primers && i >= liveP2Start && i < liveP2End;
                                     const isP1End   = i === liveP1End - 1;
                                     const isP2Start = i === liveP2Start;
+                                    // Seam: the two chars at the oligo junction.
+                                    const isP1Start = i === liveP1Start;
+                                    const isP2End   = i === liveP2End - 1;
 
                                     if (isP1) {
-                                        className = `bg-green-200 dark:bg-green-900/40 text-green-900 dark:text-green-300 font-bold hover:bg-green-300 dark:hover:bg-green-800/60 select-none ${isP1End ? 'cursor-ew-resize' : 'cursor-grab active:cursor-grabbing'}`;
-                                        if (isP1End) handlers = { onMouseDown: (e: React.MouseEvent) => handleSeqMouseDown(e, 'p1', 'right') };
+                                        className = `bg-green-200 dark:bg-green-900/40 text-green-900 dark:text-green-300 font-bold hover:bg-green-300 dark:hover:bg-green-800/60 select-none ${isP1Start || isP1End ? 'cursor-ew-resize' : 'cursor-grab active:cursor-grabbing'}`;
+                                        if (isP1Start) handlers = { onMouseDown: (e: React.MouseEvent) => handleSeqMouseDown(e, 'p1', 'middle'), title: 'Drag to rebalance the two oligo lengths' };
+                                        else if (isP1End) handlers = { onMouseDown: (e: React.MouseEvent) => handleSeqMouseDown(e, 'p1', 'right') };
                                         else handlers = { onMouseDown: (e: React.MouseEvent) => handleSeqMouseDown(e, 'p1', 'move') };
                                     } else if (isP2) {
-                                        className = `bg-amber-200 dark:bg-amber-900/40 text-amber-900 dark:text-amber-300 font-bold hover:bg-amber-300 dark:hover:bg-amber-800/60 select-none ${isP2Start ? 'cursor-ew-resize' : 'cursor-grab active:cursor-grabbing'}`;
-                                        if (isP2Start) handlers = { onMouseDown: (e: React.MouseEvent) => handleSeqMouseDown(e, 'p2', 'left') };
+                                        className = `bg-amber-200 dark:bg-amber-900/40 text-amber-900 dark:text-amber-300 font-bold hover:bg-amber-300 dark:hover:bg-amber-800/60 select-none ${isP2End || isP2Start ? 'cursor-ew-resize' : 'cursor-grab active:cursor-grabbing'}`;
+                                        if (isP2End) handlers = { onMouseDown: (e: React.MouseEvent) => handleSeqMouseDown(e, 'p2', 'middle'), title: 'Drag to rebalance the two oligo lengths' };
+                                        else if (isP2Start) handlers = { onMouseDown: (e: React.MouseEvent) => handleSeqMouseDown(e, 'p2', 'left') };
                                         else handlers = { onMouseDown: (e: React.MouseEvent) => handleSeqMouseDown(e, 'p2', 'move') };
                                     }
 
@@ -2529,6 +2553,7 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                             <div className="text-[13px] text-zinc-400 text-center mt-2 font-medium flex justify-center gap-4">
                                 <span><span className="inline-block w-2 h-2 bg-amber-400 rounded-sm mr-1"></span><span className="inline-block w-2 h-2 bg-green-400 rounded-sm mr-1"></span> Drag center string to shift</span>
                                 <span> Drag edges to resize</span>
+                                <span> Drag the seam between the oligos to rebalance their lengths</span>
                             </div>
                         )}
                     </div>
