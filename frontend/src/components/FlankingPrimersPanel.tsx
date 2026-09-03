@@ -848,7 +848,12 @@ export default function FlankingPrimersPanel({
             );
             const tmRow = (
                 <>
-                    <span>IDT Tm: <span className="font-mono tabular-nums text-zinc-500">{itemIdtTm != null ? `${Number(itemIdtTm).toFixed(1)}°C` : '–'}</span></span>
+                    {/* IDT returns no Tm for dimers (API and web OligoAnalyzer both
+                        report ΔG only for SelfDimer/HeteroDimer), so hide the
+                        always-empty IDT Tm for dimer items. */}
+                    {!itemIsDimer && (
+                        <span>IDT Tm: <span className="font-mono tabular-nums text-zinc-500">{itemIdtTm != null ? `${Number(itemIdtTm).toFixed(1)}°C` : '–'}</span></span>
+                    )}
                     <span>Strider Tm: <span className="font-mono tabular-nums text-zinc-500">{itemLocalTm != null ? `${itemLocalTm.toFixed(1)}°C` : '–'}</span>{itemLocalTm != null && itemLocalTmShort && <span title="Hairpin stem under 3 bp: two-state Tm is unreliable (marginal structure)" className="ml-1 text-amber-600 dark:text-amber-400 font-bold">*</span>}</span>
                 </>
             );
