@@ -50,8 +50,8 @@ function pairGenBankFeatures(features: GenBankFeature[]): GenBankFeatureRow[] {
     return rows;
 }
 
-// Rows shown before the "Expand all" toggle appears; matches the old max-h-56 scroll cap.
-const FEATURES_COLLAPSED_ROWS = 6;
+// Rows shown before the "Expand all" toggle appears.
+const FEATURES_COLLAPSED_ROWS = 3;
 
 function FeatureCell({ feature: f }: { feature: GenBankFeature }) {
     return (
