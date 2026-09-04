@@ -212,6 +212,7 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
     const [featuresExpanded, setFeaturesExpanded] = useState(false);
     const hoverColRef = useRef<number | null>(null);
     const hoverRafRef = useRef<number>(0);
+    const scrollRafRef = useRef<number>(0);
     // Set while a left-drag region selection is in progress; suppresses the
     // onClick popup (NCBI modal / autofind boundary) that would otherwise
     // fire after mouseup of a drag.
@@ -1178,6 +1179,13 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
 
         const firstCol = Math.max(0, Math.floor(scrollLeft / cellW));
         const lastCol = Math.min(anchorLen - 1, Math.ceil((scrollLeft + seqAreaW) / cellW));
+        // When zoomed out far enough that a column is under a pixel wide, many
+        // columns land on the same screen pixel and only the last one drawn is
+        // ever visible; stepping past the redundant ones (bars-mode loops below)
+        // keeps per-draw cost proportional to screen width instead of alignment
+        // length, which is what made zoomed-out panning sluggish. colStep is 1
+        // (visit every column, unchanged) once cellW reaches a full pixel.
+        const colStep = cellW > 0 ? Math.max(1, Math.floor(1 / cellW)) : 1;
 
         /* ── clip sequence area so it never bleeds into labels ── */
         ctx.save();
@@ -1307,8 +1315,8 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
                         ctx.fillRect(barX1, y + 3, barX2 - barX1, ROW_HEIGHT - 6);
                     }
                 }
-                const barW = Math.max(1, Math.ceil(cellW));
-                for (let a = firstCol; a <= lastCol; a++) {
+                const barW = Math.max(1, Math.ceil(cellW * colStep));
+                for (let a = firstCol; a <= lastCol; a += colStep) {
                     const col = anchorCols[a];
                     const ch = (s.seq[col] || '-').toUpperCase();
                     const qch = querySeq[col].toUpperCase();
@@ -1387,8 +1395,8 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
         // ── GC content track (sticky) ──
         ctx.fillStyle = isDark ? '#1e293b' : '#f8fafc';
         ctx.fillRect(labelWidth, stickyY, availableWidth - labelWidth, MAIN_GC_TRACK_H);
-        const gcBarW = Math.max(1, Math.ceil(cellW));
-        for (let a = firstCol; a <= lastCol; a++) {
+        const gcBarW = Math.max(1, Math.ceil(cellW * colStep));
+        for (let a = firstCol; a <= lastCol; a += colStep) {
             const x = Math.floor(labelWidth + a * cellW - scrollLeft);
             const w = Math.min(gcBarW, labelWidth + seqAreaW - x);
             if (w <= 0) continue;
@@ -1777,11 +1785,20 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
     }, [drawHoverOverlay, drawMinimap]);
 
     /* ── scroll handler ─────────────────────────────────── */
+    // Trackpad/scrollbar panning fires native "scroll" events far more often than the
+    // screen repaints, and each one was committing straight to state, triggering a full
+    // main-canvas redraw (plus the hover overlay and minimap) synchronously in between
+    // paints. Coalescing to one state update per animation frame drops the redraw rate
+    // to match what actually gets displayed, which is most of the win when zoomed out
+    // (more visible columns per row means each redraw is more expensive to begin with).
     const handleScroll = () => {
-        if (!isDragging.current && scrollRef.current) {
+        if (isDragging.current || !scrollRef.current) return;
+        cancelAnimationFrame(scrollRafRef.current);
+        scrollRafRef.current = requestAnimationFrame(() => {
+            if (!scrollRef.current) return;
             setScrollLeft(scrollRef.current.scrollLeft);
             setScrollTop(scrollRef.current.scrollTop);
-        }
+        });
     };
 
     /* ── Ctrl/⌘ + wheel = zoom ─────────────────────────── */
