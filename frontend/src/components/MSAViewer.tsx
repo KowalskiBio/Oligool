@@ -2,6 +2,29 @@ import React, { useState, useRef, useEffect, useMemo, useCallback, forwardRef, u
 import { findCleanRegions, computeMismatchCols, type CleanRegion } from '../utils/msa';
 import { buildAnchorGrid, buildInsertRuns, groupInsertsByRow, firstAnchorAtOrAfter, lastAnchorAtOrBefore, gappedRangeToAnchor, type InsertEntry } from '../utils/anchorGrid';
 
+const API = ((import.meta.env.VITE_API_BASE as string) || '');
+
+interface GenBankFeature {
+    type: string;
+    location: string;
+    start: number;
+    end: number;
+    strand: number | null;
+    gene?: string;
+    product?: string;
+    protein_id?: string;
+    note?: string;
+}
+
+interface GenBankFeatures {
+    accession: string;
+    definition: string;
+    length: number;
+    source: { organism?: string | null; isolate?: string | null; mol_type?: string | null; note?: string | null };
+    features: GenBankFeature[];
+    truncated: boolean;
+}
+
 /* ── helpers ────────────────────────────────────────── */
 const getPrettyStep = (minPixels: number, pixelsPerUnit: number) => {
     const minUnits = minPixels / pixelsPerUnit;
@@ -142,6 +165,7 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
     const [copyFeedback, setCopyFeedback] = useState('');
     const [selectionRange, setSelectionRange] = useState<{ start: number; end: number } | null>(null);
     const [ncbiModalAccession, setNcbiModalAccession] = useState<string | null>(null);
+    const [genbankFeatures, setGenbankFeatures] = useState<{ accession: string; loading: boolean; error: string | null; data: GenBankFeatures | null }>({ accession: '', loading: false, error: null, data: null });
     const hoverColRef = useRef<number | null>(null);
     const hoverRafRef = useRef<number>(0);
     // Set while a left-drag region selection is in progress; suppresses the
@@ -156,6 +180,38 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
     const viewFractionRef = useRef(viewFraction);
     const seqAreaWRef = useRef(0);
     const totalVirtualWRef = useRef(0);
+
+    // Fetch the GenBank FEATURES table for the NCBI popup's accession, scoped to the
+    // BLAST-aligned region when known (mirrors the "Coding region" deep link exactly,
+    // just previewed inline instead of requiring a click-through to NCBI).
+    useEffect(() => {
+        if (!ncbiModalAccession) return;
+        let cancelled = false;
+        setGenbankFeatures({ accession: ncbiModalAccession, loading: true, error: null, data: null });
+        const range = hitRanges[ncbiModalAccession];
+        const params = new URLSearchParams({ accession: ncbiModalAccession });
+        if (range) {
+            params.set('seq_start', String(Math.min(range.sstart, range.send)));
+            params.set('seq_stop', String(Math.max(range.sstart, range.send)));
+        }
+        fetch(`${API}/genbank/features?${params.toString()}`)
+            .then(async (res) => {
+                if (!res.ok) {
+                    const body = await res.json().catch(() => null);
+                    throw new Error(body?.detail || `HTTP ${res.status}`);
+                }
+                return res.json() as Promise<GenBankFeatures>;
+            })
+            .then((data) => {
+                if (cancelled) return;
+                setGenbankFeatures({ accession: ncbiModalAccession, loading: false, error: null, data });
+            })
+            .catch((err: unknown) => {
+                if (cancelled) return;
+                setGenbankFeatures({ accession: ncbiModalAccession, loading: false, error: err instanceof Error ? err.message : 'Failed to load features', data: null });
+            });
+        return () => { cancelled = true; };
+    }, [ncbiModalAccession, hitRanges]);
 
     useImperativeHandle(ref, () => ({
         getViewportSnapshot: () => ({
@@ -2367,7 +2423,7 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
                     onClick={() => setNcbiModalAccession(null)}
                 >
                     <div
-                        className="card shadow-xl max-w-sm w-full p-6"
+                        className="card shadow-xl max-w-lg w-full p-6"
                         onClick={e => e.stopPropagation()}
                     >
                         <div className="flex items-center justify-between mb-4">
@@ -2430,6 +2486,57 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
                         <p className="mt-4 text-[13px] text-zinc-500 dark:text-zinc-400">
                             Choose whether to view the complete genome record or just the BLAST-aligned coding region.
                         </p>
+
+                        {/* ── Inline FEATURES preview (source + gene/CDS table), scoped to the
+                            aligned region when known, so the gene/product context is visible
+                            without leaving the app. ── */}
+                        <div className="mt-4 pt-4 border-t border-zinc-200 dark:border-zinc-800">
+                            <div className="text-[13px] font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-2">
+                                Features{hitRanges[ncbiModalAccession] ? ' (aligned region)' : ''}
+                            </div>
+                            {genbankFeatures.accession === ncbiModalAccession && genbankFeatures.loading && (
+                                <div className="flex items-center gap-2 text-[13px] text-zinc-400">
+                                    <div className="w-3 h-3 border-2 border-zinc-400 border-t-transparent rounded-full animate-spin" />
+                                    Loading from NCBI…
+                                </div>
+                            )}
+                            {genbankFeatures.accession === ncbiModalAccession && genbankFeatures.error && !genbankFeatures.loading && (
+                                <div className="text-[13px] text-red-500">{genbankFeatures.error}</div>
+                            )}
+                            {genbankFeatures.accession === ncbiModalAccession && genbankFeatures.data && !genbankFeatures.loading && (
+                                <div className="space-y-2">
+                                    {genbankFeatures.data.source.organism && (
+                                        <div className="text-[13px] text-zinc-600 dark:text-zinc-300">
+                                            <span className="italic">{genbankFeatures.data.source.organism}</span>
+                                            {genbankFeatures.data.source.isolate && (
+                                                <span className="text-zinc-400"> · isolate {genbankFeatures.data.source.isolate}</span>
+                                            )}
+                                        </div>
+                                    )}
+                                    {genbankFeatures.data.features.length === 0 ? (
+                                        <div className="text-[13px] text-zinc-400 italic">No gene/CDS features in this region.</div>
+                                    ) : (
+                                        <div className="max-h-56 overflow-y-auto rounded-md border border-zinc-200 dark:border-zinc-800 divide-y divide-zinc-100 dark:divide-zinc-800">
+                                            {genbankFeatures.data.features.map((f, i) => (
+                                                <div key={i} className="px-2.5 py-1.5 text-[13px] flex items-start gap-2">
+                                                    <span className={`shrink-0 font-mono px-1 rounded text-[11px] mt-0.5 ${f.type === 'CDS' ? 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300' : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400'}`}>{f.type}</span>
+                                                    <div className="min-w-0 flex-1">
+                                                        <div className="flex items-baseline gap-2 flex-wrap">
+                                                            {f.gene && <span className="font-medium text-zinc-700 dark:text-zinc-200">{f.gene}</span>}
+                                                            <span className="font-mono text-[12px] text-zinc-400 tabular-nums">{f.location}</span>
+                                                        </div>
+                                                        {f.product && <div className="text-zinc-500 dark:text-zinc-400 truncate">{f.product}</div>}
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                    {genbankFeatures.data.truncated && (
+                                        <div className="text-[13px] text-zinc-400 italic">Showing the first {genbankFeatures.data.features.length} features; open the full record on NCBI for the rest.</div>
+                                    )}
+                                </div>
+                            )}
+                        </div>
                     </div>
                 </div>
             )}

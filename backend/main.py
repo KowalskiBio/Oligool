@@ -11,6 +11,7 @@ from pydantic import BaseModel
 from typing import List, Literal, Optional
 from backend.alignment import run_msa
 from backend.blast import run_blast
+from backend.genbank import fetch_genbank_features
 import json
 import threading as _threading
 from collections import OrderedDict
@@ -282,6 +283,15 @@ async def align_sequences(request: AlignmentRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+
+@app.get("/genbank/features")
+def genbank_features(accession: str, seq_start: Optional[int] = None, seq_stop: Optional[int] = None):
+    """Feature table (source + gene/CDS) for one GenBank accession, so the MSA
+    viewer's NCBI popup can preview it without leaving the app."""
+    try:
+        return fetch_genbank_features(accession, seq_start, seq_stop)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=str(e))
 
 
 from typing import Dict
