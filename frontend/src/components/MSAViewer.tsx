@@ -37,6 +37,10 @@ interface MSAViewerProps {
     flankingPrimers?: { fwd: { start: number; end: number } | null; rev: { start: number; end: number } | null } | null;
     /** Excluded (forbidden) regions in gapped column coords, drawn in red in the ruler and minimap */
     excludedRegions?: { start: number; end: number }[] | null;
+    /** The full manually-dragged target region(s) in gapped column coords (usually wider than
+     * the eventual flanking primer picked inside them); drawn as a bright underline spanning
+     * the header block, distinct from the solid flankingPrimers highlight. */
+    manualRegions?: { left: { start: number; end: number } | null; right: { start: number; end: number } | null } | null;
     /** When true, shift+left-drag marks an exclusion region instead of a normal selection */
     enableExcludeSelect?: boolean;
     isDarkMode?: boolean;
@@ -87,7 +91,7 @@ const MINIMAP_HEIGHT = MINIMAP_GC_H + MINIMAP_RULER_H + 50 + MINIMAP_HANDLE_H;
 const MAIN_GC_TRACK_H = 40;
 const MAIN_MSA_TRACK_H = 30;
 
-const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVisibleQueryChange, primers, flankingPrimers, excludedRegions, enableExcludeSelect, isDarkMode, navigateTarget, onOligoRegionSelect, onAutofindRegionSelect, onFlankingPrimerClick, selectedAccessions, onSelectionChange, restoredRegion, showAutofindUI = true, autofindTreatIndelsAsMismatches = false, onAutofindTreatIndelsAsMismatchesChange, blastRid = '', hitRanges = {}, maxHeight }, ref) => {
+const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVisibleQueryChange, primers, flankingPrimers, excludedRegions, manualRegions, enableExcludeSelect, isDarkMode, navigateTarget, onOligoRegionSelect, onAutofindRegionSelect, onFlankingPrimerClick, selectedAccessions, onSelectionChange, restoredRegion, showAutofindUI = true, autofindTreatIndelsAsMismatches = false, onAutofindTreatIndelsAsMismatchesChange, blastRid = '', hitRanges = {}, maxHeight }, ref) => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const hoverOverlayRef = useRef<HTMLCanvasElement>(null);
     const minimapRef = useRef<HTMLCanvasElement>(null);
@@ -348,6 +352,14 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
             .filter(r => r.end > r.start)
             .map(r => gappedRangeToAnchor(anchorCols, r.start, r.end));
     }, [excludedRegions, anchorCols]);
+
+    const manualRegionsA = useMemo(() => {
+        if (!manualRegions) return null;
+        return {
+            left: manualRegions.left ? gappedRangeToAnchor(anchorCols, manualRegions.left.start, manualRegions.left.end) : null,
+            right: manualRegions.right ? gappedRangeToAnchor(anchorCols, manualRegions.right.start, manualRegions.right.end) : null,
+        };
+    }, [manualRegions, anchorCols]);
 
     const restoredA = useMemo(() => {
         if (!restoredRegion) return null;
@@ -765,6 +777,30 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
             }
         }
 
+        // Manually-dragged target regions: a translucent band spanning the GC/ruler
+        // header plus a bright underline, so the full selection reads at a glance
+        // even though the eventual flankingPrimers bar above is usually narrower.
+        if (manualRegionsA) {
+            const bandTop = 0;
+            const bandH = MINIMAP_GC_H + MINIMAP_RULER_H;
+            if (manualRegionsA.left && manualRegionsA.left.end > manualRegionsA.left.start) {
+                const lx = MINIMAP_LABEL_W + (manualRegionsA.left.start / anchorLen) * mmSeqW;
+                const lw = Math.max(2, ((manualRegionsA.left.end - manualRegionsA.left.start) / anchorLen) * mmSeqW);
+                ctx.fillStyle = isDark ? 'rgba(16, 185, 129, 0.18)' : 'rgba(16, 185, 129, 0.14)';
+                ctx.fillRect(lx, bandTop, lw, bandH);
+                ctx.fillStyle = '#10b981';
+                ctx.fillRect(lx, bandTop + bandH - 2, lw, 2);
+            }
+            if (manualRegionsA.right && manualRegionsA.right.end > manualRegionsA.right.start) {
+                const rx = MINIMAP_LABEL_W + (manualRegionsA.right.start / anchorLen) * mmSeqW;
+                const rw = Math.max(2, ((manualRegionsA.right.end - manualRegionsA.right.start) / anchorLen) * mmSeqW);
+                ctx.fillStyle = isDark ? 'rgba(20, 184, 166, 0.18)' : 'rgba(20, 184, 166, 0.14)';
+                ctx.fillRect(rx, bandTop, rw, bandH);
+                ctx.fillStyle = '#14b8a6';
+                ctx.fillRect(rx, bandTop + bandH - 2, rw, 2);
+            }
+        }
+
         // Excluded regions, drawn as red bars above the flanking primer bars
         if (excludedRegionsA) {
             for (const ex of excludedRegionsA) {
@@ -790,7 +826,7 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
         ctx.fillRect(MINIMAP_LABEL_W - 1, 0, 1, MINIMAP_HEIGHT);
 
         staticMinimapDrawnRef.current = true;
-    }, [sequences, querySeq, anchorLen, anchorCols, insertEntries, availableWidth, gcContent, primersA, flankingPrimersA, excludedRegionsA, isDark, restoredA, lightMatchBars]);
+    }, [sequences, querySeq, anchorLen, anchorCols, insertEntries, availableWidth, gcContent, primersA, flankingPrimersA, excludedRegionsA, manualRegionsA, isDark, restoredA, lightMatchBars]);
 
     const drawMinimap = useCallback(() => {
         const cvs = minimapRef.current;
@@ -1457,6 +1493,36 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
             }
         }
 
+        /* ── Manual target region markers: a translucent band spanning the GC/MSA/ruler
+           header plus a bright underline at the very bottom, distinct from the solid
+           flankingPrimers highlight for the (usually narrower) primer found inside it. ── */
+        if (manualRegionsA) {
+            const bandTop = stickyY;
+            const bandH = MAIN_GC_TRACK_H + MAIN_MSA_TRACK_H + RULER_HEIGHT;
+            if (manualRegionsA.left && manualRegionsA.left.end > manualRegionsA.left.start) {
+                const lx = labelWidth + manualRegionsA.left.start * cellW - scrollLeft;
+                const lw = Math.max(2, (manualRegionsA.left.end - manualRegionsA.left.start) * cellW);
+                const lwC = Math.min(lw, labelWidth + seqAreaW - lx);
+                if (lwC > 0) {
+                    ctx.fillStyle = isDark ? 'rgba(16, 185, 129, 0.12)' : 'rgba(16, 185, 129, 0.10)';
+                    ctx.fillRect(lx, bandTop, lwC, bandH);
+                    ctx.fillStyle = '#10b981';
+                    ctx.fillRect(lx, bandTop + bandH - 3, lwC, 3);
+                }
+            }
+            if (manualRegionsA.right && manualRegionsA.right.end > manualRegionsA.right.start) {
+                const rx = labelWidth + manualRegionsA.right.start * cellW - scrollLeft;
+                const rw = Math.max(2, (manualRegionsA.right.end - manualRegionsA.right.start) * cellW);
+                const rwC = Math.min(rw, labelWidth + seqAreaW - rx);
+                if (rwC > 0) {
+                    ctx.fillStyle = isDark ? 'rgba(20, 184, 166, 0.12)' : 'rgba(20, 184, 166, 0.10)';
+                    ctx.fillRect(rx, bandTop, rwC, bandH);
+                    ctx.fillStyle = '#14b8a6';
+                    ctx.fillRect(rx, bandTop + bandH - 3, rwC, 3);
+                }
+            }
+        }
+
         /* ── Excluded region markers in main ruler (red stripes) ── */
         if (excludedRegionsA) {
             for (const ex of excludedRegionsA) {
@@ -1552,7 +1618,7 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
             hoverCvs.style.width = `${availableWidth}px`;
             hoverCvs.style.height = `${canvasH}px`;
         }
-    }, [sequences, querySeq, scrollLeft, scrollTop, cellW, seqAreaW, availableWidth, totalH, anchorLen, anchorCols, insertEntries, insertsByRow, viewMode, primersA, flankingPrimersA, excludedRegionsA, gcContent, isDarkMode, oligoSelection, autofindBoundaryRow, restoredA, lightMatchBars]);
+    }, [sequences, querySeq, scrollLeft, scrollTop, cellW, seqAreaW, availableWidth, totalH, anchorLen, anchorCols, insertEntries, insertsByRow, viewMode, primersA, flankingPrimersA, excludedRegionsA, manualRegionsA, gcContent, isDarkMode, oligoSelection, autofindBoundaryRow, restoredA, lightMatchBars]);
 
     /* ── lightweight hover overlay (draws only a thin line) ── */
     const drawHoverOverlay = useCallback(() => {

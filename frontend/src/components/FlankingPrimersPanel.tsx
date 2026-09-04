@@ -1284,6 +1284,16 @@ export default function FlankingPrimersPanel({
         return excludedRegions.map(([s, e]) => ({ start: mapRawToFullGapped(s), end: mapRawToFullGapped(e) }));
     }, [excludedRegions, mapRawToFullGapped]);
 
+    // The full dragged manual region(s), for the underline overlay in the bottom MSA
+    // viewer (mirrors the Context Viewer's highlight, but in full-alignment gapped coords).
+    const manualRegionsForMSA = useMemo(() => {
+        if (manualLeftStart === null && manualRightStart === null) return null;
+        return {
+            left: manualLeftStart !== null && manualLeftEnd !== null ? { start: mapRawToFullGapped(manualLeftStart), end: mapRawToFullGapped(manualLeftEnd) } : null,
+            right: manualRightStart !== null && manualRightEnd !== null ? { start: mapRawToFullGapped(manualRightStart), end: mapRawToFullGapped(manualRightEnd) } : null,
+        };
+    }, [manualLeftStart, manualLeftEnd, manualRightStart, manualRightEnd, mapRawToFullGapped]);
+
     // Propagate the selection up to App (for the MSA highlight + session save).
     // Guard the FIRST emission: this panel remounts fresh on session load (its
     // parent QueryViewer is keyed by the import nonce), so without this guard the
@@ -1655,6 +1665,7 @@ export default function FlankingPrimersPanel({
                     primers={gappedOligoPrimers}
                     flankingPrimers={flankingPrimersForMSA}
                     excludedRegions={excludedRegionsForMSA}
+                    manualRegions={manualRegionsForMSA}
                     enableExcludeSelect
                     isDarkMode={isDarkMode}
                     navigateTarget={primerNavTarget ?? navigateTarget}
