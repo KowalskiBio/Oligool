@@ -25,6 +25,49 @@ interface GenBankFeatures {
     truncated: boolean;
 }
 
+interface GenBankFeatureRow {
+    left: GenBankFeature;
+    right: GenBankFeature | null;
+}
+
+// A "gene" feature is immediately followed by its "CDS" (same location) in GenBank flat
+// files; pair those onto one two-column row instead of two stacked rows. Anything without
+// a same-location partner (misc_feature, an orphaned gene/CDS, etc.) stays single-column.
+function pairGenBankFeatures(features: GenBankFeature[]): GenBankFeatureRow[] {
+    const rows: GenBankFeatureRow[] = [];
+    let i = 0;
+    while (i < features.length) {
+        const cur = features[i];
+        const next = features[i + 1];
+        if (next && next.location === cur.location && next.type !== cur.type) {
+            rows.push({ left: cur, right: next });
+            i += 2;
+        } else {
+            rows.push({ left: cur, right: null });
+            i += 1;
+        }
+    }
+    return rows;
+}
+
+// Rows shown before the "Expand all" toggle appears; matches the old max-h-56 scroll cap.
+const FEATURES_COLLAPSED_ROWS = 6;
+
+function FeatureCell({ feature: f }: { feature: GenBankFeature }) {
+    return (
+        <div className="px-2.5 py-1.5 text-[13px] flex items-start gap-2 min-w-0">
+            <span className={`shrink-0 font-mono px-1 rounded text-[11px] mt-0.5 ${f.type === 'CDS' ? 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300' : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400'}`}>{f.type}</span>
+            <div className="min-w-0 flex-1">
+                <div className="flex items-baseline gap-2 flex-wrap">
+                    {f.gene && <span className="font-medium text-zinc-700 dark:text-zinc-200">{f.gene}</span>}
+                    <span className="font-mono text-[12px] text-zinc-400 tabular-nums">{f.location}</span>
+                </div>
+                {f.product && <div className="text-zinc-500 dark:text-zinc-400 truncate">{f.product}</div>}
+            </div>
+        </div>
+    );
+}
+
 /* ── helpers ────────────────────────────────────────── */
 const getPrettyStep = (minPixels: number, pixelsPerUnit: number) => {
     const minUnits = minPixels / pixelsPerUnit;
@@ -166,6 +209,7 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
     const [selectionRange, setSelectionRange] = useState<{ start: number; end: number } | null>(null);
     const [ncbiModalAccession, setNcbiModalAccession] = useState<string | null>(null);
     const [genbankFeatures, setGenbankFeatures] = useState<{ accession: string; loading: boolean; error: string | null; data: GenBankFeatures | null }>({ accession: '', loading: false, error: null, data: null });
+    const [featuresExpanded, setFeaturesExpanded] = useState(false);
     const hoverColRef = useRef<number | null>(null);
     const hoverRafRef = useRef<number>(0);
     // Set while a left-drag region selection is in progress; suppresses the
@@ -188,6 +232,7 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
         if (!ncbiModalAccession) return;
         let cancelled = false;
         setGenbankFeatures({ accession: ncbiModalAccession, loading: true, error: null, data: null });
+        setFeaturesExpanded(false);
         const range = hitRanges[ncbiModalAccession];
         const params = new URLSearchParams({ accession: ncbiModalAccession });
         if (range) {
@@ -2423,7 +2468,7 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
                     onClick={() => setNcbiModalAccession(null)}
                 >
                     <div
-                        className="card shadow-xl max-w-lg w-full p-6"
+                        className="card shadow-xl max-w-xl w-full p-6"
                         onClick={e => e.stopPropagation()}
                     >
                         <div className="flex items-center justify-between mb-4">
@@ -2491,8 +2536,18 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
                             aligned region when known, so the gene/product context is visible
                             without leaving the app. ── */}
                         <div className="mt-4 pt-4 border-t border-zinc-200 dark:border-zinc-800">
-                            <div className="text-[13px] font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-2">
-                                Features{hitRanges[ncbiModalAccession] ? ' (aligned region)' : ''}
+                            <div className="flex items-center justify-between mb-2">
+                                <div className="text-[13px] font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">
+                                    Features{hitRanges[ncbiModalAccession] ? ' (aligned region)' : ''}
+                                </div>
+                                {genbankFeatures.accession === ncbiModalAccession && genbankFeatures.data && genbankFeatures.data.features.length > FEATURES_COLLAPSED_ROWS && (
+                                    <button
+                                        onClick={() => setFeaturesExpanded(v => !v)}
+                                        className="text-[13px] font-medium text-accent-700 dark:text-accent-300 hover:underline"
+                                    >
+                                        {featuresExpanded ? '▲ Collapse' : '▼ Expand all'}
+                                    </button>
+                                )}
                             </div>
                             {genbankFeatures.accession === ncbiModalAccession && genbankFeatures.loading && (
                                 <div className="flex items-center gap-2 text-[13px] text-zinc-400">
@@ -2515,22 +2570,20 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
                                     )}
                                     {genbankFeatures.data.features.length === 0 ? (
                                         <div className="text-[13px] text-zinc-400 italic">No gene/CDS features in this region.</div>
-                                    ) : (
-                                        <div className="max-h-56 overflow-y-auto rounded-md border border-zinc-200 dark:border-zinc-800 divide-y divide-zinc-100 dark:divide-zinc-800">
-                                            {genbankFeatures.data.features.map((f, i) => (
-                                                <div key={i} className="px-2.5 py-1.5 text-[13px] flex items-start gap-2">
-                                                    <span className={`shrink-0 font-mono px-1 rounded text-[11px] mt-0.5 ${f.type === 'CDS' ? 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300' : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400'}`}>{f.type}</span>
-                                                    <div className="min-w-0 flex-1">
-                                                        <div className="flex items-baseline gap-2 flex-wrap">
-                                                            {f.gene && <span className="font-medium text-zinc-700 dark:text-zinc-200">{f.gene}</span>}
-                                                            <span className="font-mono text-[12px] text-zinc-400 tabular-nums">{f.location}</span>
-                                                        </div>
-                                                        {f.product && <div className="text-zinc-500 dark:text-zinc-400 truncate">{f.product}</div>}
+                                    ) : (() => {
+                                        const rows = pairGenBankFeatures(genbankFeatures.data.features);
+                                        const visibleRows = featuresExpanded ? rows : rows.slice(0, FEATURES_COLLAPSED_ROWS);
+                                        return (
+                                            <div className={`rounded-md border border-zinc-200 dark:border-zinc-800 divide-y divide-zinc-100 dark:divide-zinc-800 ${featuresExpanded ? 'max-h-[28rem] overflow-y-auto' : ''}`}>
+                                                {visibleRows.map((row, i) => (
+                                                    <div key={i} className={`grid ${row.right ? 'grid-cols-2 divide-x divide-zinc-100 dark:divide-zinc-800' : 'grid-cols-1'}`}>
+                                                        <FeatureCell feature={row.left} />
+                                                        {row.right && <FeatureCell feature={row.right} />}
                                                     </div>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    )}
+                                                ))}
+                                            </div>
+                                        );
+                                    })()}
                                     {genbankFeatures.data.truncated && (
                                         <div className="text-[13px] text-zinc-400 italic">Showing the first {genbankFeatures.data.features.length} features; open the full record on NCBI for the rest.</div>
                                     )}
