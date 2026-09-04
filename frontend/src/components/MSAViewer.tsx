@@ -579,8 +579,11 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
 
         setViewFraction(newVF);
         setScrollLeft(newSL);
-        // Sync with ref so it's immediate
-        if (scrollRef.current) scrollRef.current.scrollLeft = newSL;
+        // Deferred scroll (see the no-dep useEffect above): writing scrollRef.current.scrollLeft
+        // synchronously here gets clamped by the browser to the OLD (pre-zoom, narrower) scroll
+        // width when zooming in, since the container hasn't resized to the new viewFraction yet.
+        // That clamp is what caused zoom to snap the view to a tiny region near the left edge.
+        targetScrollRef.current = newSL;
     };
 
     // The +/- buttons zoom from the left edge of the current viewport so the
@@ -1813,9 +1816,9 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
 
             setViewFraction(newVF);
             setScrollLeft(newSL);
-
-            // Sync with ref if needed, though we updated state directly
-            if (scrollRef.current) scrollRef.current.scrollLeft = newSL;
+            // Deferred scroll: see the applyZoom comment above for why a direct,
+            // synchronous scrollLeft write here gets clamped to the pre-zoom width.
+            targetScrollRef.current = newSL;
         }
     };
 
@@ -2020,7 +2023,10 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
                     const newSL = (s / anchorLen) * newTotalW;
                     setViewFraction(newVF);
                     setScrollLeft(newSL);
-                    if (scrollRef.current) scrollRef.current.scrollLeft = newSL;
+                    // Deferred scroll: see the applyZoom comment for why a direct, synchronous
+                    // scrollLeft write here gets clamped to the pre-zoom (narrower) scroll width
+                    // when zooming in, which is what snapped the view to a tiny left-edge region.
+                    targetScrollRef.current = newSL;
                 }
             };
             // If the right button was released outside the browser window (a very
