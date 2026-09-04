@@ -1070,7 +1070,14 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
         if (dragType === 'select') setSelectionRange({ start: mouseXFrac, end: mouseXFrac });
 
         const startClientX = e.clientX;
-        const onMove = makeMoveHandler(dragType, startClientX, curStart, curEnd, curSeqAreaW, mmSeqW, mouseXFrac);
+        const innerMove = makeMoveHandler(dragType, startClientX, curStart, curEnd, curSeqAreaW, mmSeqW, mouseXFrac);
+        // Missed-release safety (see the main canvas drag handlers above): if the
+        // left button was already released outside the window, finalize here on
+        // the next mousemove instead of leaking a listener that misfires later.
+        const onMove = (ev: MouseEvent) => {
+            if (!(ev.buttons & 1)) { onUp(); return; }
+            innerMove(ev);
+        };
 
         const onUp = () => {
             isDragging.current = false;
@@ -1999,7 +2006,6 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
 
         // ── RIGHT BUTTON: zoom to dragged column range ───────────────────
         if (e.button === 2) {
-            const onMove = (ev: MouseEvent) => setOligoSelection({ startCol: startC, endCol: colAt(ev.clientX), mode: 'zoom' });
             const onUp = (ev: MouseEvent) => {
                 document.removeEventListener('mousemove', onMove);
                 document.removeEventListener('mouseup', onUp);
@@ -2017,6 +2023,17 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
                     if (scrollRef.current) scrollRef.current.scrollLeft = newSL;
                 }
             };
+            // If the right button was released outside the browser window (a very
+            // plausible drag target when zooming into a wide selection), the real
+            // "mouseup" never reaches document and this listener pair leaks: it
+            // then fires on some later, unrelated mouseup using a stale startC from
+            // this abandoned drag, snapping the view to a tiny, wrong region. Detect
+            // the missed release on the next mousemove (ev.buttons no longer has the
+            // right-button bit set) and finalize the drag there instead of leaking.
+            const onMove = (ev: MouseEvent) => {
+                if (!(ev.buttons & 2)) { onUp(ev); return; }
+                setOligoSelection({ startCol: startC, endCol: colAt(ev.clientX), mode: 'zoom' });
+            };
             document.addEventListener('mousemove', onMove);
             document.addEventListener('mouseup', onUp);
             e.preventDefault();
@@ -2024,7 +2041,12 @@ const MSAViewer = forwardRef<MSAViewerHandle, MSAViewerProps>(({ alignment, onVi
         }
 
         // ── LEFT BUTTON: primer click or oligo region selection ──────────
-        const onMove = (ev: MouseEvent) => setOligoSelection({ startCol: startC, endCol: colAt(ev.clientX), mode: excludeDrag ? 'exclude' : 'select' });
+        // Same missed-release safety as the right-button branch above: finalize on
+        // the next mousemove if the left button was already released elsewhere.
+        const onMove = (ev: MouseEvent) => {
+            if (!(ev.buttons & 1)) { onUp(ev); return; }
+            setOligoSelection({ startCol: startC, endCol: colAt(ev.clientX), mode: excludeDrag ? 'exclude' : 'select' });
+        };
         const onUp = (ev: MouseEvent) => {
             document.removeEventListener('mousemove', onMove);
             document.removeEventListener('mouseup', onUp);
