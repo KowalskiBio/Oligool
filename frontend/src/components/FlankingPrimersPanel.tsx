@@ -1411,10 +1411,16 @@ export default function FlankingPrimersPanel({
                                     const isFwd = liveFwdInterval && i >= liveFwdInterval[0] && i < liveFwdInterval[1];
                                     const isRev = liveRevInterval && i >= liveRevInterval[0] && i < liveRevInterval[1];
                                     const isExcluded = excludedRegions.some(([s, e]) => i >= s && i < e);
+                                    // The full dragged region, distinct from the (usually smaller) live
+                                    // primer interval the search engine settles on inside it.
+                                    const isManualLeft = manualLeftStart !== null && manualLeftEnd !== null && i >= manualLeftStart && i < manualLeftEnd;
+                                    const isManualRight = manualRightStart !== null && manualRightEnd !== null && i >= manualRightStart && i < manualRightEnd;
 
                                     let cn = 'text-zinc-500 dark:text-zinc-400';
                                     let handlers: React.HTMLAttributes<HTMLSpanElement> = {};
 
+                                    if (isManualLeft) cn = 'bg-emerald-500/10 dark:bg-emerald-400/10 border-b-2 border-emerald-500 dark:border-emerald-400';
+                                    if (isManualRight) cn = 'bg-accent-500/10 dark:bg-accent-400/10 border-b-2 border-accent-500 dark:border-accent-400';
                                     if (isP1) cn = 'bg-green-200 dark:bg-green-900/40 text-green-900 dark:text-green-300 font-medium';
                                     if (isP2) cn = 'bg-amber-200 dark:bg-amber-900/40 text-amber-900 dark:text-amber-300 font-medium';
                                     if (isExcluded && !isFwd && !isRev) cn = 'bg-red-200 dark:bg-red-900/50 text-red-800 dark:text-red-300 font-medium';
