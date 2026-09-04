@@ -1532,6 +1532,8 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                   navigateTarget={navigateTarget}
                   isDarkMode={isDarkMode}
                   onSaveSession={handleSaveSession}
+                  blastRid={blastMeta?.rid ?? ''}
+                  hitRanges={hitRanges}
                 />
               )}
             </>

@@ -68,6 +68,10 @@ interface QueryViewerProps {
     alignment?: string;
     navigateTarget?: { colStart: number; colEnd: number; ts: number } | null;
     isDarkMode?: boolean;
+    /** BLAST hit genome coordinates, forwarded to FlankingPrimersPanel's MSA viewer so its
+     * cursor position tooltip can show genome/CDS coordinates, matching the top-level viewer. */
+    blastRid?: string;
+    hitRanges?: Record<string, { sstart: number; send: number; rank: number }>;
     /** A session to restore into this viewer; applied once per nonce. */
     importedSession?: ImportedSession | null;
     /** Saves the current working session to a downloadable file. */
@@ -148,7 +152,7 @@ function EditableOligoName({ value, onChange, className, editing, onEditingChang
     );
 }
 
-const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function QueryViewer({ data, jobName, genbankHeader, onGenbankHeaderChange, onPrimersUpdate, onFlankingPrimersUpdate, flankingPanelState, onFlankingPanelStateChange, onNavigateTo, oligoRegion, autofindRegion, idtCredentials, onParameterSetChange, searchEngine, equilibriumSplit, alignment, navigateTarget, isDarkMode, importedSession, onSaveSession }, ref) {
+const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function QueryViewer({ data, jobName, genbankHeader, onGenbankHeaderChange, onPrimersUpdate, onFlankingPrimersUpdate, flankingPanelState, onFlankingPanelStateChange, onNavigateTo, oligoRegion, autofindRegion, idtCredentials, onParameterSetChange, searchEngine, equilibriumSplit, alignment, navigateTarget, isDarkMode, importedSession, onSaveSession, blastRid, hitRanges }, ref) {
     const API_BASE = ((import.meta.env.VITE_API_BASE as string) || '');
     const [copyFeedback, setCopyFeedback] = useState('');
 
@@ -3094,6 +3098,8 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                     gappedData={data}
                     navigateTarget={navigateTarget}
                     isDarkMode={isDarkMode}
+                    blastRid={blastRid}
+                    hitRanges={hitRanges}
                     idtCredentials={idtCredentials}
                     idtAdvancedParams={idtAdvancedParams}
                     onFlankingPrimersUpdate={handleFlankingPrimersUpdate}

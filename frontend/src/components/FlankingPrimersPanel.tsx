@@ -24,6 +24,10 @@ interface Props {
     oligoPrimers?: OligoPrimers | null;
     navigateTarget?: { colStart: number; colEnd: number; ts: number } | null;
     isDarkMode?: boolean;
+    /** BLAST hit genome coordinates, so the cursor position tooltip shown while hovering hit
+     * rows matches the top-level MSA viewer (genome/CDS coordinates, not just MSA position). */
+    blastRid?: string;
+    hitRanges?: Record<string, { sstart: number; send: number; rank: number }>;
     idtCredentials?: any;
     idtAdvancedParams?: any;
     gappedData?: { seq: string; start: number; ungappedOffset?: number };
@@ -71,6 +75,7 @@ export default function FlankingPrimersPanel({
     rawSeq, oligoStart, oligoEnd,
     p1Start, p1End, p2Start, p2End,
     alignment, oligoPrimers, navigateTarget, isDarkMode,
+    blastRid, hitRanges,
     idtCredentials, gappedData, onFlankingPrimersUpdate,
     restoredState, onPanelStateChange, searchEngine, equilibriumSplit, onParameterSetChange, redesignNonce
 }: Props) {
@@ -1672,6 +1677,8 @@ export default function FlankingPrimersPanel({
                     onFlankingPrimerClick={handleFlankingPrimerClick}
                     onOligoRegionSelect={handleMSARegionSelect}
                     showAutofindUI={false}
+                    blastRid={blastRid}
+                    hitRanges={hitRanges}
                 />
             )}
 
