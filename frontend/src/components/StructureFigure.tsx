@@ -25,6 +25,9 @@ export default function StructureFigure({ seq, dotBracket, fallback }: Structure
     const [mode, setMode] = useState(getStructureRenderer);
     const [colorMode, setColorMode] = useState(getStructureColor);
     const [fetched, setFetched] = useState<{ key: string; svg: string } | null>(null);
+    const [theme, setTheme] = useState<'light' | 'dark'>(() =>
+        typeof document !== 'undefined' && document.documentElement.classList.contains('dark')
+            ? 'dark' : 'light');
 
     useEffect(() => {
         const onChange = () => {
@@ -35,7 +38,17 @@ export default function StructureFigure({ seq, dotBracket, fallback }: Structure
         return () => window.removeEventListener(STRUCTURE_RENDERER_CHANGE_EVENT, onChange);
     }, []);
 
-    const key = seq && dotBracket ? `${seq}|${dotBracket}|${colorMode}` : null;
+    // Oligool toggles dark mode by flipping the 'dark' class on <html>
+    // (App.tsx); watch it so Strider figures re-render with the matching theme.
+    useEffect(() => {
+        const sync = () =>
+            setTheme(document.documentElement.classList.contains('dark') ? 'dark' : 'light');
+        const observer = new MutationObserver(sync);
+        observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+        return () => observer.disconnect();
+    }, []);
+
+    const key = seq && dotBracket ? `${seq}|${dotBracket}|${colorMode}|${theme}` : null;
     const svg = key
         ? (svgCache.get(key) ?? (fetched?.key === key ? fetched.svg : null))
         : null;
@@ -47,7 +60,7 @@ export default function StructureFigure({ seq, dotBracket, fallback }: Structure
         fetch(`${apiBase}/strider/render`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ sequence: seq, dot_bracket: dotBracket, view: 'structure', color: colorMode }),
+            body: JSON.stringify({ sequence: seq, dot_bracket: dotBracket, view: 'structure', color: colorMode, theme }),
         })
             .then(res => (res.ok ? res.json() : Promise.reject(new Error(`HTTP ${res.status}`))))
             .then(data => {
@@ -60,7 +73,7 @@ export default function StructureFigure({ seq, dotBracket, fallback }: Structure
                 /* keep the built-in fallback */
             });
         return () => { cancelled = true; };
-    }, [mode, key, seq, dotBracket, colorMode]);
+    }, [mode, key, seq, dotBracket, colorMode, theme]);
 
     if (mode === 'strider' && svg) {
         return (

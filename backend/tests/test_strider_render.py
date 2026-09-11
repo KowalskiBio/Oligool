@@ -81,6 +81,25 @@ def test_render_color_modes_differ(client: TestClient) -> None:
 
 
 @pytest.mark.skipif(not _HAVE_STRIDER_VIZ, reason="strider.viz not importable")
+def test_render_dark_theme(client: TestClient) -> None:
+    body = {
+        "sequence": "GGGAAACCCAAAGGGAAACCC",
+        "dot_bracket": "(((...(((...)))...)))",
+    }
+    light = client.post("/strider/render", json=body)
+    dark = client.post("/strider/render", json={**body, "theme": "dark"})
+    assert light.status_code == 200
+    assert dark.status_code == 200
+    svg_dark = dark.json()["svg"]
+    # Dark theme flips the figure background to zinc-800, brightens the
+    # position-number labels, and differs from the light rendering.
+    assert "#27272a" in svg_dark
+    assert "#555555" not in svg_dark
+    assert "#a1a1aa" in svg_dark
+    assert svg_dark != light.json()["svg"]
+
+
+@pytest.mark.skipif(not _HAVE_STRIDER_VIZ, reason="strider.viz not importable")
 def test_render_arc_view(client: TestClient) -> None:
     res = client.post(
         "/strider/render",

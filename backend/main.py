@@ -1720,6 +1720,24 @@ class StriderRenderRequest(BaseModel):
     # strider's color="nt"); "structure" colors by structural element (stem,
     # hairpin loop, interior loop, multiloop, exterior).
     color: Literal["identity", "structure"] = "identity"
+    # "dark" renders with a zinc-900-style figure background and light text so
+    # the SVG blends into Oligool's dark mode instead of a white card.
+    theme: Literal["light", "dark"] = "light"
+
+
+# Dark-mode rcParams layered on top of strider's own style context.  The base /
+# backbone / rung colors strider draws with are mid-tone and legible on both
+# backgrounds, so only the figure background, text and tick colors need to flip.
+_STRIDER_DARK_RC = {
+    "figure.facecolor": "#27272a",   # zinc-800, the dark panel background
+    "axes.facecolor": "#27272a",
+    "savefig.facecolor": "#27272a",
+    "text.color": "#e4e4e7",         # zinc-200
+    "axes.labelcolor": "#e4e4e7",
+    "axes.edgecolor": "#52525b",     # zinc-600
+    "xtick.color": "#a1a1aa",        # zinc-400
+    "ytick.color": "#a1a1aa",
+}
 
 
 @app.post("/strider/render")
@@ -1744,6 +1762,7 @@ def render_strider_svg(request: StriderRenderRequest):
     if db.count("(") == 0 and db.count("[") == 0 and db.count("{") == 0 and db.count("<") == 0:
         raise HTTPException(status_code=400, detail="dot_bracket has no base pairs")
     try:
+        import contextlib
         import io
         import matplotlib
         matplotlib.use("Agg")
@@ -1751,7 +1770,9 @@ def render_strider_svg(request: StriderRenderRequest):
         from strider.viz import style
         from strider.viz.arc import arc_diagram
         from strider.viz.structure2d import draw_complex, draw_structure
-        with style.style_context():
+        theme_ctx = (matplotlib.rc_context(_STRIDER_DARK_RC)
+                     if request.theme == "dark" else contextlib.nullcontext())
+        with style.style_context(), theme_ctx:
             base_color = "nt" if request.color == "identity" else "structure"
             if request.view == "arc":
                 ax = arc_diagram(seq, db)
@@ -1762,7 +1783,12 @@ def render_strider_svg(request: StriderRenderRequest):
             buf = io.StringIO()
             ax.figure.savefig(buf, format="svg")
             plt.close(ax.figure)
-        return {"svg": buf.getvalue()}
+        svg = buf.getvalue()
+        if request.theme == "dark":
+            # Position-number labels are hardcoded mid-gray in strider.viz
+            # (structure2d.py); brighten them for the dark background.
+            svg = svg.replace("#555555", "#a1a1aa")
+        return {"svg": svg}
     except HTTPException:
         raise
     except Exception as exc:
