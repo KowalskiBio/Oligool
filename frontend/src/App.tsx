@@ -6,6 +6,7 @@ import GameArcade from './components/GameArcade';
 import UserReport from './components/UserReport';
 import { downloadSession, parseSessionText, OLIGOOL_SESSION_APP, OLIGOOL_SESSION_VERSION, type OligoolSession, type FlankingPanelState, type FlankingPrimerSelection } from './utils/session';
 import { parseSequenceHeader } from './utils/dna';
+import ResultsNav from './components/ResultsNav';
 import { getStructureRenderer, setStructureRenderer, getStructureColor, setStructureColor, type StructureRendererMode, type StructureColorMode } from './utils/structureRenderer';
 import { ACCENT_PRESETS, NEUTRAL_PRESETS, WALLPAPERS, applyAccentPreset, applyNeutralPreset, clearThemeOverrides, generatePalette } from './theme';
 
@@ -61,6 +62,7 @@ function App() {
   );
   const [structureRenderer, setStructureRendererState] = useState<StructureRendererMode>(getStructureRenderer);
   const [structureColor, setStructureColorState] = useState<StructureColorMode>(getStructureColor);
+  const [flankingProvenanceVisible, setFlankingProvenanceVisible] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [settingsTab, setSettingsTab] = useState<'account' | 'engine' | 'theme'>('account');
   const [maxHitsPreset, setMaxHitsPreset] = useState(() => localStorage.getItem('max_hits_preset') || '50');
@@ -630,8 +632,60 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
     msaViewerContainerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }, [visibleAlignment]);
 
+  const resultsNavTargets = [
+    {
+      id: 'blast-results-section',
+      label: 'BLAST Results',
+      visible: blastHits.length > 0,
+      icon: (
+        <svg className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 5.25h16.5v13.5H3.75zM3.75 10.5h16.5M3.75 15.75h16.5M9.75 5.25v13.5M14.25 5.25v13.5" />
+        </svg>
+      ),
+    },
+    {
+      id: 'msa-viewer-section',
+      label: 'MSA Viewer',
+      visible: !!visibleAlignment,
+      icon: (
+        <svg className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M4 5h4M4 9h4M4 13h7M4 17h4M11 5h4M11 9h4M15 13h5M15 17h4" />
+        </svg>
+      ),
+    },
+    {
+      id: 'oligo-provenance-section',
+      label: 'Oligo Provenance',
+      visible: step === 'done' && !!selectedSequence,
+      icon: (
+        <svg className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M8 20v-9a4 4 0 018 0v9M8 16h8" />
+        </svg>
+      ),
+      children: [
+        { id: 'oligo-context-viewer', label: 'Context Viewer' },
+        { id: 'oligo-secondary-structures', label: 'Secondary structures' },
+      ],
+    },
+    {
+      id: 'flanking-primers-section',
+      label: 'Flanking Primer Provenance',
+      visible: flankingProvenanceVisible,
+      icon: (
+        <svg className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M4 8h13m0 0l-3.5-3.5M17 8l-3.5 3.5M20 16H7m0 0l3.5-3.5M7 16l3.5 3.5" />
+        </svg>
+      ),
+      children: [
+        { id: 'flanking-context-viewer', label: 'Context Viewer' },
+        { id: 'flanking-primers-list', label: 'Primers' },
+      ],
+    },
+  ];
+
   return (
     <div className="min-h-screen py-8 px-4 sm:px-6 lg:px-8">
+      <ResultsNav targets={resultsNavTargets} />
       {wallpaperUrl && (
         <div
           className="fixed inset-0 -z-10 pointer-events-none"
@@ -1522,19 +1576,21 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
 
           {/* BLAST Results Table */}
           {blastHits.length > 0 && (
-            <BlastResults
-              hits={blastHits}
-              filteredHits={filteredHits}
-              showMatches={showMatches}
-              onToggleShowMatches={() => setShowMatches(v => !v)}
-              onHitClick={handleHitClick}
-            />
+            <div id="blast-results-section">
+              <BlastResults
+                hits={blastHits}
+                filteredHits={filteredHits}
+                showMatches={showMatches}
+                onToggleShowMatches={() => setShowMatches(v => !v)}
+                onHitClick={handleHitClick}
+              />
+            </div>
           )}
 
           {/* MSA Viewer */}
           {visibleAlignment && (
             <>
-              <div ref={msaViewerContainerRef}>
+              <div id="msa-viewer-section" ref={msaViewerContainerRef}>
                 <MSAViewer
                   ref={msaViewerRef}
                   alignment={visibleAlignment}
@@ -1573,6 +1629,7 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                   onFlankingPrimersUpdate={setSelectedFlankingPrimers}
                   flankingPanelState={flankingPanelState}
                   onFlankingPanelStateChange={setFlankingPanelState}
+                  onFlankingVisible={setFlankingProvenanceVisible}
                   onNavigateTo={(colStart, colEnd) => {
                     setNavigateTarget({ colStart, colEnd, ts: Date.now() });
                     setRestoredRegion({ start: colStart, end: colEnd });

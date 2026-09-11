@@ -1703,7 +1703,7 @@ export default function FlankingPrimersPanel({
 
             <div className="p-5 space-y-5">
                 {/* ── Context Viewer ── */}
-                <div>
+                <div id="flanking-context-viewer">
                 <div className="flex items-center justify-between mb-2">
                     <span className="text-[13px] font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Context Viewer</span>
                     <div className="flex items-center gap-2">
@@ -1875,7 +1875,7 @@ export default function FlankingPrimersPanel({
 
                 {/* ── Results ── */}
                 {(result || selFwd || selRev) && (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-5 ">
+                    <div id="flanking-primers-list" className="grid grid-cols-1 md:grid-cols-2 gap-5 ">
                         <div>
                             <div className="text-[13px] font-medium text-emerald-600 dark:text-emerald-400 uppercase tracking-wider mb-2 px-1">
                                 Left (Forward) Primers{result ? `: ${result.forward.num_returned} found` : ''}

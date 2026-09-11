@@ -46,6 +46,8 @@ interface QueryViewerProps {
     flankingPanelState?: FlankingPanelState | null;
     /** Relays durable FlankingPrimersPanel state up to App for session saves. */
     onFlankingPanelStateChange?: (state: FlankingPanelState) => void;
+    /** Tells App whether the Flanking Primers Provenance card is currently shown (results navigation). */
+    onFlankingVisible?: (visible: boolean) => void;
     onNavigateTo?: (colStart: number, colEnd: number) => void;
     /** Gapped column range selected by the user in MSAViewer for constrained oligo search */
     oligoRegion?: { startCol: number; endCol: number } | null;
@@ -155,7 +157,7 @@ function EditableOligoName({ value, onChange, className, editing, onEditingChang
     );
 }
 
-const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function QueryViewer({ data, jobName, genbankHeader, onGenbankHeaderChange, onPrimersUpdate, onFlankingPrimersUpdate, flankingPanelState, onFlankingPanelStateChange, onNavigateTo, oligoRegion, autofindRegion, idtCredentials, onParameterSetChange, searchEngine, equilibriumSplit, alignment, navigateTarget, isDarkMode, importedSession, onSaveSession, blastRid, hitRanges }, ref) {
+const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function QueryViewer({ data, jobName, genbankHeader, onGenbankHeaderChange, onPrimersUpdate, onFlankingPrimersUpdate, flankingPanelState, onFlankingPanelStateChange, onFlankingVisible, onNavigateTo, oligoRegion, autofindRegion, idtCredentials, onParameterSetChange, searchEngine, equilibriumSplit, alignment, navigateTarget, isDarkMode, importedSession, onSaveSession, blastRid, hitRanges }, ref) {
     const API_BASE = ((import.meta.env.VITE_API_BASE as string) || '');
     const [copyFeedback, setCopyFeedback] = useState('');
 
@@ -330,6 +332,14 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
     const [searchOligoError, setSearchOligoError] = useState<string | null>(null);
     const [showFlankingPrimers, setShowFlankingPrimers] = useState(false);
     const [flankDesignNonce, setFlankDesignNonce] = useState(0);
+
+    // Relay flanking-panel visibility to App so the results navigation can
+    // offer (and later retract) the Flanking Provenance entry.
+    useEffect(() => {
+        onFlankingVisible?.(!!primers && showFlankingPrimers);
+        return () => onFlankingVisible?.(false);
+    }, [primers, showFlankingPrimers, onFlankingVisible]);
+
     const [flankingPrimersData, setFlankingPrimersData] = useState<{
         fwd: { start: number; end: number } | null;
         rev: { start: number; end: number } | null;
@@ -2127,7 +2137,7 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
 
     return (
         <>
-        <div className="mt-6 card overflow-hidden transition-all">
+        <div id="oligo-provenance-section" className="mt-6 card overflow-hidden transition-all">
             <div className="panel-header flex items-center justify-between flex-wrap gap-2">
                 <div className="flex items-center gap-3 flex-wrap">
                     <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
@@ -2577,7 +2587,7 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                         </div>
                     )}
 
-                    <div className="mt-4 p-5 bg-zinc-50 dark:bg-zinc-800/40 rounded-lg border border-zinc-200 dark:border-zinc-700">
+                    <div id="oligo-context-viewer" className="mt-4 p-5 bg-zinc-50 dark:bg-zinc-800/40 rounded-lg border border-zinc-200 dark:border-zinc-700">
                         <div className="flex justify-between items-center mb-2 gap-4">
                             <div className="flex items-center gap-3 flex-wrap">
                                 <span className="text-[13px] font-bold text-zinc-500 uppercase">Context Viewer</span>
@@ -2984,7 +2994,7 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                      )}
 
                     {primers && (
-                        <div className="mt-4 border-t border-zinc-100 dark:border-zinc-700 pt-4">
+                        <div id="oligo-secondary-structures" className="mt-4 border-t border-zinc-100 dark:border-zinc-700 pt-4">
                             <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
                                 <h4 className="text-sm font-bold text-zinc-400 uppercase tracking-widest">Secondary structures</h4>
                                 <div className="flex items-center gap-3">
