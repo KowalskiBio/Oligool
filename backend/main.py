@@ -419,7 +419,8 @@ def _short_stem_two_state_tm(seq, structure, mv_m, mg_m, paramset_obj):
     dS = (dH - dG37) / T_REF
     if abs(dS) < 1e-6:
         return None
-    return dH / dS - 273.15
+    # Returns (tm_C, dH kcal/mol, dS cal/mol/K): units match hairpin_thermo.
+    return dH / dS - 273.15, dH, dS * 1000.0
 
 
 def strider_hairpin_analysis(seq, *, mv_conc, dv_conc, dntp_conc,
@@ -429,9 +430,17 @@ def strider_hairpin_analysis(seq, *, mv_conc, dv_conc, dntp_conc,
     Folds the sequence at 25 °C (unless ``structure`` is given, mirroring the
     MOLigo path that scores its own fold), then computes the Tm via
     hairpin_thermo (Mg2+-aware, concentration-independent).  Returns
-    ``{"tm": float | None, "short_stem": bool}``; tm is None when strider is
+    ``{"tm": float | None, "short_stem": bool, "multiloop": bool,
+    "dH": float | None, "dS": float | None}``; tm is None when strider is
     unavailable or no stable hairpin exists (same ``t > 1.0`` display policy
-    as before).
+    as before).  dH (kcal/mol) and dS (cal/mol/K) are the two-state pair
+    behind that Tm, so callers can evaluate the classic sigmoid
+    f(T) = 1/(1 + e^(dG(T)/RT)) at any temperature; they are None whenever
+    tm is.  ``multiloop`` marks a branched fold (several stems).  strider #14+
+    splits such folds into individual stem-loops and scores the most stable
+    one, so tm (when present) is the best single stem's two-state Tm, not the
+    whole fold's; the UI annotates it as a per-stem number.  tm stays None
+    with multiloop=True when no scorable stem can be extracted at all.
 
     Version-tolerant across the strider #14 hairpin guards: pre-#14 strider
     returns short-stem (< SHORT_STEM_WARN_BP bp) Tms directly, which we flag
@@ -439,8 +448,9 @@ def strider_hairpin_analysis(seq, *, mv_conc, dv_conc, dntp_conc,
     case the Tm is recomputed locally (_short_stem_two_state_tm) and flagged,
     so the UI can warn instead of silently dropping the value.
     """
+    _no_tm = {"tm": None, "short_stem": False, "multiloop": False, "dH": None, "dS": None}
     if _strider_melting_temperature is None or not seq:
-        return {"tm": None, "short_stem": False}
+        return dict(_no_tm)
     try:
         from strider.thermo.hairpin import hairpin_thermo
         mv_m = float(mv_conc) / 1000.0
@@ -453,13 +463,17 @@ def strider_hairpin_analysis(seq, *, mv_conc, dv_conc, dntp_conc,
             eng = _thermo_engine_cached('dna', 25.0, mv_m, mg_m, parameter_set)
             mfe = eng.mfe(seq)
             if '(' not in mfe.structure:
-                return {"tm": None, "short_stem": False}
+                return dict(_no_tm)
             structure = mfe.structure
+        # Branched fold (several stems): strider scores the best stem after
+        # its multiloop split, so the Tm we get back (if any) is per-stem.
+        branched = not _is_single_stem(structure)
         kw = {"paramset": paramset_obj} if paramset_obj is not None else {}
         try:
             res = hairpin_thermo(seq, sodium_M=mv_m, magnesium_M=mg_m,
                                  structure=structure, dangles=2, **kw)
             t = res.tm_celsius
+            dh, ds = res.dH, res.dS
             n_pairs = getattr(res, "n_pairs", None)
             short = n_pairs is not None and n_pairs < SHORT_STEM_WARN_BP
         except ValueError as e:
@@ -467,17 +481,27 @@ def strider_hairpin_analysis(seq, *, mv_conc, dv_conc, dntp_conc,
             if "stem is" in msg and "bp" in msg:
                 # strider #14+: stem below MIN_STEM_BP.  Oligool reports it
                 # with a warning instead of hiding it.
-                t = _short_stem_two_state_tm(seq, structure, mv_m, mg_m, paramset_obj)
-                if t is None:
-                    return {"tm": None, "short_stem": False}
+                local = _short_stem_two_state_tm(seq, structure, mv_m, mg_m, paramset_obj)
+                if local is None:
+                    return dict(_no_tm)
+                t, dh, ds = local
                 short = True
+            elif ("not a single unbranched hairpin" in msg
+                  or "no valid stem-loop found in multiloop" in msg):
+                # Pseudoknot/malformed bracket, or a branched fold from which
+                # no scorable stem could be extracted: no per-stem Tm exists.
+                return {"tm": None, "short_stem": False, "multiloop": True,
+                        "dH": None, "dS": None}
             else:
                 raise
-        return {"tm": round(t, 1) if t and t > 1.0 else None,
-                "short_stem": bool(short)}
+        if t and t > 1.0:
+            return {"tm": round(t, 1), "short_stem": bool(short), "multiloop": bool(branched),
+                    "dH": dh, "dS": ds}
+        return {"tm": None, "short_stem": bool(short), "multiloop": bool(branched),
+                "dH": None, "dS": None}
     except Exception:
         logging.exception("strider hairpin_tm failed for %s", seq)
-        return {"tm": None, "short_stem": False}
+        return dict(_no_tm)
 
 
 def strider_hairpin_tm(seq, *, mv_conc, dv_conc, dntp_conc):
@@ -907,6 +931,9 @@ def _is_single_stem(structure: str) -> bool:
         return False
     if not pairs:
         return False
+    # Pairs were appended in closing order (lefts descending); the nesting
+    # check below needs them in left-index order.
+    pairs.sort()
     for k in range(1, len(pairs)):
         if not (pairs[k][0] > pairs[k - 1][0] and pairs[k][1] < pairs[k - 1][1]):
             return False
@@ -994,6 +1021,7 @@ def _run_strider_analysis(
             # Short-stem warning flag for the hairpin two-state Tm (never set on
             # the dimer path: bimolecular Tms have no MIN_STEM_BP guard).
             mfe_tm_short = False
+            mfe_tm_multiloop = False
 
             # Fraction of the monomeric (hairpin) ensemble that is unfolded or
             # merely transient (open state plus all ΔG >= 0 microstates).
@@ -1005,6 +1033,9 @@ def _run_strider_analysis(
             ensemble_dg = None
             ensemble_dg_native = None
             population_fraction = None
+            # Two-state (hairpin-vs-open) fraction of the reported structure at
+            # base_temp; None on the dimer path (bimolecular, no such thing).
+            two_state_fraction = None
             # Full unimolecular enumeration (hairpin path only): reused for
             # both the partition sum and the suboptimal-structure display.
             subs_enum: list = []
@@ -1122,56 +1153,92 @@ def _run_strider_analysis(
                 def _with_div(s): return s
 
                 # Only draw the MFE structure when it actually has base pairs. When the
-                # MFE is flat (all dots, ΔG = 0) there is no stable structure — by
-                # definition no suboptimal structure can have ΔG < 0, so we must NOT
+                # MFE is flat (all dots, ΔG = 0) there is no stable structure:
+                # by definition no suboptimal structure can have ΔG < 0, so we must NOT
                 # fall back to a positive-ΔG fold that doesn't physically form.
+                # The display policy stays, but the PARTITION still runs on the
+                # flat path: past the Tm the best paired structure has a small
+                # positive ΔG yet retains real Boltzmann weight, and nulling it
+                # collapsed P_Hairpin to a hard zero one degree past Tm.
                 if _valid_paired(raw_mfe):
                     viz_struct_raw = raw_mfe
                     viz_dg = round(float(mfe_result.energy), 2)
-                    # Enumeration-based partition: sum the Boltzmann weights of
-                    # the same dangles=2 structures that are displayed, instead
-                    # of pfunc, whose dangle-free energy model disagrees with
-                    # them by ~1 kcal per structure. That mismatch used to
-                    # inflate Z ~8x, pushing "unfolded" to ~1% and the MFE
-                    # share to ~10% for marginal hairpins. gap=5 enumerates
-                    # every structure with non-negligible weight, including the
-                    # fully-open state, so Z is essentially exact.
-                    try:
-                        subs_enum = eng.subopt(fold_seq, gap=5.0, max_structures=20000)
-                    except Exception:
-                        subs_enum = []
-                    _rt_uni = R_GAS * (base_temp + 273.15)
-                    _Z_uni = 0.0
-                    _neg_w = 0.0
-                    for _s, _e, _ in subs_enum:
-                        _w = math.exp(-float(_e) / _rt_uni)
-                        _Z_uni += _w
-                        if float(_e) < 0.0:
-                            _neg_w += _w
-                    if not any("(" not in _s for _s, _, _ in subs_enum):
-                        _Z_uni += 1.0  # fully-open state missing from the enumeration
-                    _mfe_w = math.exp(-viz_dg / _rt_uni)
-                    _Z_uni = max(_Z_uni, _mfe_w)
-                    _neg_w = max(_neg_w, _mfe_w)
+                else:
+                    viz_struct_raw = None
+                    viz_dg = None
+
+                # Enumeration-based partition: sum the Boltzmann weights of
+                # the same dangles=2 structures that are displayed, instead
+                # of pfunc, whose dangle-free energy model disagrees with
+                # them by ~1 kcal per structure. That mismatch used to
+                # inflate Z ~8x, pushing "unfolded" to ~1% and the MFE
+                # share to ~10% for marginal hairpins. gap=5 enumerates
+                # every structure with non-negligible weight, including the
+                # fully-open state, so Z is essentially exact. The gap is
+                # anchored to the MFE, so the window is continuous across
+                # the flat-MFE boundary (window [MFE, MFE+5] -> [0, 5]).
+                try:
+                    subs_enum = eng.subopt(fold_seq, gap=5.0, max_structures=20000)
+                except Exception:
+                    subs_enum = []
+                _rt_uni = R_GAS * (base_temp + 273.15)
+                _Z_uni = 0.0
+                _neg_w = 0.0
+                _best_pair_struct = None
+                _best_pair_dg = None
+                for _s, _e, _ in subs_enum:
+                    _w = math.exp(-float(_e) / _rt_uni)
+                    _Z_uni += _w
+                    if float(_e) < 0.0:
+                        _neg_w += _w
+                    if _valid_paired(_s) and (_best_pair_dg is None or float(_e) < _best_pair_dg):
+                        _best_pair_struct = _s
+                        _best_pair_dg = float(_e)
+                if not any("(" not in _s for _s, _, _ in subs_enum):
+                    _Z_uni += 1.0  # fully-open state missing from the enumeration
+                if viz_dg is not None:
+                    _hairpin_w = math.exp(-viz_dg / _rt_uni)
+                    _Z_uni = max(_Z_uni, _hairpin_w)
+                    _neg_w = max(_neg_w, _hairpin_w)
+                elif _best_pair_struct is not None:
+                    _hairpin_w = math.exp(-_best_pair_dg / _rt_uni)
+                    _Z_uni = max(_Z_uni, 1.0 + _hairpin_w)
+                else:
+                    _hairpin_w = 0.0
+                    _Z_uni = max(_Z_uni, 1.0)
+                if viz_dg is not None or _best_pair_struct is not None:
                     ensemble_dg = round(-_rt_uni * math.log(_Z_uni), 2)
                     # No bimolecular association term for a single strand, so no
                     # convention shift is needed here (unlike the dimer branch).
                     ensemble_dg_native = ensemble_dg
-                    population_fraction = round(_mfe_w / _Z_uni, 4)
+                    population_fraction = round(_hairpin_w / _Z_uni, 4)
                     # Unfolded share of the monomer ensemble: the fully-open
                     # state plus every thermodynamically unfavourable (ΔG >= 0)
                     # transient microstate. A structure with positive ΔG is a
                     # random-coil fluctuation, not a stable fold; counting these
                     # as "other folds" made weak-hairpin primers look ~80%
                     # structured when their only favorable fold is barely below
-                    # 0 kcal/mol.
-                    population_unfolded = round(max(0.0, (_Z_uni - _neg_w) / _Z_uni), 4)
-                else:
-                    viz_struct_raw = None
-                    viz_dg = None
-                    ensemble_dg_native = None
-                    ensemble_dg = None
-                    population_fraction = None
+                    # 0 kcal/mol. The reported hairpin structure itself is carved
+                    # out (below its Tm via _neg_w, above it by hand) so Hairpin
+                    # and Unfolded never double-count it.
+                    _excluded_hairpin_w = _hairpin_w if viz_dg is None else 0.0
+                    population_unfolded = round(
+                        max(0.0, (_Z_uni - _neg_w - _excluded_hairpin_w) / _Z_uni), 4)
+
+                # Two-state sigmoid of the structure the cards anchor on: the
+                # 25 C MFE, i.e. the SAME fold behind the displayed Local Tm
+                # (strider_hairpin_analysis with structure=None folds at 25).
+                # Evaluating its dH/dS at base_temp makes the Two-way strip
+                # read 50% at the reported Tm by construction and decay
+                # monotonically past it, independent of which fold happens to
+                # be the MFE at the query temperature.
+                two_state_fraction = None
+                _ts = strider_hairpin_analysis(
+                    fold_seq, mv_conc=mv_conc, dv_conc=mg_conc,
+                    dntp_conc=dntp_conc, parameter_set=parameter_set)
+                if _ts.get("tm") is not None and _ts.get("dH") is not None and _ts.get("dS") is not None:
+                    _dg_ts = _ts["dH"] - (base_temp + 273.15) * (_ts["dS"] / 1000.0)
+                    two_state_fraction = round(1.0 / (1.0 + math.exp(_dg_ts / _rt_uni)), 4)
 
                 # Tm: unimolecular two-state for hairpins via hairpin_thermo.
                 # Short-stem (< 3 bp) structures are reported WITH a warning
@@ -1183,9 +1250,9 @@ def _run_strider_analysis(
                         fold_seq, mv_conc=mv_conc, dv_conc=mg_conc,
                         dntp_conc=dntp_conc, structure=structure,
                         parameter_set=parameter_set)
-                    return res["tm"], res["short_stem"]
+                    return res["tm"], res["short_stem"], res["multiloop"]
 
-                mfe_tm, mfe_tm_short = _struct_tm(viz_struct_raw, viz_dg)
+                mfe_tm, mfe_tm_short, mfe_tm_multiloop = _struct_tm(viz_struct_raw, viz_dg)
 
             viz_struct = _with_div(viz_struct_raw) if viz_struct_raw else None
 
@@ -1205,9 +1272,11 @@ def _run_strider_analysis(
                 item["Local_DeltaG"] = viz_dg
                 item["Local_Tm"] = mfe_tm
                 item["Local_Tm_ShortStem"] = mfe_tm_short
+                item["Local_Tm_Multiloop"] = mfe_tm_multiloop
                 item["Ensemble_DeltaG"] = ensemble_dg
                 item["Population_Fraction"] = population_fraction
                 item["Population_Unfolded"] = population_unfolded
+                item["Two_State_Fraction"] = two_state_fraction
                 # Association-term-kept ensemble ΔG (kept for API compat; since
                 # the enumeration-based rework it equals Ensemble_DeltaG).
                 item["Ensemble_DeltaG_Native"] = ensemble_dg_native
@@ -1262,13 +1331,14 @@ def _run_strider_analysis(
                     if float(sub_energy) >= 0: continue
                     seen.add(sub_struct)
                     sub_dg = round(float(sub_energy), 2)
-                    sub_tm, sub_tm_short = _struct_tm(sub_struct, sub_dg)
+                    sub_tm, sub_tm_short, sub_tm_multiloop = _struct_tm(sub_struct, sub_dg)
                     final_results.append({
                         "DotBracket": _with_div(sub_struct),
                         "Sequence": display_seq,
                         "Local_DeltaG": sub_dg,
                         "Local_Tm": sub_tm,
                         "Local_Tm_ShortStem": sub_tm_short,
+                        "Local_Tm_Multiloop": sub_tm_multiloop,
                         "DeltaG": None,
                         "IDT_Tm": None,
                         # Ensemble share of this structure within the full
@@ -1360,6 +1430,7 @@ def _run_strider_analysis(
             top_idt_tms = [item.get("IDT_Tm") for item in scored_items[:5]]
             top_local_tms = [item.get("Local_Tm") for item in scored_items[:5]]
             top_local_tms_short = [bool(item.get("Local_Tm_ShortStem")) for item in scored_items[:5]]
+            top_local_tms_multiloop = [bool(item.get("Local_Tm_Multiloop")) for item in scored_items[:5]]
             top_ensemble_dgs = [item.get("Ensemble_DeltaG") for item in scored_items[:5]]
             top_pop_fracs = [item.get("Population_Fraction") for item in scored_items[:5]]
 
@@ -1372,6 +1443,7 @@ def _run_strider_analysis(
                 "all_IDT_Tm": top_idt_tms,
                 "all_Local_Tm": top_local_tms,
                 "all_Local_Tm_ShortStem": top_local_tms_short,
+                "all_Local_Tm_Multiloop": top_local_tms_multiloop,
                 "raw": top_items
             }
 
@@ -1398,12 +1470,16 @@ def _run_strider_analysis(
         return None
 
     def _competition(seq_a, seq_b, selfdimer_dg, hetero_dg, has_hetero, hairpin_pop_frac,
-                     hairpin_unfolded_frac=None, monomer_a_dg=None, monomer_b_dg=None):
+                     hairpin_unfolded_frac=None, monomer_a_dg=None, monomer_b_dg=None,
+                     hairpin_twostate_frac=None):
         """Concentration-aware free/hairpin/self-dimer/heterodimer split via
         strider's mass-action solver. Every complex free energy must come from
         the enumeration-based partition built in add_strider_analysis (same
         energy model as the displayed structures); pfunc fallbacks are only
         used if the enumeration value is missing.
+        hairpin_twostate_frac is the classic two-state sigmoid of the reported
+        hairpin (from the same dH/dS as its Local Tm), exposed as
+        P_Hairpin_TwoState for the Two-way strip mode.
         Returns None (rather than raising) if strider is unavailable or the
         Newton solve can't be set up, so this never breaks the rest of the
         response."""
@@ -1437,9 +1513,11 @@ def _run_strider_analysis(
             # in other suboptimal folds.
             p_hairpin = p_free * hairpin_pop_frac if hairpin_pop_frac is not None else None
             p_unfolded = p_free * hairpin_unfolded_frac if hairpin_unfolded_frac is not None else None
+            p_twostate = p_free * hairpin_twostate_frac if hairpin_twostate_frac is not None else None
             return {
                 "P_Free": round(p_free, 4),
                 "P_Hairpin": round(p_hairpin, 4) if p_hairpin is not None else None,
+                "P_Hairpin_TwoState": round(p_twostate, 4) if p_twostate is not None else None,
                 "P_Unfolded": round(p_unfolded, 4) if p_unfolded is not None else None,
                 "P_SelfDimer": round(p_selfdimer, 4),
                 "P_HeteroDimer": round(p_hetero, 4) if has_hetero else None,
@@ -1461,6 +1539,7 @@ def _run_strider_analysis(
         _first_field(m1_hairpin, "Population_Unfolded"),
         monomer_a_dg=_first_field(m1_hairpin, "Ensemble_DeltaG"),
         monomer_b_dg=_first_field(m2_hairpin, "Ensemble_DeltaG") if p2_seq is not None else None,
+        hairpin_twostate_frac=_first_field(m1_hairpin, "Two_State_Fraction"),
     )
     if p2_seq is not None:
         competition_m2 = _competition(
@@ -1469,6 +1548,7 @@ def _run_strider_analysis(
             _first_field(m2_hairpin, "Population_Unfolded"),
             monomer_a_dg=_first_field(m2_hairpin, "Ensemble_DeltaG"),
             monomer_b_dg=_first_field(m1_hairpin, "Ensemble_DeltaG"),
+            hairpin_twostate_frac=_first_field(m2_hairpin, "Two_State_Fraction"),
         )
     else:
         competition_m2 = None

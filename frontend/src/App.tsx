@@ -938,11 +938,11 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                       </label>
                       <div
                         className="flex items-center rounded-md border border-zinc-300 dark:border-zinc-700 overflow-hidden"
-                        title="How the monomer pool is shown in the competition strips: Two-way folds Free, Hairpin and dimers into one view; Three-way additionally splits Free into Unfolded and Other folds"
+                        title="How the monomer pool is shown in the competition strips: Two-state (model) shows the classic hairpin-vs-open sigmoid built from the same dH/dS behind Local Tm, so it reads 50% at the reported Tm; Ensemble (three-way) splits the free monomer pool into Unfolded and Other folds from the full partition"
                       >
                         {([
-                          ['two-way', 'Two-way'],
-                          ['three-way', 'Three-way'],
+                          ['two-way', 'Two-state (model)'],
+                          ['three-way', 'Ensemble (three-way)'],
                         ] as const).map(([value, label], idx) => (
                           <button
                             key={value}
@@ -958,7 +958,7 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                         ))}
                       </div>
                       <p className="text-[13px] text-zinc-500 dark:text-zinc-400">
-                        Two-way: Free / Hairpin / dimers. Three-way: Free is split into Unfolded and Other folds
+                        Two-state (model): the classic Free / Hairpin / dimers view, keyed to Local Tm (50% at Tm). Ensemble (three-way): Free is split into Unfolded and Other folds
                       </p>
                     </div>
                     <div className="flex items-center gap-3 flex-wrap mt-4">
@@ -1624,6 +1624,26 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
               </div>
               <div className="space-y-4 text-sm text-zinc-700 dark:text-zinc-300">
                 <section className="flex gap-3">
+                  <svg className="h-5 w-5 flex-shrink-0 mt-0.5 text-accent-700 dark:text-accent-300" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-4.293-4.707a1 1 0 00-1.414 0l-5 5a1 1 0 000 1.414l5 5a1 1 0 001.414-1.414L9.414 11l4.293-4.293a1 1 0 000-1.414z" clipRule="evenodd" /></svg>
+                  <div>
+                    <h3 className="font-semibold text-accent-700 dark:text-accent-300 mb-1">Equilibrium strips: no cliff past Tm, and a true Two-state mode</h3>
+                    <p>
+                      Two fixes for the equilibrium strips. First, the cliff: a degree or two above a hairpin's
+                      Tm the strip used to collapse to a hard zero (the monomer partition was dropped when the
+                      MFE turned flat), even though a structure one degree past its Tm still holds ~45% of
+                      strands. The partition now keeps running past that point, so the hairpin share decays
+                      smoothly with temperature. Second, the Equilibrium toggle is now honest about what it
+                      shows: <b>Two-state (model)</b> displays the classic hairpin-vs-open sigmoid built from
+                      the same dH/dS behind Local Tm, so it reads 50% at the reported Tm and decays
+                      monotonically above it, exactly like the textbook melting curve. <b>Ensemble
+                      (three-way)</b> keeps the full partition, where competing folds depress the best
+                      structure's share near its Tm; when the two views disagree by 10 points or more, the
+                      strip says so, turning the gap into a measure of ensemble degeneracy instead of a
+                      silent inconsistency.
+                    </p>
+                  </div>
+                </section>
+                <section className="flex gap-3">
                   <svg className="h-5 w-5 flex-shrink-0 mt-0.5 text-accent-700 dark:text-accent-300" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M3 5a2 2 0 012-2h10a2 2 0 012 2v10a2 2 0 01-2 2H5a2 2 0 01-2-2V5zm3.293 1.293a1 1 0 011.414 0L10 8.586l2.293-2.293a1 1 0 111.414 1.414L11.414 10l2.293 2.293a1 1 0 01-1.414 1.414L10 11.414l-2.293 2.293a1 1 0 01-1.414-1.414L8.586 10 6.293 7.707a1 1 0 010-1.414z" clipRule="evenodd" /></svg>
                   <div>
                     <h3 className="font-semibold text-accent-700 dark:text-accent-300 mb-1">New setting: Equilibrium split, Two-way or Three-way</h3>
@@ -1708,17 +1728,22 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                       above 25 °C); a hairpin with ΔG = -0.3 is barely distinguishable from random noise,
                       because RT alone (~0.6) outweighs it, and its Tm sits below the assay temperature.
                     </p>
-                    <p>
-                      <b>Two-state versus three-state.</b> The classic two-state picture assumes exactly two
-                      populations: the folded hairpin and everything else (Free). It is the model behind
-                      every ΔG and Tm on the cards, and it is perfectly fine for answering "will this
-                      structure form at all?". The three-way strip uses the full ensemble to additionally
-                      split that "everything else" into what is genuinely unfolded (open chain or transient
-                      flickers) and what is caught in other real, favorable folds. If you want one number
-                      per question ("is my primer free?"), use Two-way. If you want to see where the free
-                      pool actually lives, use Three-way. Both views come from the same solve, so they
-                      always agree with each other and with the per-structure percentages.
-                    </p>
+                     <p>
+                       <b>Two-state (model) versus Ensemble (three-way).</b> The classic two-state picture
+                       assumes exactly two populations: the folded hairpin and everything else (Free). It is
+                       the model behind every ΔG and Tm on the cards, and it is perfectly fine for
+                       answering "will this structure form at all?". In this mode the strip's Hairpin
+                       segment is the two-state sigmoid of the structure behind Local Tm: 50% at its Tm,
+                       decaying smoothly above it, like a textbook melting curve. The ensemble strip uses
+                       the full partition to additionally split that "everything else" into what is
+                       genuinely unfolded (open chain or transient flickers) and what is caught in other
+                       real, favorable folds; near the Tm, that competition leaves the best structure with
+                       less than the two-state promise. When the two views disagree by 10 points or more,
+                       the strip notes the ensemble number: the gap is the cost of the two-state
+                       assumption, not an error. If you want one number per question ("is my primer
+                       free?"), use Two-state. If you want to see where the free pool actually lives, use
+                       Ensemble. Dimer segments are identical in both modes; only the monomer view differs.
+                     </p>
                   </div>
                 </section>
                 <section className="flex gap-3">

@@ -711,14 +711,20 @@ export default function FlankingPrimersPanel({
         if (!competition) return null;
         // P_Hairpin and P_Unfolded are subsets of P_Free (the monomeric
         // population split by the unimolecular ensemble); carve them out so the
-        // segments are mutually exclusive and sum to ~100%. Without P_Unfolded
-        // (pre-split payloads) fall back to a single "Free" segment.
-        const pHairpin = competition.P_Hairpin ?? 0;
+        // segments are mutually exclusive and sum to ~100%.
+        // Two-state mode runs the classic hairpin-vs-open sigmoid from the
+        // same dH/dS behind Local Tm (50% at Tm, smooth decay past it);
+        // Ensemble mode keeps the full-partition share, where competing
+        // folds depress the MFE near Tm. Without P_Unfolded (pre-split
+        // payloads) fall back to a single "Free" segment.
+        const pHairpinTwoState = competition.P_Hairpin_TwoState ?? null;
+        const useTwoState = equilibriumSplit === 'two-way' && pHairpinTwoState != null;
+        const pHairpin = useTwoState ? pHairpinTwoState! : (competition.P_Hairpin ?? 0);
         const pUnfolded = competition.P_Unfolded ?? null;
         const pFreeTotal = competition.P_Free ?? 0;
-        // Three-way mode (with an ensemble-split payload available): Unfolded +
-        // Hairpin + Other folds. Two-way mode (or pre-split payloads): the old
-        // single "Free" segment for the whole non-MFE monomer pool.
+        // Ensemble (three-way) mode with an ensemble-split payload available:
+        // Unfolded + Hairpin + Other folds. Two-state mode (or pre-split
+        // payloads): the single "Free" segment for the whole non-MFE pool.
         const useSplit = equilibriumSplit !== 'two-way' && pUnfolded != null;
         const pOtherFolds = useSplit
             ? Math.max(0, pFreeTotal - pHairpin - pUnfolded!)
@@ -739,7 +745,7 @@ export default function FlankingPrimersPanel({
         const shown = segments.filter(s => s.value > 0.001);
         if (shown.length === 0) return null;
         const wasComputed: Record<string, boolean> = {
-            Hairpin: competition.P_Hairpin !== null && competition.P_Hairpin !== undefined,
+            Hairpin: useTwoState || (competition.P_Hairpin !== null && competition.P_Hairpin !== undefined),
             'Self-Dimer': competition.P_SelfDimer !== null && competition.P_SelfDimer !== undefined,
             'Cross-Dimer': competition.P_HeteroDimer !== null && competition.P_HeteroDimer !== undefined,
             Unfolded: useSplit,
@@ -769,6 +775,13 @@ export default function FlankingPrimersPanel({
                         </span>
                     ))}
                 </div>
+                {useTwoState && !useSplit && competition.P_Hairpin != null
+                    && pHairpinTwoState != null
+                    && Math.abs(pHairpinTwoState - competition.P_Hairpin) >= 0.1 && (
+                    <div className="text-[13px] text-zinc-400 dark:text-zinc-500 mt-0.5">
+                        Two-state model; the ensemble view puts the best fold at {(competition.P_Hairpin * 100).toFixed(1)}%
+                    </div>
+                )}
                 {competition.Converged === false && (
                     <div className="text-[13px] text-amber-500 mt-0.5 italic">Equilibrium solve did not fully converge, treat as approximate.</div>
                 )}
@@ -809,6 +822,7 @@ export default function FlankingPrimersPanel({
             const itemIdtTm = item.IDT_Tm ?? null;
             const itemLocalTm = item.Local_Tm ?? null;
             const itemLocalTmShort = item.Local_Tm_ShortStem === true;
+            const itemLocalTmMultiloop = item.Local_Tm_Multiloop === true;
             const hasStructure = !!(item.DotBracket || item.Local_DotBracket || item.Bonds);
             const itemIsDimer = String(item.Sequence ?? item.DotBracket ?? item.Local_DotBracket ?? '').includes('&');
             const itemPopFrac = item.Population_Fraction ?? null;
@@ -826,7 +840,7 @@ export default function FlankingPrimersPanel({
                     {!itemIsDimer && (
                         <span>IDT Tm: <span className="font-mono tabular-nums text-zinc-500">{itemIdtTm != null ? `${Number(itemIdtTm).toFixed(1)}°C` : '–'}</span></span>
                     )}
-                    <span>Strider Tm: <span className="font-mono tabular-nums text-zinc-500">{itemLocalTm != null ? `${itemLocalTm.toFixed(1)}°C` : '–'}</span>{itemLocalTm != null && itemLocalTmShort && <span title="Hairpin stem under 3 bp: two-state Tm is unreliable (marginal structure)" className="ml-1 text-amber-600 dark:text-amber-400 font-bold">*</span>}</span>
+                    <span>Strider Tm: <span className="font-mono tabular-nums text-zinc-500">{itemLocalTm != null ? `${itemLocalTm.toFixed(1)}°C` : '–'}</span>{itemLocalTm != null && itemLocalTmShort && <span title="Hairpin stem under 3 bp: two-state Tm is unreliable (marginal structure)" className="ml-1 text-amber-600 dark:text-amber-400 font-bold">*</span>}{itemLocalTmMultiloop && <span title={itemLocalTm != null ? 'Multiloop fold (several stems): Tm is the best single stem\'s two-state Tm, not the whole fold\'s' : 'Multiloop fold (several stems): no scorable stem, no two-state Tm'} className="ml-1 text-amber-600 dark:text-amber-400 font-bold">*</span>}</span>
                 </>
             );
             const popFracRow = itemPopFrac != null && (

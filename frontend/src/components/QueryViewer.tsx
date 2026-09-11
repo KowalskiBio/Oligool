@@ -82,6 +82,8 @@ interface QueryViewerProps {
 interface CompetitionResult {
     P_Free?: number | null;
     P_Hairpin?: number | null;
+    /** Classic two-state sigmoid of the hairpin behind Local Tm (Two-way mode). */
+    P_Hairpin_TwoState?: number | null;
     /** Fraction of all strands that are monomeric AND fully unfolded (1/Z). */
     P_Unfolded?: number | null;
     P_SelfDimer?: number | null;
@@ -1870,8 +1872,8 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                             {itemIdtTmVal !== undefined && itemIdtTmVal !== null && (
                                 <span>IDT Tm: <span className={`font-mono tabular-nums ${getTmColor(itemIdtTmVal)}`}>{Number(itemIdtTmVal).toFixed(1)}°C</span></span>
                             )}
-                            {itemLocalTmVal !== undefined && itemLocalTmVal !== null && (
-                                <span>Local Tm: <span className={`font-mono tabular-nums ${getTmColor(itemLocalTmVal)}`}>{Number(itemLocalTmVal).toFixed(1)}°C</span>{item?.Local_Tm_ShortStem === true && <span title="Hairpin stem under 3 bp: two-state Tm is unreliable (marginal structure)" className="ml-1 text-amber-600 dark:text-amber-400 font-bold">*</span>}</span>
+                            {(itemLocalTmVal !== undefined && itemLocalTmVal !== null || item?.Local_Tm_Multiloop === true) && (
+                                <span>Local Tm: <span className={`font-mono tabular-nums ${itemLocalTmVal !== undefined && itemLocalTmVal !== null ? getTmColor(itemLocalTmVal) : 'text-zinc-400'}`}>{itemLocalTmVal !== undefined && itemLocalTmVal !== null ? `${Number(itemLocalTmVal).toFixed(1)}°C` : '–'}</span>{item?.Local_Tm_ShortStem === true && <span title="Hairpin stem under 3 bp: two-state Tm is unreliable (marginal structure)" className="ml-1 text-amber-600 dark:text-amber-400 font-bold">*</span>}{item?.Local_Tm_Multiloop === true && <span title={itemLocalTmVal != null ? 'Multiloop fold (several stems): Tm is the best single stem\'s two-state Tm, not the whole fold\'s' : 'Multiloop fold (several stems): no scorable stem, no two-state Tm'} className="ml-1 text-amber-600 dark:text-amber-400 font-bold">*</span>}</span>
                             )}
                         </div>
                         {itemPopFrac !== undefined && itemPopFrac !== null && (
@@ -1998,12 +2000,18 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
         // population split by the unimolecular ensemble), not disjoint
         // categories; carve them out here so the bar's segments are mutually
         // exclusive and actually sum to ~100%.
-        const pHairpin = competition.P_Hairpin ?? 0;
+        // Two-state mode runs the classic hairpin-vs-open sigmoid from the
+        // same dH/dS behind Local Tm (50% at Tm, smooth decay past it);
+        // Ensemble mode keeps the full-partition share, where competing
+        // folds depress the MFE near Tm.
+        const pHairpinTwoState = competition.P_Hairpin_TwoState ?? null;
+        const useTwoState = equilibriumSplit === 'two-way' && pHairpinTwoState != null;
+        const pHairpin = useTwoState ? pHairpinTwoState! : (competition.P_Hairpin ?? 0);
         const pUnfolded = competition.P_Unfolded;
         const pFreeTotal = competition.P_Free ?? 0;
-        // Three-way mode (with an ensemble-split payload available): Unfolded +
-        // Hairpin + Other folds. Two-way mode (or pre-split payloads): the old
-        // single "Free" segment for the whole non-MFE monomer pool.
+        // Ensemble (three-way) mode with an ensemble-split payload available:
+        // Unfolded + Hairpin + Other folds. Two-state mode (or pre-split
+        // payloads): the single "Free" segment for the whole non-MFE pool.
         const useSplit = equilibriumSplit !== 'two-way' && pUnfolded != null;
         const pOtherFolds = useSplit
             ? Math.max(0, pFreeTotal - pHairpin - pUnfolded!)
@@ -2029,7 +2037,7 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
         // mode, or no pairing was found at all), otherwise a genuinely-tiny-but
         // -real value looks identical to n/a and this exact question comes up.
         const wasComputed: Record<string, boolean> = {
-            Hairpin: competition.P_Hairpin !== null && competition.P_Hairpin !== undefined,
+            Hairpin: useTwoState || (competition.P_Hairpin !== null && competition.P_Hairpin !== undefined),
             'Self-Dimer': competition.P_SelfDimer !== null && competition.P_SelfDimer !== undefined,
             'Cross-Dimer': competition.P_HeteroDimer !== null && competition.P_HeteroDimer !== undefined,
             Unfolded: useSplit,
@@ -2058,6 +2066,13 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                         </span>
                     ))}
                 </div>
+                {useTwoState && !useSplit && competition.P_Hairpin != null
+                    && pHairpinTwoState != null
+                    && Math.abs(pHairpinTwoState - competition.P_Hairpin) >= 0.1 && (
+                    <div className="text-[13px] text-zinc-400 dark:text-zinc-500 mt-0.5">
+                        Two-state model; the ensemble view puts the best fold at {(competition.P_Hairpin * 100).toFixed(1)}%
+                    </div>
+                )}
                 {competition.Converged === false && (
                     <div className="text-[13px] text-amber-500 mt-0.5 italic">Equilibrium solve did not fully converge, treat as approximate.</div>
                 )}
