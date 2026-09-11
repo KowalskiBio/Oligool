@@ -3,6 +3,7 @@ import MOLigoPanel from './MOLigoPanel';
 import FlankingPrimersPanel from './FlankingPrimersPanel';
 import HairpinSVG from './HairpinSVG';
 import DimerSVG from './DimerSVG';
+import StructureFigure from './StructureFigure';
 import QueryReport from './QueryReport';
 import { dimerAsciiFromItem } from './DimerAscii';
 import { PIN_COLORS, exportPositionsCSV, exportPositionsTSV } from '../utils/session';
@@ -1836,11 +1837,17 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                     hairpinDotBracket = db;
                     hairpinSeq = fullSeq;
                 } else if (isDimer && seq) {
+                    const dimerSeq = fullSeq.includes('&') ? fullSeq : (seq2 ? `${seq}&${seq2}` : `${seq}&${seq}`);
                     if (item.Bonds) {
                         asciiStructure = buildDimerAscii(item, seq, seq2);
                     } else if (db) {
-                        const dimerSeq = seq2 ? `${seq}&${seq2}` : `${seq}&${seq}`;
                         asciiStructure = dimerAsciiFromItem(dimerSeq, db);
+                    }
+                    // Dimers with a dot-bracket also get a Strider complex view
+                    // (StructureFigure); the ASCII alignment stays as fallback.
+                    if (db) {
+                        hairpinDotBracket = db;
+                        hairpinSeq = dimerSeq;
                     }
                 }
             }
@@ -1875,11 +1882,17 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                     </div>
                     {hairpinDotBracket && hairpinSeq && (
                         <div className="mt-1 w-full overflow-x-auto bg-zinc-100 dark:bg-zinc-800 rounded p-2">
-                            {isDimer ? (
-                                <DimerSVG seq={hairpinSeq} dotBracket={hairpinDotBracket} />
-                            ) : (
-                                <HairpinSVG seq={hairpinSeq} dotBracket={hairpinDotBracket} />
-                            )}
+                            <StructureFigure
+                                seq={hairpinSeq}
+                                dotBracket={hairpinDotBracket}
+                                fallback={isDimer && asciiStructure ? (
+                                    <pre className="font-mono text-zinc-700 dark:text-zinc-300 whitespace-pre leading-[1.15] tracking-tighter text-[13px]">{asciiStructure}</pre>
+                                ) : isDimer ? (
+                                    <DimerSVG seq={hairpinSeq} dotBracket={hairpinDotBracket} />
+                                ) : (
+                                    <HairpinSVG seq={hairpinSeq} dotBracket={hairpinDotBracket} />
+                                )}
+                            />
                         </div>
                     )}
                     {hairpinDotBracket && (!hairpinSeq || hairpinSeq.length === 0) && (

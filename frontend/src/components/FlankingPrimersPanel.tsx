@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import MSAViewer from './MSAViewer';
 import DimerAscii from './DimerAscii';
 import HairpinSVG from './HairpinSVG';
+import StructureFigure from './StructureFigure';
 import type { CompetitionResult } from './MOLigoPanel';
 import { FLANKING_PANEL_DEFAULTS, type FlankingPanelState, type FlankingDesignedPrimer, type FlankingDesignResult } from '../utils/session';
 
@@ -856,11 +857,15 @@ export default function FlankingPrimersPanel({
                     {/* Structure below provenance. */}
                     {hasStructure && (
                         <div className="bg-zinc-50 dark:bg-zinc-900/50 rounded p-2 overflow-x-auto">
-                            {item.Sequence && item.Sequence.includes('&') ? (
-                                <DimerAscii seq={item.Sequence} dotBracket={item.DotBracket || item.Local_DotBracket} raw={item} />
-                            ) : (
-                                <HairpinSVG seq={item.Sequence || item.dot_bracket || ''} dotBracket={item.DotBracket || item.Local_DotBracket} />
-                            )}
+                            <StructureFigure
+                                seq={item.Sequence || item.dot_bracket || ''}
+                                dotBracket={item.DotBracket || item.Local_DotBracket}
+                                fallback={item.Sequence && item.Sequence.includes('&') ? (
+                                    <DimerAscii seq={item.Sequence} dotBracket={item.DotBracket || item.Local_DotBracket} raw={item} />
+                                ) : (
+                                    <HairpinSVG seq={item.Sequence || item.dot_bracket || ''} dotBracket={item.DotBracket || item.Local_DotBracket} />
+                                )}
+                            />
                         </div>
                     )}
                 </div>

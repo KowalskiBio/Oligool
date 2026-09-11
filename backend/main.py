@@ -1712,6 +1712,63 @@ def analyze_strider_competition(request: StriderCompetitionRequest):
     }
 
 
+class StriderRenderRequest(BaseModel):
+    sequence: str
+    dot_bracket: str
+    view: Literal["structure", "arc"] = "structure"
+    # "identity" colors each base by its letter (Oligool-style A/C/G/T palette,
+    # strider's color="nt"); "structure" colors by structural element (stem,
+    # hairpin loop, interior loop, multiloop, exterior).
+    color: Literal["identity", "structure"] = "identity"
+
+
+@app.post("/strider/render")
+def render_strider_svg(request: StriderRenderRequest):
+    """Render a secondary structure as an SVG figure via strider.viz (matplotlib).
+
+    Draws anything the frontend's built-in HairpinSVG/DimerSVG cannot:
+    branched multiloops, pseudoknots and '&' two-strand dimers.  The frontend
+    keeps its built-in renderers as the fallback whenever this endpoint
+    fails, so any error here just means "use the backup".
+    """
+    seq = request.sequence.strip().upper().replace("+", "&")
+    db = request.dot_bracket.strip()
+    if not seq or not db:
+        raise HTTPException(status_code=400, detail="sequence and dot_bracket are required")
+    if any(ch not in set("ACGTU&") for ch in seq):
+        raise HTTPException(status_code=400, detail="sequence contains non-nucleotide characters")
+    if any(ch not in set("()[]{}<>.&+") for ch in db):
+        raise HTTPException(status_code=400, detail="dot_bracket contains unsupported characters")
+    if len(seq) != len(db):
+        raise HTTPException(status_code=400, detail="sequence and dot_bracket length mismatch")
+    if db.count("(") == 0 and db.count("[") == 0 and db.count("{") == 0 and db.count("<") == 0:
+        raise HTTPException(status_code=400, detail="dot_bracket has no base pairs")
+    try:
+        import io
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+        from strider.viz import style
+        from strider.viz.arc import arc_diagram
+        from strider.viz.structure2d import draw_complex, draw_structure
+        with style.style_context():
+            base_color = "nt" if request.color == "identity" else "structure"
+            if request.view == "arc":
+                ax = arc_diagram(seq, db)
+            elif "&" in seq:
+                ax = draw_complex(seq, db, color=base_color)
+            else:
+                ax = draw_structure(seq, db, color=base_color)
+            buf = io.StringIO()
+            ax.figure.savefig(buf, format="svg")
+            plt.close(ax.figure)
+        return {"svg": buf.getvalue()}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"render failed: {exc}")
+
+
 # ────────────────────────────────────────────────────────────────
 # Flanking Primers Design  (ported from Primerool)
 # ────────────────────────────────────────────────────────────────

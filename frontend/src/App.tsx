@@ -6,6 +6,7 @@ import GameArcade from './components/GameArcade';
 import UserReport from './components/UserReport';
 import { downloadSession, parseSessionText, OLIGOOL_SESSION_APP, OLIGOOL_SESSION_VERSION, type OligoolSession, type FlankingPanelState, type FlankingPrimerSelection } from './utils/session';
 import { parseSequenceHeader } from './utils/dna';
+import { getStructureRenderer, setStructureRenderer, getStructureColor, setStructureColor, type StructureRendererMode, type StructureColorMode } from './utils/structureRenderer';
 import { ACCENT_PRESETS, NEUTRAL_PRESETS, WALLPAPERS, applyAccentPreset, applyNeutralPreset, clearThemeOverrides, generatePalette } from './theme';
 
 type Step = 'input' | 'blasting' | 'aligning' | 'done';
@@ -58,6 +59,8 @@ function App() {
   const [equilibriumSplit, setEquilibriumSplit] = useState<'two-way' | 'three-way'>(
     () => localStorage.getItem('equilibrium_split') === 'three-way' ? 'three-way' : 'two-way'
   );
+  const [structureRenderer, setStructureRendererState] = useState<StructureRendererMode>(getStructureRenderer);
+  const [structureColor, setStructureColorState] = useState<StructureColorMode>(getStructureColor);
   const [showSettings, setShowSettings] = useState(false);
   const [settingsTab, setSettingsTab] = useState<'account' | 'engine' | 'theme'>('account');
   const [maxHitsPreset, setMaxHitsPreset] = useState(() => localStorage.getItem('max_hits_preset') || '50');
@@ -958,6 +961,66 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                         Two-way: Free / Hairpin / dimers. Three-way: Free is split into Unfolded and Other folds
                       </p>
                     </div>
+                    <div className="flex items-center gap-3 flex-wrap mt-4">
+                      <label className="text-[13px] font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider w-24">
+                        Structure
+                      </label>
+                      <div
+                        className="flex items-center rounded-md border border-zinc-300 dark:border-zinc-700 overflow-hidden"
+                        title="Renderer for secondary structure figures. Built-in keeps the lightweight HairpinSVG schematic (default); Strider (backend matplotlib) draws multiloops, pseudoknots and two-strand dimers. Changes apply live"
+                      >
+                        {([
+                          ['builtin', 'Built-in'],
+                          ['strider', 'Strider'],
+                        ] as const).map(([value, label], idx) => (
+                          <button
+                            key={value}
+                            onClick={() => { setStructureRenderer(value); setStructureRendererState(value); }}
+                            className={`px-2.5 py-1 text-[13px] font-medium transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent-700 dark:focus-visible:outline-accent-300 ${idx > 0 ? 'border-l border-zinc-300 dark:border-zinc-700 ' : ''}${
+                              structureRenderer === value
+                                ? 'bg-accent-700/10 dark:bg-accent-300/10 text-accent-800 dark:text-accent-200'
+                                : 'bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700'
+                            }`}
+                          >
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+                      <p className="text-[13px] text-zinc-500 dark:text-zinc-400">
+                        Built-in schematic is the default; Strider (live) draws multiloops, pseudoknots and dimers
+                      </p>
+                    </div>
+                    {structureRenderer === 'strider' && (
+                      <div className="flex items-center gap-3 flex-wrap mt-4">
+                        <label className="text-[13px] font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider w-24">
+                          Colour
+                        </label>
+                        <div
+                          className="flex items-center rounded-md border border-zinc-300 dark:border-zinc-700 overflow-hidden"
+                          title="Base coloring for Strider figures. Identity colors each base by its letter (A/C/G/T, Oligool-style); Structure colors by structural element (stem, hairpin loop, interior loop, multiloop, exterior), showing the fold architecture at a glance. Changes apply live"
+                        >
+                          {([
+                            ['identity', 'Identity (Oligool)'],
+                            ['structure', 'Structure (Strider)'],
+                          ] as const).map(([value, label], idx) => (
+                            <button
+                              key={value}
+                              onClick={() => { setStructureColor(value); setStructureColorState(value); }}
+                              className={`px-2.5 py-1 text-[13px] font-medium transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent-700 dark:focus-visible:outline-accent-300 ${idx > 0 ? 'border-l border-zinc-300 dark:border-zinc-700 ' : ''}${
+                                structureColor === value
+                                  ? 'bg-accent-700/10 dark:bg-accent-300/10 text-accent-800 dark:text-accent-200'
+                                  : 'bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700'
+                              }`}
+                            >
+                              {label}
+                            </button>
+                          ))}
+                        </div>
+                        <p className="text-[13px] text-zinc-500 dark:text-zinc-400">
+                          Identity: per-base A/C/G/T palette. Structure: colored by element (stem, loops, exterior)
+                        </p>
+                      </div>
+                    )}
                   </div>
                 )}
                 {settingsTab === 'theme' && (

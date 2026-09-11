@@ -4,6 +4,14 @@ export function openSvgInNewTab(svg: SVGSVGElement, title: string): void {
     clone.setAttribute('width', '100%');
     clone.setAttribute('style', 'max-height: 100vh');
     const markup = new XMLSerializer().serializeToString(clone);
+    openSvgMarkupInNewTab(markup, title);
+}
+
+export function openSvgStringInNewTab(svg: string, title: string): void {
+    openSvgMarkupInNewTab(svg, title);
+}
+
+function openSvgMarkupInNewTab(markup: string, title: string): void {
     const safeTitle = title.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     const html = `<!DOCTYPE html>
 <html>
@@ -13,6 +21,7 @@ export function openSvgInNewTab(svg: SVGSVGElement, title: string): void {
 <style>
 html, body { margin: 0; height: 100%; }
 body { display: flex; align-items: center; justify-content: center; background: #fafafa; }
+svg { max-width: 100%; height: auto; max-height: 100vh; }
 @media (prefers-color-scheme: dark) { body { background: #18181b; } }
 </style>
 </head>
