@@ -104,3 +104,11 @@ tmp/
 temp/
 .tmp/
 
+
+# Local assistant / docs artifacts
+CLAUDE.md
+Oligool.pdf
+config/
+
+# graphify knowledge graph
+graphify-out/
