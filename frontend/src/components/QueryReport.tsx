@@ -214,6 +214,11 @@ export default function QueryReport({ data }: QueryReportProps) {
                         .query-report .break-avoid-item { break-inside: avoid; page-break-inside: avoid; }
                         .query-report .grid > * { break-inside: avoid; page-break-inside: avoid; }
                         .query-report .structure-figure svg { width: 300px !important; max-height: 150px !important; display: block; margin: 0 auto; }
+                        /* SECONDARY STRUCTURE PREDICTIONS always starts on a fresh
+                         * page, with the structure sub-sections in two columns so
+                         * no single structure ends up alone on its own page. */
+                        .query-report .structures-section { break-before: page; page-break-before: always; }
+                        .query-report .structures-grid { grid-template-columns: 1fr 1fr !important; }
                     }
                     @media screen {
                         .query-report { display: none !important; }
@@ -312,9 +317,9 @@ export default function QueryReport({ data }: QueryReportProps) {
                 )}
 
                 {(data.idtM1Hairpin || data.idtM1SelfDimer || data.idtM2Hairpin || data.idtM2SelfDimer || data.idtPairwise) && (
-                    <div className="mb-6">
+                    <div className="structures-section mb-6">
                         <h2 className="text-lg font-bold text-zinc-800 mb-2 border-b border-zinc-300 pb-1">SECONDARY STRUCTURE PREDICTIONS</h2>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div className="structures-grid grid grid-cols-1 md:grid-cols-2 gap-6">
                             <StructureSection title="MOLigo 1 Hairpin" result={data.idtM1Hairpin} seq1={data.moligo1Seq} />
                             <StructureSection title="MOLigo 1 Self-Dimer" result={data.idtM1SelfDimer} seq1={data.moligo1Seq} />
                             <StructureSection title="MOLigo 2 Hairpin" result={data.idtM2Hairpin} seq1={data.moligo2Seq} />
