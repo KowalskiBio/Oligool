@@ -82,6 +82,12 @@ export interface OligoSnapshot {
     showFlankingPrimers: boolean;
     /** The currently designed oligo pair, locked to absolute coordinates. */
     currentOligo: FixedAbsCoords | null;
+    /** Cached MOLigo structural analyses so IDT / Strider results survive save + restore. */
+    idtResults?: unknown;
+    striderResults?: unknown;
+    /** The oligo pair the cached analyses were run on (staleness guard). */
+    idtAnalyzedSeqs?: { p1: string; p2: string } | null;
+    striderAnalyzedSeqs?: { p1: string; p2: string } | null;
 }
 
 export interface FlankingPrimerSelection {
@@ -385,6 +391,11 @@ function normalizeOligoSnapshot(oligo: unknown): OligoSnapshot | null {
     if (!oligo || typeof oligo !== 'object') return null;
     const o = oligo as Record<string, unknown>;
     const rawPositions = Array.isArray(o.savedPositions) ? o.savedPositions : [];
+    const seqPair = (v: unknown): { p1: string; p2: string } | null => {
+        if (!v || typeof v !== 'object') return null;
+        const q = v as { p1?: unknown; p2?: unknown };
+        return typeof q.p1 === 'string' && typeof q.p2 === 'string' ? { p1: q.p1, p2: q.p2 } : null;
+    };
     return {
         moligo1Shift: typeof o.moligo1Shift === 'number' ? o.moligo1Shift : 0,
         moligo2Shift: typeof o.moligo2Shift === 'number' ? o.moligo2Shift : 0,
@@ -402,6 +413,10 @@ function normalizeOligoSnapshot(oligo: unknown): OligoSnapshot | null {
         interactiveFlankWindow: typeof o.interactiveFlankWindow === 'number' ? o.interactiveFlankWindow : 200,
         showFlankingPrimers: typeof o.showFlankingPrimers === 'boolean' ? o.showFlankingPrimers : false,
         currentOligo: o.currentOligo && typeof o.currentOligo === 'object' ? (o.currentOligo as FixedAbsCoords) : null,
+        idtResults: o.idtResults ?? null,
+        striderResults: o.striderResults ?? null,
+        idtAnalyzedSeqs: seqPair(o.idtAnalyzedSeqs),
+        striderAnalyzedSeqs: seqPair(o.striderAnalyzedSeqs),
     };
 }
 

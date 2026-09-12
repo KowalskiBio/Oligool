@@ -755,6 +755,13 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
         setInteractiveFlankWindow(s.interactiveFlankWindow);
         setFlankDesignNonce(0);
         setShowFlankingPrimers(s.showFlankingPrimers);
+        // Cached structural analyses (IDT + Strider) round-trip with the
+        // session so the app and the report keep their structures and the
+        // IDT panel state without re-running the (paid) analysis.
+        setIdtResults((s.idtResults as IdtData | null) ?? null);
+        setIdtAnalyzedSeqs(s.idtAnalyzedSeqs ?? null);
+        setStriderResults((s.striderResults as IdtData | null) ?? null);
+        setStriderAnalyzedSeqs(s.striderAnalyzedSeqs ?? null);
         lastShiftsApplied.current = { s1: s.moligo1Shift, s2: s.moligo2Shift };
         if (s.currentOligo) {
             captureFixedContext();
@@ -867,6 +874,10 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
             interactiveFlankWindow,
             showFlankingPrimers,
             currentOligo: computeCurrentOligo(),
+            idtResults,
+            striderResults,
+            idtAnalyzedSeqs,
+            striderAnalyzedSeqs,
         }),
     }));
 
@@ -1336,6 +1347,51 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
         onFlankingPrimersUpdate?.(data);
     }, [onFlankingPrimersUpdate]);
 
+    // Merge fresh Strider results (structures + Local ΔG/Tm) with stable IDT
+    // values. After a Mathews/SantaLucia toggle, striderResults is recomputed
+    // (fresh hairpins, fresh ΔG/Tm) while idtResults keeps its IDT values from
+    // when the user last clicked Run IDT. This produces a single panel that
+    // shows both side-by-side: Strider ΔG (fresh) with IDT ΔG (stable) next to it.
+    // IDT ΔG is an independent measurement (IDT's own fold), so it goes on the
+    // best (first) structure only, matching how /idt/analyze itself structures
+    // the response.
+    const mergeStability = (strider: IdtData | null, idt: IdtData | null): IdtData | null => {
+        if (!strider && !idt) return null;
+        if (!strider) return idt;
+        if (!idt) return strider;
+
+        const overlay = (s: any, i: any) => {
+            if (!s) return i;
+            if (!i) return s;
+            const sRaw: any[] = Array.isArray(s.raw) ? s.raw : (s.raw ? [s.raw] : []);
+            const iRaw0: any = Array.isArray(i.raw) ? i.raw?.[0] : i.raw;
+            const idtDg = i.DeltaG ?? iRaw0?.DeltaG ?? null;
+            const idtTm = iRaw0?.IDT_Tm ?? null;
+            return {
+                ...s,
+                DeltaG: idtDg,
+                all_DeltaG: sRaw.map((_: any, idx: number) => idx === 0 ? idtDg : null),
+                all_IDT_Tm: sRaw.map((_: any, idx: number) => idx === 0 ? idtTm : null),
+            };
+        };
+
+        return {
+            m1: {
+                hairpin: overlay(strider.m1?.hairpin, idt.m1?.hairpin),
+                self_dimer: overlay(strider.m1?.self_dimer, idt.m1?.self_dimer),
+                analyze: idt.m1?.analyze ?? strider.m1?.analyze,
+                competition: strider.m1?.competition ?? idt.m1?.competition,
+            },
+            m2: {
+                hairpin: overlay(strider.m2?.hairpin, idt.m2?.hairpin),
+                self_dimer: overlay(strider.m2?.self_dimer, idt.m2?.self_dimer),
+                analyze: idt.m2?.analyze ?? strider.m2?.analyze,
+                competition: strider.m2?.competition ?? idt.m2?.competition,
+            },
+            pairwise: overlay(strider.pairwise, idt.pairwise),
+        } as IdtData;
+    };
+
     const buildCompleteReport = (): CompleteReportData => {
         const extractBestTm = (raw?: Record<string, unknown> | Record<string, unknown>[]): number | undefined => {
             if (!raw) return undefined;
@@ -1464,6 +1520,12 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
         const flankingRevSeq = flankingPrimersData?.revSeq ?? sr?.sequence;
         const flankingRevName = flankingPrimersData?.revName ?? fps?.revName ?? sr?.name;
 
+        // Structures for the report come from the same merged view the app's
+        // stability grid shows (Strider structures + Local ΔG/Tm overlaid
+        // with IDT's stable values), so anything visible in the app is
+        // reflected in the report, not just the IDT-run case.
+        const structures = mergeStability(striderResults, idtResults);
+
         return {
             jobName,
             queryId: data.id,
@@ -1488,19 +1550,19 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
             tagPartNumber: tagEntry?.partNumber,
             fwdPrimer,
             revPrimer,
-            idtM1Hairpin: idtResults?.m1?.hairpin,
-            idtM1SelfDimer: idtResults?.m1?.self_dimer,
-            idtM1Analyze: idtResults?.m1?.analyze,
+            idtM1Hairpin: structures?.m1?.hairpin,
+            idtM1SelfDimer: structures?.m1?.self_dimer,
+            idtM1Analyze: structures?.m1?.analyze,
             moligo1TmP3: primers?.p1?.tm,
             moligo1TmStrider: primers?.p1?.tm_strider ?? null,
-            idtM1Tm: extractBestTm(idtResults?.m1?.analyze),
-            idtM2Hairpin: idtResults?.m2?.hairpin,
-            idtM2SelfDimer: idtResults?.m2?.self_dimer,
-            idtM2Analyze: idtResults?.m2?.analyze,
+            idtM1Tm: extractBestTm(structures?.m1?.analyze),
+            idtM2Hairpin: structures?.m2?.hairpin,
+            idtM2SelfDimer: structures?.m2?.self_dimer,
+            idtM2Analyze: structures?.m2?.analyze,
             moligo2TmP3: primers?.p2?.tm,
             moligo2TmStrider: primers?.p2?.tm_strider ?? null,
-            idtM2Tm: extractBestTm(idtResults?.m2?.analyze),
-            idtPairwise: idtResults?.pairwise,
+            idtM2Tm: extractBestTm(structures?.m2?.analyze),
+            idtPairwise: structures?.pairwise,
             savedPositions,
             flankingFwdName,
             flankingFwdSeq,
@@ -1952,51 +2014,6 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
                 {items}
             </div>
         );
-    };
-
-    // Merge fresh Strider results (structures + Local ΔG/Tm) with stable IDT
-    // values. After a Mathews/SantaLucia toggle, striderResults is recomputed
-    // (fresh hairpins, fresh ΔG/Tm) while idtResults keeps its IDT values from
-    // when the user last clicked Run IDT. This produces a single panel that
-    // shows both side-by-side: Strider ΔG (fresh) with IDT ΔG (stable) next to it.
-    // IDT ΔG is an independent measurement (IDT's own fold), so it goes on the
-    // best (first) structure only, matching how /idt/analyze itself structures
-    // the response.
-    const mergeStability = (strider: IdtData | null, idt: IdtData | null): IdtData | null => {
-        if (!strider && !idt) return null;
-        if (!strider) return idt;
-        if (!idt) return strider;
-
-        const overlay = (s: any, i: any) => {
-            if (!s) return i;
-            if (!i) return s;
-            const sRaw: any[] = Array.isArray(s.raw) ? s.raw : (s.raw ? [s.raw] : []);
-            const iRaw0: any = Array.isArray(i.raw) ? i.raw?.[0] : i.raw;
-            const idtDg = i.DeltaG ?? iRaw0?.DeltaG ?? null;
-            const idtTm = iRaw0?.IDT_Tm ?? null;
-            return {
-                ...s,
-                DeltaG: idtDg,
-                all_DeltaG: sRaw.map((_: any, idx: number) => idx === 0 ? idtDg : null),
-                all_IDT_Tm: sRaw.map((_: any, idx: number) => idx === 0 ? idtTm : null),
-            };
-        };
-
-        return {
-            m1: {
-                hairpin: overlay(strider.m1?.hairpin, idt.m1?.hairpin),
-                self_dimer: overlay(strider.m1?.self_dimer, idt.m1?.self_dimer),
-                analyze: idt.m1?.analyze ?? strider.m1?.analyze,
-                competition: strider.m1?.competition ?? idt.m1?.competition,
-            },
-            m2: {
-                hairpin: overlay(strider.m2?.hairpin, idt.m2?.hairpin),
-                self_dimer: overlay(strider.m2?.self_dimer, idt.m2?.self_dimer),
-                analyze: idt.m2?.analyze ?? strider.m2?.analyze,
-                competition: strider.m2?.competition ?? idt.m2?.competition,
-            },
-            pairwise: overlay(strider.pairwise, idt.pairwise),
-        } as IdtData;
     };
 
     // Static segmented bar showing the equilibrium population split for one
