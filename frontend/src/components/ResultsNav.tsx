@@ -10,13 +10,20 @@
  * icon re-expands it.  Sub-links are only offered while their anchor is
  * actually mounted (tracked via a MutationObserver).  The rail hides below
  * 1400px so it never overlaps the centered max-w-7xl content.
+ *
+ * Keyboard: single-letter shortcuts (B/M/O/P for sections, C/S/P for
+ * sub-sections) teleport to the matching target; the letter is shown as a
+ * small kbd chip on each row.  Shortcuts are ignored while typing in an
+ * input, textarea or select.
  */
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 
 export interface NavSubTarget {
     /** DOM id of the sub-section to scroll to. */
     id: string;
     label: string;
+    /** Optional keyboard shortcut (single letter) that scrolls here. */
+    hotkey?: string;
 }
 
 export interface NavTarget {
@@ -26,6 +33,8 @@ export interface NavTarget {
     icon: React.ReactNode;
     /** Whether the section is currently mounted in the results flow. */
     visible: boolean;
+    /** Optional keyboard shortcut (single letter) that scrolls here. */
+    hotkey?: string;
     /** Optional subdivisions revealed when the entry is expanded. */
     children?: NavSubTarget[];
 }
@@ -92,6 +101,62 @@ export default function ResultsNav({ targets }: { targets: NavTarget[] }) {
         return () => window.removeEventListener('scroll', onScroll);
     }, [orderKey]);
 
+    // Keyboard navigation: B/M/O/P teleport to the main sections; C/S/P drill
+    // into the sub-sections.  When two sub-sections share a key (both Context
+    // Viewers are C, Primers repeats P), the one belonging to the section the
+    // user is currently in wins; pressing P inside the primer section jumps to
+    // the Primers list, anywhere else it jumps to the Primer Provenance card.
+    const latest = useRef({ enabled, active, presence });
+    useEffect(() => {
+        latest.current = { enabled, active, presence };
+    });
+    useEffect(() => {
+        const onKey = (e: KeyboardEvent) => {
+            if (e.metaKey || e.ctrlKey || e.altKey || e.repeat) return;
+            const el = e.target as HTMLElement | null;
+            if (
+                !el ||
+                el.isContentEditable ||
+                ['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName)
+            ) {
+                return;
+            }
+            const key = e.key.toLowerCase();
+            const { enabled: targets, active: current, presence: present } = latest.current;
+            const scrollTo = (id: string) =>
+                document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            // 1) A sub-section of the section we are currently in wins.
+            const inTop = targets.find(
+                t =>
+                    t.id === current ||
+                    (t.children ?? []).some(c => c.id === current && present[c.id])
+            );
+            const drill = (inTop?.children ?? []).find(
+                c => present[c.id] && c.hotkey === key
+            );
+            if (drill) {
+                scrollTo(drill.id);
+                return;
+            }
+            // 2) Top-level hotkey.
+            const top = targets.find(t => t.hotkey === key);
+            if (top) {
+                scrollTo(top.id);
+                return;
+            }
+            // 3) Fallback: first mounted sub-section with that hotkey.
+            for (const t of targets) {
+                const sub = (t.children ?? []).find(c => present[c.id] && c.hotkey === key);
+                if (sub) {
+                    scrollTo(sub.id);
+                    return;
+                }
+            }
+        };
+        window.addEventListener('keydown', onKey);
+        return () => window.removeEventListener('keydown', onKey);
+    }, []);
+
     if (enabled.length === 0) return null;
 
     const scrollTo = (id: string) =>
@@ -132,7 +197,12 @@ export default function ResultsNav({ targets }: { targets: NavTarget[] }) {
                         >
                             <span className="shrink-0">{t.icon}</span>
                             <span className="text-[13px] font-medium whitespace-nowrap">{t.label}</span>
-                            {subs.length > 0 && isCollapsed && (
+                            {t.hotkey && (
+                                <span className="ml-auto px-1.5 py-0.5 rounded-md border text-[10px] font-semibold leading-none border-zinc-200 dark:border-zinc-700 text-zinc-400 dark:text-zinc-500">
+                                    {t.hotkey.toUpperCase()}
+                                </span>
+                            )}
+                            {subs.length > 0 && isCollapsed && !t.hotkey && (
                                 <span className="ml-auto w-1.5 h-1.5 rounded-full opacity-40 bg-zinc-400 dark:bg-zinc-500 group-hover:opacity-70" />
                             )}
                         </button>
@@ -157,6 +227,11 @@ export default function ResultsNav({ targets }: { targets: NavTarget[] }) {
                                             }`}
                                         />
                                         {c.label}
+                                        {c.hotkey && (
+                                            <span className="ml-auto px-1 py-0.5 rounded border text-[9px] font-semibold leading-none border-zinc-200 dark:border-zinc-700 text-zinc-400 dark:text-zinc-500">
+                                                {c.hotkey.toUpperCase()}
+                                            </span>
+                                        )}
                                     </button>
                                 ))}
                                 <button

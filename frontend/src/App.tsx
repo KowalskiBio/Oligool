@@ -636,6 +636,7 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
     {
       id: 'blast-results-section',
       label: 'BLAST Results',
+      hotkey: 'b',
       visible: blastHits.length > 0,
       icon: (
         <svg className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
@@ -646,6 +647,7 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
     {
       id: 'msa-viewer-section',
       label: 'MSA Viewer',
+      hotkey: 'm',
       visible: !!visibleAlignment,
       icon: (
         <svg className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
@@ -655,7 +657,8 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
     },
     {
       id: 'oligo-provenance-section',
-      label: 'MOLigo Provenance',
+      label: 'Oligo Provenance',
+      hotkey: 'o',
       visible: step === 'done' && !!selectedSequence,
       icon: (
         <svg className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
@@ -663,13 +666,14 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
         </svg>
       ),
       children: [
-        { id: 'oligo-context-viewer', label: 'Context Viewer' },
-        { id: 'oligo-secondary-structures', label: 'Secondary structures' },
+        { id: 'oligo-context-viewer', label: 'Context Viewer', hotkey: 'c' },
+        { id: 'oligo-secondary-structures', label: 'Secondary structures', hotkey: 's' },
       ],
     },
     {
       id: 'flanking-primers-section',
       label: 'Primer Provenance',
+      hotkey: 'p',
       visible: flankingProvenanceVisible,
       icon: (
         <svg className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
@@ -677,8 +681,8 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
         </svg>
       ),
       children: [
-        { id: 'flanking-context-viewer', label: 'Context Viewer' },
-        { id: 'flanking-primers-list', label: 'Primers' },
+        { id: 'flanking-context-viewer', label: 'Context Viewer', hotkey: 'c' },
+        { id: 'flanking-primers-list', label: 'Primers', hotkey: 'p' },
       ],
     },
   ];
