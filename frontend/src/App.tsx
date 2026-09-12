@@ -669,7 +669,7 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
     },
     {
       id: 'flanking-primers-section',
-      label: 'Flanking Primers Provenance',
+      label: 'Primer Provenance',
       visible: flankingProvenanceVisible,
       icon: (
         <svg className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
