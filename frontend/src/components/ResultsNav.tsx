@@ -11,7 +11,7 @@
  * actually mounted (tracked via a MutationObserver).  The rail hides below
  * 1400px so it never overlaps the centered max-w-7xl content.
  *
- * Keyboard: single-letter shortcuts (B/M/O/P for sections, C/S/P for
+ * Keyboard: single-letter shortcuts (B/M/O/P/R for sections, C/S/P for
  * sub-sections) teleport to the matching target; the letter is shown as a
  * small kbd chip on each row.  Shortcuts are ignored while typing in an
  * input, textarea or select.
@@ -35,6 +35,11 @@ export interface NavTarget {
     visible: boolean;
     /** Optional keyboard shortcut (single letter) that scrolls here. */
     hotkey?: string;
+    /**
+     * When set, the entry performs this action instead of scrolling (e.g.
+     * opening a dialog); it then has no scrollspy position of its own.
+     */
+    onActivate?: () => void;
     /** Optional subdivisions revealed when the entry is expanded. */
     children?: NavSubTarget[];
 }
@@ -70,8 +75,10 @@ export default function ResultsNav({ targets }: { targets: NavTarget[] }) {
 
     // Scrollspy order follows the results flow: each section followed by its
     // mounted subdivisions, so the rail lights up the exact sub-section on
-    // screen instead of only the top-level card.
+    // screen instead of only the top-level card.  Action entries (onActivate)
+    // have no anchor and are skipped.
     const orderKey = enabled
+        .filter(t => !t.onActivate)
         .flatMap(t => [t.id, ...(t.children ?? []).filter(c => presence[c.id]).map(c => c.id)])
         .join('|');
 
@@ -138,10 +145,11 @@ export default function ResultsNav({ targets }: { targets: NavTarget[] }) {
                 scrollTo(drill.id);
                 return;
             }
-            // 2) Top-level hotkey.
+            // 2) Top-level hotkey: perform the action, or scroll to the section.
             const top = targets.find(t => t.hotkey === key);
             if (top) {
-                scrollTo(top.id);
+                if (top.onActivate) top.onActivate();
+                else scrollTo(top.id);
                 return;
             }
             // 3) Fallback: first mounted sub-section with that hotkey.
@@ -178,6 +186,10 @@ export default function ResultsNav({ targets }: { targets: NavTarget[] }) {
                     <div key={t.id} className="flex flex-col">
                         <button
                             onClick={() => {
+                                if (t.onActivate) {
+                                    t.onActivate();
+                                    return;
+                                }
                                 if (subs.length > 0 && isCollapsed) {
                                     setCollapsed(prev => {
                                         const next = new Set(prev);

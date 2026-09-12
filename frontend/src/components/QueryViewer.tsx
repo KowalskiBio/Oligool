@@ -15,6 +15,8 @@ import { TAG_DATABASE } from '../constants/tags';
 /** Imperative handle App uses to pull QueryViewer's state when saving a session. */
 export interface QueryViewerHandle {
     getSnapshot: () => OligoSnapshot;
+    /** Opens the final "Create a report" dialog (the complete design report). */
+    openReportDialog: () => void;
 }
 
 /** A pending session import, tagged with a nonce so it is applied exactly once. */
@@ -879,6 +881,10 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
             idtAnalyzedSeqs,
             striderAnalyzedSeqs,
         }),
+        openReportDialog: () => {
+            setHeaderError(null);
+            setShowReportDialog(true);
+        },
     }));
 
     /* ── Region-constrained oligo search ────────────────────────── */

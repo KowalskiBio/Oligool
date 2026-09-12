@@ -698,6 +698,18 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
         { id: 'flanking-primers-list', label: 'Primers', hotkey: 'p' },
       ],
     },
+    {
+      id: 'report-section',
+      label: 'Report',
+      hotkey: 'r',
+      visible: step === 'done' && !!selectedPrimers,
+      onActivate: () => queryViewerRef.current?.openReportDialog(),
+      icon: (
+        <svg className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M7 3h7l5 5v13H7zM14 3v5h5M10 12h7M10 16h5" />
+        </svg>
+      ),
+    },
   ];
 
   return (
