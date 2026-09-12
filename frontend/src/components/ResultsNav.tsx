@@ -53,28 +53,44 @@ function useDomPresence(ids: string[]): Record<string, boolean> {
 
 export default function ResultsNav({ targets }: { targets: NavTarget[] }) {
     const enabled = targets.filter(t => t.visible);
-    const enabledKey = enabled.map(t => t.id).join('|');
     const subIds = enabled.flatMap(t => (t.children ?? []).map(c => c.id));
     const presence = useDomPresence(subIds);
     const [active, setActive] = useState<string | null>(null);
     // Groups with subdivisions are expanded unless the user collapsed them.
     const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
 
+    // Scrollspy order follows the results flow: each section followed by its
+    // mounted subdivisions, so the rail lights up the exact sub-section on
+    // screen instead of only the top-level card.
+    const orderKey = enabled
+        .flatMap(t => [t.id, ...(t.children ?? []).filter(c => presence[c.id]).map(c => c.id)])
+        .join('|');
+
     useEffect(() => {
-        if (!enabledKey) return;
-        const ids = enabledKey.split('|');
+        if (!orderKey) return;
+        const order = orderKey.split('|');
         const onScroll = () => {
             let current: string | null = null;
-            for (const id of ids) {
+            for (const id of order) {
                 const el = document.getElementById(id);
                 if (el && el.getBoundingClientRect().top <= 160) current = id;
+            }
+            // At the very bottom the last section can sit above the
+            // threshold line without ever crossing it; light it up anyway.
+            if (
+                current === null ||
+                (current !== order[order.length - 1] &&
+                    window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 2)
+            ) {
+                const lastEl = document.getElementById(order[order.length - 1]);
+                if (lastEl) current = order[order.length - 1];
             }
             setActive(current);
         };
         onScroll();
         window.addEventListener('scroll', onScroll, { passive: true });
         return () => window.removeEventListener('scroll', onScroll);
-    }, [enabledKey]);
+    }, [orderKey]);
 
     if (enabled.length === 0) return null;
 
@@ -89,6 +105,10 @@ export default function ResultsNav({ targets }: { targets: NavTarget[] }) {
             {enabled.map(t => {
                 const subs = (t.children ?? []).filter(c => presence[c.id]);
                 const isCollapsed = collapsed.has(t.id);
+                // The parent lights up only while the viewport is inside its
+                // section (the card itself or one of its sub-sections).
+                const sectionActive =
+                    active === t.id || (subs.some(c => c.id === active) && !isCollapsed);
                 return (
                     <div key={t.id} className="flex flex-col">
                         <button
@@ -102,23 +122,19 @@ export default function ResultsNav({ targets }: { targets: NavTarget[] }) {
                                 }
                                 scrollTo(t.id);
                             }}
-                            title={t.label}
-                            aria-label={t.label}
                             aria-expanded={subs.length > 0 ? !isCollapsed : undefined}
                             aria-current={active === t.id ? 'true' : undefined}
-                            className={`group relative w-9 h-9 flex items-center justify-center rounded-xl transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent-700 dark:focus-visible:outline-accent-300 ${
-                                active === t.id || (!isCollapsed && subs.length > 0)
+                            className={`group flex items-center gap-2 w-full px-2 py-1.5 rounded-xl transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent-700 dark:focus-visible:outline-accent-300 ${
+                                sectionActive
                                     ? 'bg-accent-700/10 dark:bg-accent-300/10 text-accent-800 dark:text-accent-200'
                                     : 'text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 hover:text-zinc-700 dark:hover:text-zinc-200'
                             }`}
                         >
-                            {t.icon}
+                            <span className="shrink-0">{t.icon}</span>
+                            <span className="text-[13px] font-medium whitespace-nowrap">{t.label}</span>
                             {subs.length > 0 && isCollapsed && (
-                                <span className="absolute right-0.5 bottom-0.5 w-1.5 h-1.5 rounded-full opacity-40 bg-zinc-400 dark:bg-zinc-500 group-hover:opacity-70" />
+                                <span className="ml-auto w-1.5 h-1.5 rounded-full opacity-40 bg-zinc-400 dark:bg-zinc-500 group-hover:opacity-70" />
                             )}
-                            <span className="pointer-events-none absolute left-full ml-3 px-2 py-1 rounded-md text-[13px] font-medium whitespace-nowrap bg-zinc-900 dark:bg-zinc-200 text-white dark:text-zinc-900 opacity-0 group-hover:opacity-100 transition-opacity shadow-md">
-                                {t.label}
-                            </span>
                         </button>
                         {!isCollapsed && subs.length > 0 && (
                             <div className="ml-2.5 pl-2 border-l border-zinc-200 dark:border-zinc-700 flex flex-col gap-0.5 py-1">
@@ -129,12 +145,17 @@ export default function ResultsNav({ targets }: { targets: NavTarget[] }) {
                                         title={c.label}
                                         aria-label={c.label}
                                         aria-current={active === c.id ? 'true' : undefined}
-                                        className={`px-2 py-1 rounded-md text-[11px] font-medium text-left whitespace-nowrap transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent-700 dark:focus-visible:outline-accent-300 ${
+                                        className={`flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] font-medium text-left whitespace-nowrap transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent-700 dark:focus-visible:outline-accent-300 ${
                                             active === c.id
                                                 ? 'text-accent-800 dark:text-accent-200 bg-accent-700/10 dark:bg-accent-300/10'
                                                 : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800'
                                         }`}
                                     >
+                                        <span
+                                            className={`w-1 h-1 rounded-full bg-current transition-opacity ${
+                                                active === c.id ? 'opacity-100' : 'opacity-0'
+                                            }`}
+                                        />
                                         {c.label}
                                     </button>
                                 ))}
@@ -142,9 +163,8 @@ export default function ResultsNav({ targets }: { targets: NavTarget[] }) {
                                     onClick={() =>
                                         setCollapsed(prev => new Set(prev).add(t.id))
                                     }
-                                    title={`Collapse ${t.label}`}
                                     aria-label={`Collapse ${t.label}`}
-                                    className="mt-0.5 w-5 h-5 flex items-center justify-center rounded-md text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent-700 dark:focus-visible:outline-accent-300"
+                                    className="mt-0.5 self-end w-5 h-5 flex items-center justify-center rounded-md text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent-700 dark:focus-visible:outline-accent-300"
                                 >
                                     <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}>
                                         <path strokeLinecap="round" strokeLinejoin="round" d="M4 15l8-8 8 8" />

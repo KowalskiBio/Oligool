@@ -655,7 +655,7 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
     },
     {
       id: 'oligo-provenance-section',
-      label: 'Oligo Provenance',
+      label: 'MOLigo Provenance',
       visible: step === 'done' && !!selectedSequence,
       icon: (
         <svg className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
@@ -669,7 +669,7 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
     },
     {
       id: 'flanking-primers-section',
-      label: 'Flanking Primer Provenance',
+      label: 'Flanking Primers Provenance',
       visible: flankingProvenanceVisible,
       icon: (
         <svg className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
