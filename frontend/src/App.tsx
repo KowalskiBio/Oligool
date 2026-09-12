@@ -138,6 +138,19 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
     }
   }, [isDarkMode]);
 
+  // Pressing "," opens/closes Settings (ignored while typing in form fields).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== ',' || e.metaKey || e.ctrlKey || e.altKey || e.repeat) return;
+      const el = e.target as HTMLElement | null;
+      if (!el || el.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName)) return;
+      e.preventDefault();
+      setShowSettings(prev => !prev);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
   useEffect(() => { applyAccentPreset(accentPreset, customAccentColor); }, [accentPreset, customAccentColor]);
   useEffect(() => { applyNeutralPreset(neutralPreset, customNeutralColor); }, [neutralPreset, customNeutralColor]);
   useEffect(() => {
@@ -807,7 +820,7 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
             <button
               onClick={() => setShowSettings(!showSettings)}
               aria-label="Settings"
-              title="Settings"
+              title="Settings (,)"
               className="icon-btn"
             >
               <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">

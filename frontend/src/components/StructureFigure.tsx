@@ -3,8 +3,9 @@
  * with the backend's Strider renderer (matplotlib SVG via POST /strider/render).
  *
  * The Strider view handles branched multiloops, pseudoknots and '&' two-strand
- * dimers that the built-in schematic cannot.  Whenever Strider is disabled,
- * still loading, or the render fails, the original renderer passed as
+ * dimers that the built-in schematic cannot.  While Strider fetches, a neutral
+ * placeholder is shown (never the built-in style, so there is no flash).  When
+ * Strider is disabled or the render fails, the original renderer passed as
  * `fallback` (HairpinSVG / DimerSVG / ASCII art) is shown instead, so the
  * built-in visualizations remain available as a backup at all times.
  */
@@ -21,13 +22,29 @@ interface StructureFigureProps {
 
 const svgCache = new Map<string, string>();
 
+/**
+ * App toggles dark mode by flipping the 'dark' class on <html>, but only in
+ * an effect that runs after this component first renders.  To avoid fetching
+ * and flashing a light-themed figure on a dark page load, resolve the theme
+ * the same way App does: class if already set, else the persisted value,
+ * else the OS preference.
+ */
+function initialTheme(): 'light' | 'dark' {
+    if (typeof document === 'undefined') return 'light';
+    if (document.documentElement.classList.contains('dark')) return 'dark';
+    if (typeof localStorage !== 'undefined') {
+        const saved = localStorage.getItem('theme');
+        if (saved === 'dark' || saved === 'light') return saved;
+    }
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+}
+
 export default function StructureFigure({ seq, dotBracket, fallback }: StructureFigureProps) {
     const [mode, setMode] = useState(getStructureRenderer);
     const [colorMode, setColorMode] = useState(getStructureColor);
     const [fetched, setFetched] = useState<{ key: string; svg: string } | null>(null);
-    const [theme, setTheme] = useState<'light' | 'dark'>(() =>
-        typeof document !== 'undefined' && document.documentElement.classList.contains('dark')
-            ? 'dark' : 'light');
+    const [failedKey, setFailedKey] = useState<string | null>(null);
+    const [theme, setTheme] = useState<'light' | 'dark'>(initialTheme);
 
     useEffect(() => {
         const onChange = () => {
@@ -70,7 +87,8 @@ export default function StructureFigure({ seq, dotBracket, fallback }: Structure
                 }
             })
             .catch(() => {
-                /* keep the built-in fallback */
+                /* fall back to the built-in renderer on failure */
+                if (!cancelled) setFailedKey(key);
             });
         return () => { cancelled = true; };
     }, [mode, key, seq, dotBracket, colorMode, theme]);
@@ -84,6 +102,17 @@ export default function StructureFigure({ seq, dotBracket, fallback }: Structure
                 title="Strider render – click to open in a new tab"
                 onClick={() => openSvgStringInNewTab(svg, 'Secondary structure (Strider)')}
                 dangerouslySetInnerHTML={{ __html: svg }}
+            />
+        );
+    }
+    if (mode === 'strider' && key && failedKey !== key) {
+        // Strider is enabled and the figure is being fetched: show a neutral
+        // placeholder instead of the built-in style, so the figure never
+        // flashes HairpinSVG/DimerSVG before switching to the Strider render.
+        return (
+            <div
+                aria-hidden
+                className="w-full h-40 rounded-xl animate-pulse bg-zinc-100 dark:bg-zinc-800/60"
             />
         );
     }
