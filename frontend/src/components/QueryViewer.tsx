@@ -50,6 +50,8 @@ interface QueryViewerProps {
     onFlankingPanelStateChange?: (state: FlankingPanelState) => void;
     /** Tells App whether the Flanking Primers Provenance card is currently shown (results navigation). */
     onFlankingVisible?: (visible: boolean) => void;
+    /** Fires whenever the cached IDT / Strider analysis results change, so App can re-autosave. */
+    onAnalysisResultsChange?: () => void;
     onNavigateTo?: (colStart: number, colEnd: number) => void;
     /** Gapped column range selected by the user in MSAViewer for constrained oligo search */
     oligoRegion?: { startCol: number; endCol: number } | null;
@@ -159,7 +161,7 @@ function EditableOligoName({ value, onChange, className, editing, onEditingChang
     );
 }
 
-const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function QueryViewer({ data, jobName, genbankHeader, onGenbankHeaderChange, onPrimersUpdate, onFlankingPrimersUpdate, flankingPanelState, onFlankingPanelStateChange, onFlankingVisible, onNavigateTo, oligoRegion, autofindRegion, idtCredentials, onParameterSetChange, searchEngine, equilibriumSplit, alignment, navigateTarget, isDarkMode, importedSession, onSaveSession, blastRid, hitRanges }, ref) {
+const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function QueryViewer({ data, jobName, genbankHeader, onGenbankHeaderChange, onPrimersUpdate, onFlankingPrimersUpdate, flankingPanelState, onFlankingPanelStateChange, onFlankingVisible, onAnalysisResultsChange, onNavigateTo, oligoRegion, autofindRegion, idtCredentials, onParameterSetChange, searchEngine, equilibriumSplit, alignment, navigateTarget, isDarkMode, importedSession, onSaveSession, blastRid, hitRanges }, ref) {
     const API_BASE = ((import.meta.env.VITE_API_BASE as string) || '');
     const [copyFeedback, setCopyFeedback] = useState('');
 
@@ -341,6 +343,14 @@ const QueryViewer = forwardRef<QueryViewerHandle, QueryViewerProps>(function Que
         onFlankingVisible?.(!!primers && showFlankingPrimers);
         return () => onFlankingVisible?.(false);
     }, [primers, showFlankingPrimers, onFlankingVisible]);
+
+    // Analyses (IDT / Strider) live only in this component, so App's session
+    // builder doesn't see them change. Bump App whenever they do, keeping the
+    // debounced autosave in sync (otherwise the on-disk autosave can predate
+    // the analysis run and silently lose the results on restore).
+    useEffect(() => {
+        onAnalysisResultsChange?.();
+    }, [idtResults, striderResults, onAnalysisResultsChange]);
 
     const [flankingPrimersData, setFlankingPrimersData] = useState<{
         fwd: { start: number; end: number } | null;

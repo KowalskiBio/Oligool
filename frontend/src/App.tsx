@@ -64,6 +64,9 @@ function App() {
   const [structureColor, setStructureColorState] = useState<StructureColorMode>(getStructureColor);
   const [flankingProvenanceVisible, setFlankingProvenanceVisible] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  // Bumped whenever QueryViewer's cached IDT / Strider analyses change; exists
+  // only to refresh buildSession's identity so the debounced autosave re-runs.
+  const [analysisRev, setAnalysisRev] = useState(0);
   const [settingsTab, setSettingsTab] = useState<'account' | 'engine' | 'theme'>('account');
   const [maxHitsPreset, setMaxHitsPreset] = useState(() => localStorage.getItem('max_hits_preset') || '50');
   const [customHits, setCustomHits] = useState(() => localStorage.getItem('custom_hits') || '');
@@ -408,6 +411,7 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
     setSessionMsg({ type, text });
     setTimeout(() => setSessionMsg(null), ms);
   };
+  const bumpAnalysisRev = useCallback(() => setAnalysisRev(r => r + 1), []);
 
   const buildSession = useCallback((): OligoolSession | null => {
     if (!alignment) return null;
@@ -432,7 +436,7 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
       flankingPrimers: selectedFlankingPrimers ?? null,
       flankingPanel: flankingPanelState ?? null,
     };
-  }, [alignment, blastHits, filteredHits, blastMeta, showMatches, jobName, input, organism, eValue, percIdentity, filterMatches, maxHitsPreset, customHits, autofindSelectedAccessions, autofindTreatIndelsAsMismatches, selectedFlankingPrimers, selectedSequence, flankingPanelState]);
+  }, [alignment, blastHits, filteredHits, blastMeta, showMatches, jobName, input, organism, eValue, percIdentity, filterMatches, maxHitsPreset, customHits, autofindSelectedAccessions, autofindTreatIndelsAsMismatches, selectedFlankingPrimers, selectedSequence, flankingPanelState, analysisRev]);
 
   // ── Restore a previously saved session, skipping the BLAST/MSA pipeline ──
   const applySession = useCallback((session: OligoolSession) => {
@@ -1649,6 +1653,7 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                   key={`qv-${importNonceRef.current}`}
                   ref={queryViewerRef}
                   importedSession={importedSession}
+                  onAnalysisResultsChange={bumpAnalysisRev}
                   data={selectedSequence}
                   jobName={jobName}
                   queryHeader={queryHeader}
