@@ -20,7 +20,9 @@ const fmtNum = (v: number | undefined | null, digits = 1): string => {
 const fmtDG = (v: number | undefined | null): string => {
     if (v === undefined || v === null) return 'N/A';
     const sign = v > 0 ? '+' : '';
-    return `${sign}${v.toFixed(2)} kcal/mol`;
+    // Non-breaking space: the value and its kcal/mol unit must never be split
+    // across lines by the narrow two-column print layout.
+    return `${sign}${v.toFixed(2)}\u00A0kcal/mol`;
 };
 
 const firstDefined = (...values: (number | null | undefined)[]): number | undefined => {
@@ -85,8 +87,8 @@ const StructureMetricsRow = ({
     return (
         <p className="text-sm text-zinc-600 whitespace-pre-wrap">
             {label}
-            {hasP3 && <>{'\t'}P3{'\t'}<V>{fmtDG(p3Dg)}</V> (Tm{'\t'}<V>{fmtNum(p3Tm)} °C</V>)</>}
-            {hasStrider && <>{'\t'}Strider{'\t'}<V>{fmtDG(stDg)}</V> (Tm{'\t'}<V>{fmtNum(stTm)} °C</V>{stTmShortStem === true && <span className="font-normal text-amber-600"> (short stem: under 3 bp, Tm unreliable)</span>})</>}
+            {hasP3 && <>{'\t'}P3{'\t'}<V>{fmtDG(p3Dg)}</V> (Tm{'\t'}<V>{fmtNum(p3Tm)}{'\u00A0'}°C</V>)</>}
+            {hasStrider && <>{'\t'}Strider{'\t'}<V>{fmtDG(stDg)}</V> (Tm{'\t'}<V>{fmtNum(stTm)}{'\u00A0'}°C</V>{stTmShortStem === true && <span className="font-normal text-amber-600"> (short stem: under 3 bp, Tm unreliable)</span>})</>}
         </p>
     );
 };
@@ -186,8 +188,8 @@ const StructureSection = ({
                             <div className="grid grid-cols-2 gap-x-4 gap-y-0.5 text-[13px] text-zinc-600 mb-1 whitespace-pre-wrap">
                                 {fmtDG(idtDg) !== 'N/A' && <span>IDT ΔG{'\t'}<span className="font-mono tabular-nums font-bold text-zinc-900">{fmtDG(idtDg)}</span></span>}
                                 {fmtDG(localDg) !== 'N/A' && <span>Strider ΔG{'\t'}<span className="font-mono tabular-nums font-bold text-zinc-900">{fmtDG(localDg)}</span></span>}
-                                {fmtNum(idtTm) !== 'N/A' && <span>IDT Tm{'\t'}<span className="font-mono tabular-nums font-bold text-zinc-900">{fmtNum(idtTm)} °C</span></span>}
-                                {(fmtNum(localTm) !== 'N/A' || item.Local_Tm_Multiloop === true) && <span>Local Tm{'\t'}<span className="font-mono tabular-nums font-bold text-zinc-900">{fmtNum(localTm) === 'N/A' ? 'N/A' : `${fmtNum(localTm)} °C`}</span>{item.Local_Tm_ShortStem === true && <span className="font-normal text-amber-600"> (short stem: under 3 bp, Tm unreliable)</span>}{item.Local_Tm_Multiloop === true && <span className="font-normal text-amber-600">{item.Local_Tm != null ? ' (multiloop: best-stem Tm)' : ' (multiloop: no two-state Tm)'}</span>}</span>}
+                                {fmtNum(idtTm) !== 'N/A' && <span>IDT Tm{'\t'}<span className="font-mono tabular-nums font-bold text-zinc-900">{fmtNum(idtTm)}{'\u00A0'}°C</span></span>}
+                                {(fmtNum(localTm) !== 'N/A' || item.Local_Tm_Multiloop === true) && <span>Local Tm{'\t'}<span className="font-mono tabular-nums font-bold text-zinc-900">{fmtNum(localTm) === 'N/A' ? 'N/A' : `${fmtNum(localTm)}\u00A0°C`}</span>{item.Local_Tm_ShortStem === true && <span className="font-normal text-amber-600"> (short stem: under 3 bp, Tm unreliable)</span>}{item.Local_Tm_Multiloop === true && <span className="font-normal text-amber-600">{item.Local_Tm != null ? ' (multiloop: best-stem Tm)' : ' (multiloop: no two-state Tm)'}</span>}</span>}
                             </div>
                             {renderIdtSvg(item, seq1, seq2)}
                         </div>
@@ -274,7 +276,7 @@ export default function QueryReport({ data }: QueryReportProps) {
                             <span><span className="text-zinc-500">GC{'\t'}</span><V>{fmtNum(calcGC(data.moligo1Seq))}%</V></span>
                         </div>
                         <div className="text-[13px] text-zinc-600 mt-0.5 whitespace-pre-wrap">
-                            <span><span className="text-zinc-500">Tm{'\t'}P3{'\t'}</span><V>{fmtNum(data.moligo1TmP3)} °C</V>{'\t'}<span className="text-zinc-500">Strider{'\t'}</span><V>{fmtNum(data.moligo1TmStrider)} °C</V>{'\t'}<span className="text-zinc-500">IDT{'\t'}</span><V>{fmtNum(data.idtM1Tm)} °C</V></span>
+                            <span><span className="text-zinc-500">Tm{'\t'}P3{'\t'}</span><V>{fmtNum(data.moligo1TmP3)}{'\u00A0'}°C</V>{'\t'}<span className="text-zinc-500">Strider{'\t'}</span><V>{fmtNum(data.moligo1TmStrider)}{'\u00A0'}°C</V>{'\t'}<span className="text-zinc-500">IDT{'\t'}</span><V>{fmtNum(data.idtM1Tm)}{'\u00A0'}°C</V></span>
                         </div>
                         <div className="text-[13px] text-zinc-600 mt-0.5 grid grid-cols-2 gap-x-6 gap-y-0.5 whitespace-pre-wrap">
                             <span><span className="text-zinc-500">Hairpin IDT ΔG{'\t'}</span><V>{fmtDG(data.idtM1Hairpin?.DeltaG)}</V></span>
@@ -293,7 +295,7 @@ export default function QueryReport({ data }: QueryReportProps) {
                             <span><span className="text-zinc-500">GC{'\t'}</span><V>{fmtNum(calcGC(data.moligo2Seq))}%</V></span>
                         </div>
                         <div className="text-[13px] text-zinc-600 mt-0.5 whitespace-pre-wrap">
-                            <span><span className="text-zinc-500">Tm{'\t'}P3{'\t'}</span><V>{fmtNum(data.moligo2TmP3)} °C</V>{'\t'}<span className="text-zinc-500">Strider{'\t'}</span><V>{fmtNum(data.moligo2TmStrider)} °C</V>{'\t'}<span className="text-zinc-500">IDT{'\t'}</span><V>{fmtNum(data.idtM2Tm)} °C</V></span>
+                            <span><span className="text-zinc-500">Tm{'\t'}P3{'\t'}</span><V>{fmtNum(data.moligo2TmP3)}{'\u00A0'}°C</V>{'\t'}<span className="text-zinc-500">Strider{'\t'}</span><V>{fmtNum(data.moligo2TmStrider)}{'\u00A0'}°C</V>{'\t'}<span className="text-zinc-500">IDT{'\t'}</span><V>{fmtNum(data.idtM2Tm)}{'\u00A0'}°C</V></span>
                         </div>
                         <div className="text-[13px] text-zinc-600 mt-0.5 grid grid-cols-2 gap-x-6 gap-y-0.5 whitespace-pre-wrap">
                             <span><span className="text-zinc-500">Hairpin IDT ΔG{'\t'}</span><V>{fmtDG(data.idtM2Hairpin?.DeltaG)}</V></span>
@@ -336,7 +338,7 @@ export default function QueryReport({ data }: QueryReportProps) {
                             <h3 className="text-sm font-bold text-zinc-700">{data.flankingFwdName || 'Flanking Fwd'}</h3>
                             <p className="font-mono text-sm break-all bg-zinc-50 p-2 rounded border border-zinc-200">{data.flankingFwdSeq}</p>
                             <p className="text-sm text-zinc-600 whitespace-pre-wrap">Length{'\t'}<V>{data.flankingFwdLen ?? data.flankingFwdSeq.length} nt</V> | GC{'\t'}<V>{fmtNum(data.flankingFwdGc)}%</V></p>
-                            <p className="text-sm text-zinc-600 whitespace-pre-wrap">Tm{'\t'}P3{'\t'}<V>{fmtNum(data.flankingFwdTmP3)} °C</V>{'\t'}Strider{'\t'}<V>{fmtNum(data.flankingFwdTmStrider)} °C</V>{'\t'}IDT{'\t'}<V>{fmtNum(data.flankingFwdIDTTm)} °C</V></p>
+                            <p className="text-sm text-zinc-600 whitespace-pre-wrap">Tm{'\t'}P3{'\t'}<V>{fmtNum(data.flankingFwdTmP3)}{'\u00A0'}°C</V>{'\t'}Strider{'\t'}<V>{fmtNum(data.flankingFwdTmStrider)}{'\u00A0'}°C</V>{'\t'}IDT{'\t'}<V>{fmtNum(data.flankingFwdIDTTm)}{'\u00A0'}°C</V></p>
                             <StructureMetricsRow
                                 label="Hairpin"
                                 p3Dg={data.flankingFwdHairpinDg}
@@ -361,7 +363,7 @@ export default function QueryReport({ data }: QueryReportProps) {
                             <h3 className="text-sm font-bold text-zinc-700">{data.flankingRevName || 'Flanking Rev'}</h3>
                             <p className="font-mono text-sm break-all bg-zinc-50 p-2 rounded border border-zinc-200">{data.flankingRevSeq}</p>
                             <p className="text-sm text-zinc-600 whitespace-pre-wrap">Length{'\t'}<V>{data.flankingRevLen ?? data.flankingRevSeq.length} nt</V> | GC{'\t'}<V>{fmtNum(data.flankingRevGc)}%</V></p>
-                            <p className="text-sm text-zinc-600 whitespace-pre-wrap">Tm{'\t'}P3{'\t'}<V>{fmtNum(data.flankingRevTmP3)} °C</V>{'\t'}Strider{'\t'}<V>{fmtNum(data.flankingRevTmStrider)} °C</V>{'\t'}IDT{'\t'}<V>{fmtNum(data.flankingRevIDTTm)} °C</V></p>
+                            <p className="text-sm text-zinc-600 whitespace-pre-wrap">Tm{'\t'}P3{'\t'}<V>{fmtNum(data.flankingRevTmP3)}{'\u00A0'}°C</V>{'\t'}Strider{'\t'}<V>{fmtNum(data.flankingRevTmStrider)}{'\u00A0'}°C</V>{'\t'}IDT{'\t'}<V>{fmtNum(data.flankingRevIDTTm)}{'\u00A0'}°C</V></p>
                             <StructureMetricsRow
                                 label="Hairpin"
                                 p3Dg={data.flankingRevHairpinDg}
