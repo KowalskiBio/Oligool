@@ -1819,6 +1819,26 @@ _STRIDER_DARK_RC = {
     "ytick.color": "#a1a1aa",
 }
 
+# Light theme stated explicitly (matplotlib defaults) rather than relying on
+# whatever the process-global rcParams happen to be: this endpoint runs in
+# Starlette's threadpool, where overlapping matplotlib.rc_context calls from
+# concurrent requests can restore each other's snapshots out of order and
+# leave the globals stuck dark.  Both themes are therefore applied through an
+# explicit rc_context, and the whole render is serialized by a lock so the
+# contexts can never interleave in the first place.
+_STRIDER_LIGHT_RC = {
+    "figure.facecolor": "white",
+    "axes.facecolor": "white",
+    "savefig.facecolor": "white",
+    "text.color": "black",
+    "axes.labelcolor": "black",
+    "axes.edgecolor": "black",
+    "xtick.color": "black",
+    "ytick.color": "black",
+}
+
+_STRIDER_RENDER_LOCK = _threading.Lock()
+
 
 @app.post("/strider/render")
 def render_strider_svg(request: StriderRenderRequest):
@@ -1842,7 +1862,6 @@ def render_strider_svg(request: StriderRenderRequest):
     if db.count("(") == 0 and db.count("[") == 0 and db.count("{") == 0 and db.count("<") == 0:
         raise HTTPException(status_code=400, detail="dot_bracket has no base pairs")
     try:
-        import contextlib
         import io
         import matplotlib
         matplotlib.use("Agg")
@@ -1850,24 +1869,27 @@ def render_strider_svg(request: StriderRenderRequest):
         from strider.viz import style
         from strider.viz.arc import arc_diagram
         from strider.viz.structure2d import draw_complex, draw_structure
-        theme_ctx = (matplotlib.rc_context(_STRIDER_DARK_RC)
-                     if request.theme == "dark" else contextlib.nullcontext())
-        with style.style_context(), theme_ctx:
-            base_color = "nt" if request.color == "identity" else "structure"
-            if request.view == "arc":
-                ax = arc_diagram(seq, db)
-            elif "&" in seq:
-                ax = draw_complex(seq, db, color=base_color)
-            else:
-                ax = draw_structure(seq, db, color=base_color)
-            buf = io.StringIO()
-            ax.figure.savefig(buf, format="svg")
-            plt.close(ax.figure)
-        svg = buf.getvalue()
-        if request.theme == "dark":
-            # Position-number labels are hardcoded mid-gray in strider.viz
-            # (structure2d.py); brighten them for the dark background.
-            svg = svg.replace("#555555", "#a1a1aa")
+        theme_rc = _STRIDER_DARK_RC if request.theme == "dark" else _STRIDER_LIGHT_RC
+        # Serialize the whole render: rcParams are process-global, so
+        # concurrent rc_contexts here could restore each other's snapshots
+        # out of order and corrupt the theme for every later request.
+        with _STRIDER_RENDER_LOCK:
+            with style.style_context(), matplotlib.rc_context(theme_rc):
+                base_color = "nt" if request.color == "identity" else "structure"
+                if request.view == "arc":
+                    ax = arc_diagram(seq, db)
+                elif "&" in seq:
+                    ax = draw_complex(seq, db, color=base_color)
+                else:
+                    ax = draw_structure(seq, db, color=base_color)
+                buf = io.StringIO()
+                ax.figure.savefig(buf, format="svg")
+                plt.close(ax.figure)
+            svg = buf.getvalue()
+            if request.theme == "dark":
+                # Position-number labels are hardcoded mid-gray in strider.viz
+                # (structure2d.py); brighten them for the dark background.
+                svg = svg.replace("#555555", "#a1a1aa")
         return {"svg": svg}
     except HTTPException:
         raise

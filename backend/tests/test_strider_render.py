@@ -113,6 +113,45 @@ def test_render_arc_view(client: TestClient) -> None:
     assert "<svg" in res.json()["svg"]
 
 
+@pytest.mark.skipif(not _HAVE_STRIDER_VIZ, reason="strider.viz not importable")
+def test_concurrent_dark_renders_do_not_leak_into_light() -> None:
+    # The endpoint runs in Starlette's threadpool, so several figures can be
+    # rendered at once (the frontend fetches the whole stability grid in one
+    # burst).  Overlapping matplotlib.rc_context calls used to restore each
+    # other's snapshots out of order, leaving the process-global rcParams
+    # stuck dark: every later light render then baked in a dark background.
+    # The render lock plus the explicit light rc must prevent that.
+    import concurrent.futures
+    import threading
+
+    import matplotlib
+
+    import backend.main as mod
+
+    body = {
+        "sequence": "GGGAAACCCAAAGGGAAACCC",
+        "dot_bracket": "(((...(((...)))...)))",
+    }
+    dark_req = mod.StriderRenderRequest(**body, theme="dark")
+    light_req = mod.StriderRenderRequest(**body, theme="light")
+
+    # Several rounds of overlapping dark renders from independent threads.
+    for _ in range(3):
+        barrier = threading.Barrier(4)
+        def run_dark() -> None:
+            barrier.wait()
+            mod.render_strider_svg(dark_req)
+        with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
+            list(pool.map(lambda _: run_dark(), range(4)))
+
+    svg = mod.render_strider_svg(light_req)["svg"]
+    assert "#27272a" not in svg, "dark rcParams leaked into a light render"
+
+    # And the process globals themselves must be back to light values.
+    assert matplotlib.rcParams["figure.facecolor"] in ("white", "#ffffff", "auto")
+    assert matplotlib.rcParams["text.color"] == "black"
+
+
 @pytest.mark.parametrize(
     "payload",
     [
