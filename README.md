@@ -21,10 +21,7 @@
 
 <br />
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/images/overview-dark.png" />
-  <img src="docs/images/overview-light.png" alt="Oligool's results step: a completed BLAST search and the multiple sequence alignment viewer with its GC% minimap, mismatch markers and base-level rows" width="100%" />
-</picture>
+<img src="docs/images/overview-dark.png" alt="Oligool's results step: a completed BLAST search and the multiple sequence alignment viewer with its GC% minimap, mismatch markers and base-level rows" width="100%" />
 
 </div>
 
@@ -82,10 +79,7 @@ Oligool takes a query sequence, finds its homologs with **NCBI BLAST**, aligns t
 
 ### Design oligos
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/images/oligo-design-dark.png" />
-  <img src="docs/images/oligo-design-light.png" alt="Oligo provenance: selection parameters, two contiguous 21-nt oligos with their GC, Primer3 Tm and Strider Tm, and the context viewer highlighting both on the template" width="100%" />
-</picture>
+<img src="docs/images/oligo-design-dark.png" alt="Oligo provenance: selection parameters, two contiguous 21-nt oligos with their GC, Primer3 Tm and Strider Tm, and the context viewer highlighting both on the template" width="100%" />
 
 - **MOLigo split oligos**: select a region in the alignment and Oligool splits it into two contiguous oligos, choosing lengths within your **length, Tm, ΔTm and GC** limits. Salt, Mg²⁺, dNTP and oligo concentrations are adjustable.
 - **Context viewer**: the oligos highlighted on the surrounding template. Drag the pair to shift it, drag an edge to resize, or drag the seam to rebalance the two lengths.
@@ -94,10 +88,7 @@ Oligool takes a query sequence, finds its homologs with **NCBI BLAST**, aligns t
 
 ### Check every oligo
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/images/structures-dark.png" />
-  <img src="docs/images/structures-light.png" alt="Secondary structures: stability bars and ranked hairpin diagrams for both oligos, with the pairwise cross-dimer column" width="100%" />
-</picture>
+<img src="docs/images/structures-dark.png" alt="Secondary structures: stability bars and ranked hairpin diagrams for both oligos, with the pairwise cross-dimer column" width="100%" />
 
 - **Strider** (native nearest-neighbour thermodynamics with Mg²⁺ corrections) ranks the suboptimal **hairpins**, **self-dimers** and **cross-dimers** of each oligo. Every structure shows its ΔG, local Tm and share of the ensemble, and hairpins are drawn as diagrams.
 - Switch between the **Mathews 2004** and **SantaLucia** parameter sets and set the equilibrium temperature; the analysis reruns on its own.
@@ -105,10 +96,7 @@ Oligool takes a query sequence, finds its homologs with **NCBI BLAST**, aligns t
 
 ### Assemble the construct
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/images/schematic-dark.png" />
-  <img src="docs/images/schematic-light.png" alt="The MOLigo provenance schematic: both oligos drawn base by base over the target template, with fields for the universal primers and a TAG sequence" width="100%" />
-</picture>
+<img src="docs/images/schematic-dark.png" alt="The MOLigo provenance schematic: both oligos drawn base by base over the target template, with fields for the universal primers and a TAG sequence" width="100%" />
 
 - **MOLigo schematic**: both oligos drawn base by base over the target template, with the **universal forward and reverse primers** and a **TAG** (picked from your TAG database or typed in).
 - **Primerize** view: an SVG of the whole design with the primer binding sites and TAGs, plus a sequence mode with every base lettered.
