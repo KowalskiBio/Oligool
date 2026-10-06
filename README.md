@@ -15,7 +15,7 @@
 [![Tailwind CSS](https://img.shields.io/badge/Tailwind-4-06b6d4?style=flat-square&logo=tailwindcss&logoColor=white)](frontend)
 [![Vite](https://img.shields.io/badge/Vite-7-646cff?style=flat-square&logo=vite&logoColor=white)](frontend)
 [![Desktop](https://img.shields.io/badge/desktop-pywebview-3776ab?style=flat-square&logo=python&logoColor=white)](webview_app.py)
-[![License: GPL-3.0](https://img.shields.io/badge/license-GPL--3.0-blue?style=flat-square)](LICENSE)
+[![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-blue?style=flat-square)](LICENSE)
 
 [**Features**](#features) · [**Download**](#download) · [**Run from source**](#run-from-source) · [**How it works**](#how-it-works) · [**Architecture**](#architecture)
 
@@ -277,7 +277,9 @@ Oligool builds on [NCBI BLAST](https://blast.ncbi.nlm.nih.gov/), [MAFFT](https:/
 
 ## License
 
-[GPL-3.0](LICENSE).
+Copyright (C) 2026 Vojtech Rejtar and Oligool contributors.
+
+Oligool is licensed under the [GNU Affero General Public License v3.0 or later](LICENSE) (AGPL-3.0-or-later). If you modify it and let others use it, including over a network, you must publish your modified source under the same license and keep the original copyright and attribution notices.
 
 <div align="center">
 <br />

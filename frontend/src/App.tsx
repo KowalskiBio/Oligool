@@ -1566,8 +1566,8 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
           <p>In case of bugs or errors, please contact the author.</p>
           <p className="pt-1">
             Licensed under the{' '}
-            <a href="https://www.gnu.org/licenses/gpl-3.0.html" target="_blank" rel="noopener noreferrer" className="text-teal-700 dark:text-teal-300 hover:underline">
-              GNU General Public License v3.0
+            <a href="https://www.gnu.org/licenses/agpl-3.0.html" target="_blank" rel="noopener noreferrer" className="text-teal-700 dark:text-teal-300 hover:underline">
+              GNU Affero General Public License v3.0 or later
             </a>.
           </p>
           <img
