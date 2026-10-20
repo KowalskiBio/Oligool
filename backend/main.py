@@ -21,6 +21,7 @@ from fastapi.responses import FileResponse, StreamingResponse
 import asyncio
 import logging
 import math
+import re
 import requests
 
 
@@ -267,14 +268,20 @@ class NcbiTestRequest(BaseModel):
 # when the NCBI BLAST queue is healthy.
 _NCBI_TEST_QUERY = "ATGGATGATGATATCGCCGCGCTCGTCGTCGACAACGGCTCCGGCATGTGCAAGGCCGGCTTCGCGGGCGACGATGCCCCCCGGGCCGTCTTCCC"
 _NCBI_BLAST_URL = "https://blast.ncbi.nlm.nih.gov/blast/Blast.cgi"
-_NCBI_TEST_MAX_WAIT = 60
+# NCBI's BLAST URL API guidelines allow at most one status check per RID per minute,
+# so the frontend waits this long and then asks once.
+_NCBI_TEST_QUEUE_WAIT = 60
 
 
 def _run_ncbi_test(api_key: str) -> dict:
-    """Probe NCBI in three steps: E-utilities (key validity), BLAST submit, BLAST queue."""
+    """Probe E-utilities (key validity) and submit a tiny BLAST job.
+
+    The queue is checked separately (see _check_ncbi_test_job) so that no single
+    request outlasts a reverse proxy's timeout.
+    """
     import time
 
-    result = {"eutils": None, "blast_submit": None, "blast_queue": None}
+    result = {"eutils": None, "blast_submit": None, "rid": None}
 
     # Step 1: E-utilities, which also tells us whether the API key is accepted
     params = {"db": "nucleotide", "retmode": "json"}
@@ -320,41 +327,40 @@ def _run_ncbi_test(api_key: str) -> dict:
         result["blast_submit"] = {"ok": False, "seconds": round(time.monotonic() - t0, 2), "detail": "NCBI returned no job ID."}
         return result
     result["blast_submit"] = {"ok": True, "seconds": round(time.monotonic() - t0, 2), "detail": f"Job accepted (RID {rid})."}
-
-    # Step 3: watch the queue for a limited time
-    t0 = time.monotonic()
-    status = "WAITING"
-    while time.monotonic() - t0 < _NCBI_TEST_MAX_WAIT:
-        time.sleep(5)
-        try:
-            r = requests.get(_NCBI_BLAST_URL, params={"CMD": "Get", "FORMAT_OBJECT": "SearchInfo", "RID": rid}, timeout=15)
-            r.raise_for_status()
-        except requests.RequestException:
-            continue
-        if "Status=READY" in r.text:
-            status = "READY"
-            break
-        if "Status=FAILED" in r.text or "Status=UNKNOWN" in r.text:
-            status = "FAILED"
-            break
-    elapsed = round(time.monotonic() - t0, 1)
-    if status == "READY":
-        result["blast_queue"] = {"ok": True, "seconds": elapsed, "detail": f"Test search finished in {elapsed} s."}
-    elif status == "FAILED":
-        result["blast_queue"] = {"ok": False, "seconds": elapsed, "detail": "NCBI reported the test search as failed."}
-    else:
-        result["blast_queue"] = {
-            "ok": False,
-            "seconds": elapsed,
-            "detail": f"Still queued after {elapsed} s. The NCBI BLAST API queue is lingering; real searches will likely time out.",
-        }
+    result["rid"] = rid
     return result
+
+
+def _check_ncbi_test_job(rid: str) -> dict:
+    """Ask NCBI once whether the test BLAST job has left the queue."""
+    try:
+        r = requests.get(_NCBI_BLAST_URL, params={"CMD": "Get", "FORMAT_OBJECT": "SearchInfo", "RID": rid}, timeout=15)
+        r.raise_for_status()
+    except requests.RequestException as e:
+        return {"ok": False, "seconds": _NCBI_TEST_QUEUE_WAIT, "detail": f"Status check failed: {e.__class__.__name__}"}
+    if "Status=READY" in r.text:
+        return {"ok": True, "seconds": _NCBI_TEST_QUEUE_WAIT, "detail": f"Test search finished within {_NCBI_TEST_QUEUE_WAIT} s."}
+    if "Status=FAILED" in r.text or "Status=UNKNOWN" in r.text:
+        return {"ok": False, "seconds": _NCBI_TEST_QUEUE_WAIT, "detail": "NCBI reported the test search as failed."}
+    return {
+        "ok": False,
+        "seconds": _NCBI_TEST_QUEUE_WAIT,
+        "detail": f"Still queued after {_NCBI_TEST_QUEUE_WAIT} s. The NCBI BLAST API queue is lingering; real searches will likely time out.",
+    }
 
 
 @app.post("/ncbi/test")
 async def test_ncbi(request: NcbiTestRequest):
-    """Diagnose NCBI connectivity, API key validity and BLAST queue latency."""
+    """Check NCBI connectivity and API key validity, and submit a BLAST job to time the queue."""
     return await asyncio.to_thread(_run_ncbi_test, request.api_key.strip())
+
+
+@app.get("/ncbi/test/{rid}")
+async def test_ncbi_queue(rid: str):
+    """Report whether the test BLAST job submitted by /ncbi/test has finished."""
+    if not re.fullmatch(r"[A-Za-z0-9]+", rid):
+        raise HTTPException(status_code=400, detail="Invalid RID")
+    return await asyncio.to_thread(_check_ncbi_test_job, rid)
 
 
 # Keep the old /align endpoint for direct MSA usage

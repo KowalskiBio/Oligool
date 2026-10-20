@@ -218,18 +218,33 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
     result: { eutils: NcbiCheck; blast_submit: NcbiCheck; blast_queue: NcbiCheck } | null;
   }>({ running: false, error: null, result: null });
 
+  // NCBI allows one status check per BLAST job per minute, so the queue is checked
+  // once after this delay, in its own request to stay under reverse proxy timeouts.
+  const NCBI_QUEUE_WAIT_MS = 60_000;
+
   const runNcbiTest = async () => {
+    const apiBase = (import.meta.env.VITE_API_BASE as string) || "";
     setNcbiTest({ running: true, error: null, result: null });
     try {
-      const response = await fetch(((import.meta.env.VITE_API_BASE as string) || "") + '/ncbi/test', {
+      const response = await fetch(apiBase + '/ncbi/test', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ api_key: apiKey }),
       });
       if (!response.ok) throw new Error(`Server error ${response.status}`);
-      setNcbiTest({ running: false, error: null, result: await response.json() });
+      const { eutils, blast_submit, rid } = await response.json();
+      const partial = { eutils, blast_submit, blast_queue: null };
+      if (!rid) {
+        setNcbiTest({ running: false, error: null, result: partial });
+        return;
+      }
+      setNcbiTest({ running: true, error: null, result: partial });
+      await new Promise((resolve) => setTimeout(resolve, NCBI_QUEUE_WAIT_MS));
+      const queueResponse = await fetch(apiBase + '/ncbi/test/' + encodeURIComponent(rid));
+      if (!queueResponse.ok) throw new Error(`Server error ${queueResponse.status}`);
+      setNcbiTest({ running: false, error: null, result: { ...partial, blast_queue: await queueResponse.json() } });
     } catch (err) {
-      setNcbiTest({ running: false, error: err instanceof Error ? err.message : 'Test failed', result: null });
+      setNcbiTest((prev) => ({ running: false, error: err instanceof Error ? err.message : 'Test failed', result: prev.result }));
     }
   };
 
@@ -949,9 +964,11 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                             {ncbiTest.running ? 'Testing…' : 'Test NCBI'}
                           </button>
                           <span className="text-[13px] text-zinc-500 dark:text-zinc-400">
-                            {ncbiTest.running
-                              ? 'Running a tiny BLAST search, up to about a minute.'
-                              : 'Checks the key and how long the BLAST queue takes.'}
+                            {!ncbiTest.running
+                              ? 'Checks the key and how long the BLAST queue takes.'
+                              : ncbiTest.result
+                                ? 'Test search queued. NCBI allows one status check per minute, so this takes a minute.'
+                                : 'Checking E-utilities and submitting a tiny BLAST search.'}
                           </span>
                         </div>
                         {ncbiTest.error && (
@@ -970,11 +987,11 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                                     !check ? 'text-zinc-400' : check.ok ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
                                   }`}
                                 >
-                                  {!check ? '·' : check.ok ? '✓' : '✗'}
+                                  {!check ? (ncbiTest.running ? '…' : '·') : check.ok ? '✓' : '✗'}
                                 </span>
                                 <span className="text-zinc-700 dark:text-zinc-300 font-medium w-32 shrink-0">{label}</span>
                                 <span className="text-zinc-500 dark:text-zinc-400">
-                                  {check ? check.detail : 'Skipped.'}
+                                  {check ? check.detail : ncbiTest.running ? 'Waiting for NCBI…' : 'Skipped.'}
                                 </span>
                               </li>
                             ))}
