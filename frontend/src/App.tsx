@@ -103,6 +103,9 @@ function App() {
 const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState | null>(null);
   const [showSecrets, setShowSecrets] = useState(false);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  // NCBI job ID of the current search, known as soon as NCBI accepts it, so the
+  // user can open the results on NCBI even if Oligool's wait times out.
+  const [searchRid, setSearchRid] = useState('');
   const [navigateTarget, setNavigateTarget] = useState<{ colStart: number; colEnd: number; ts: number } | null>(null);
   const [oligoRegion, setOligoRegion] = useState<{ startCol: number; endCol: number } | null>(null);
   const [autofindRegion, setAutofindRegion] = useState<{ startCol: number; endCol: number } | null>(null);
@@ -310,6 +313,7 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
   const handleSearch = async () => {
     setStep('blasting');
     setError('');
+    setSearchRid('');
     setBlastHits([]);
     setBlastMeta(null);
     setAlignment('');
@@ -359,7 +363,20 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
         throw new Error(errorMsg);
       }
 
-      const data = await response.json();
+      // The body is keepalive spaces, an optional "RID=..." line sent as soon as
+      // NCBI accepts the job, then the final JSON.
+      const reader = response.body!.getReader();
+      const decoder = new TextDecoder();
+      let body = '';
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        body += decoder.decode(value, { stream: true });
+        const ridMatch = body.match(/^RID=(\w+)$/m);
+        if (ridMatch) setSearchRid(ridMatch[1]);
+      }
+      const data = JSON.parse(body.replace(/^RID=\w+$/m, ''));
+      if (data.rid) setSearchRid(data.rid);
       if (data.error) {
         throw new Error(data.detail || 'Search or alignment failed');
       }
@@ -395,6 +412,7 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
     setAlignment('');
     setSelectedSequence(null);
       setError('');
+      setSearchRid('');
       setInput('');
       setGenbankHeader('');
       setSelectedFlankingPrimers(null);
@@ -407,7 +425,7 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
     const prev = {
       step, blastHits, filteredHits, showMatches, blastMeta, alignment,
       selectedSequence, error, input, genbankHeader, selectedFlankingPrimers,
-      flankingPanelState, autofindSelectedAccessions, importedSession,
+      flankingPanelState, autofindSelectedAccessions, importedSession, searchRid,
     };
     undoRef.current = () => {
       setStep(prev.step);
@@ -424,6 +442,7 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
       setFlankingPanelState(prev.flankingPanelState);
       setAutofindSelectedAccessions(prev.autofindSelectedAccessions);
       setImportedSession(prev.importedSession);
+      setSearchRid(prev.searchRid);
     };
     handleReset();
     setShowUndo(true);
@@ -499,6 +518,7 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
     setSelectedFlankingPrimers(session.flankingPrimers || null);
     setFlankingPanelState(session.flankingPanel ?? null);
     setError('');
+    setSearchRid('');
 
     setSelectedSequence(session.results.selectedSequence ?? null);
     pendingMsaViewportRef.current = session.results.msaViewport ?? null;
@@ -1596,6 +1616,13 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                   </span>
                 </div>
                 <p className="text-[13px] text-zinc-400 dark:text-zinc-500">This may take 1-2 minutes depending on sequence count. Preparing environment...</p>
+                {searchRid && (
+                  <p className="text-[13px] text-zinc-500 dark:text-zinc-400">
+                    NCBI job RID <span className="font-mono text-zinc-700 dark:text-zinc-300">{searchRid}</span>.{' '}
+                    <a href={`https://blast.ncbi.nlm.nih.gov/Blast.cgi?CMD=Get&RID=${searchRid}`} target="_blank" rel="noopener noreferrer" className="text-accent-700 underline">Open on NCBI</a>
+                    {' '}to check it there; NCBI keeps results for about 36 hours.
+                  </p>
+                )}
               </div>
 
               <div><GameArcade isDark={isDarkMode} /></div>
@@ -1650,6 +1677,13 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                 <div>
                   <h3 className="text-sm font-semibold text-red-800 dark:text-red-300">Error</h3>
                   <p className="mt-1 text-sm text-red-700 dark:text-red-300">{error}</p>
+                  {searchRid && (
+                    <p className="mt-1 text-sm text-red-700 dark:text-red-300">
+                      BLAST RID <span className="font-mono">{searchRid}</span>.{' '}
+                      <a href={`https://blast.ncbi.nlm.nih.gov/Blast.cgi?CMD=Get&RID=${searchRid}`} target="_blank" rel="noopener noreferrer" className="underline">Check the results on NCBI</a>
+                      {' '}once the search finishes there.
+                    </p>
+                  )}
                 </div>
               </div>
             </div>
@@ -1664,7 +1698,7 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                   {(jobName && jobName !== 'Query') ? jobName : 'Search Analysis'} Completed
                 </h3>
                 <div className="mt-1 text-[13px] text-zinc-500 dark:text-zinc-400 font-mono tabular-nums flex flex-wrap gap-x-4 gap-y-1">
-                  <span>RID: <span className="text-zinc-700 dark:text-zinc-300">{blastMeta.rid}</span></span>
+                  <span>RID: <a href={`https://blast.ncbi.nlm.nih.gov/Blast.cgi?CMD=Get&RID=${blastMeta.rid}`} target="_blank" rel="noopener noreferrer" className="text-zinc-700 dark:text-zinc-300 underline">{blastMeta.rid}</a></span>
                   <span>Len: <span className="text-zinc-700 dark:text-zinc-300">{blastMeta.query_len} bp</span></span>
                   <span>Hits: <span className="text-zinc-700 dark:text-zinc-300">{blastHits.length}</span></span>
                   <span>Time: <span className="text-zinc-700 dark:text-zinc-300">~{blastMeta.rtoe}s</span></span>

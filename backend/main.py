@@ -10,7 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Literal, Optional
 from backend.alignment import run_msa
-from backend.blast import run_blast
+from backend.blast import ncbi_identity, run_blast
 from backend.genbank import fetch_genbank_features
 import json
 import threading as _threading
@@ -164,6 +164,10 @@ async def search_and_align(request: SearchRequest):
     if not request.sequence.strip():
         raise HTTPException(status_code=400, detail="Sequence cannot be empty.")
 
+    # Filled in by run_blast as soon as NCBI accepts the job, so the RID reaches the
+    # user while the search is still queued and is not lost if it later fails.
+    submitted = {}
+
     def run_heavy_pipeline():
         try:
             # Step 1: Run BLAST
@@ -175,10 +179,11 @@ async def search_and_align(request: SearchRequest):
                 e_value=request.e_value,
                 perc_identity=request.perc_identity,
                 filter_matches=request.filter_matches,
+                on_submit=lambda rid: submitted.update(rid=rid),
             )
 
             if not blast_hits and not filtered_hits:
-                return {"error": True, "detail": "No BLAST hits found."}
+                return {"error": True, "detail": "No BLAST hits found.", "rid": submitted.get("rid")}
 
             # Step 2: Prepare sequences for MSA (query + non-filtered hits + filtered hits)
             lines = request.sequence.strip().split("\n")
@@ -238,21 +243,30 @@ async def search_and_align(request: SearchRequest):
                 "num_hits": len(blast_hits),
             }
         except Exception as e:
-            return {"error": True, "detail": str(e)}
+            return {"error": True, "detail": str(e), "rid": submitted.get("rid")}
 
     async def generate_response():
         # Schedule the heavy blocking work on a background thread
         task = asyncio.create_task(asyncio.to_thread(run_heavy_pipeline))
-        
+        rid_sent = False
+        ticks = 0
+
         while not task.done():
-            # Yield a space character over the TCP stream to prevent Cloudflare Timeout
-            yield b" "
-            
-            # Wait 15 seconds or until the task finishes, whichever comes first
-            done, pending = await asyncio.wait([task], timeout=15.0)
+            # Announce the RID on its own "RID=..." line as soon as it exists; the
+            # frontend strips that line before parsing the final JSON.
+            if not rid_sent and submitted.get("rid"):
+                yield f"\nRID={submitted['rid']}\n".encode("utf-8")
+                rid_sent = True
+            # Yield a space character every 15 s over the TCP stream to prevent Cloudflare Timeout
+            if ticks % 15 == 0:
+                yield b" "
+            ticks += 1
+
+            done, pending = await asyncio.wait([task], timeout=1.0)
             if done:
                 break
-                
+
+
         # Send the finalized, perfectly formatted JSON string at the very end
         result = task.result()
         yield json.dumps(result).encode("utf-8")
@@ -284,7 +298,7 @@ def _run_ncbi_test(api_key: str) -> dict:
     result = {"eutils": None, "blast_submit": None, "rid": None}
 
     # Step 1: E-utilities, which also tells us whether the API key is accepted
-    params = {"db": "nucleotide", "retmode": "json"}
+    params = {"db": "nucleotide", "retmode": "json", **ncbi_identity()}
     if api_key:
         params["api_key"] = api_key
     t0 = time.monotonic()
@@ -309,6 +323,7 @@ def _run_ncbi_test(api_key: str) -> dict:
         "MEGABLAST": "on",
         "HITLIST_SIZE": "1",
         "QUERY": _NCBI_TEST_QUERY,
+        **ncbi_identity(),
     }
     if api_key:
         put["API_KEY"] = api_key
@@ -334,7 +349,7 @@ def _run_ncbi_test(api_key: str) -> dict:
 def _check_ncbi_test_job(rid: str) -> dict:
     """Ask NCBI once whether the test BLAST job has left the queue."""
     try:
-        r = requests.get(_NCBI_BLAST_URL, params={"CMD": "Get", "FORMAT_OBJECT": "SearchInfo", "RID": rid}, timeout=15)
+        r = requests.get(_NCBI_BLAST_URL, params={"CMD": "Get", "FORMAT_OBJECT": "SearchInfo", "RID": rid, **ncbi_identity()}, timeout=15)
         r.raise_for_status()
     except requests.RequestException as e:
         return {"ok": False, "seconds": _NCBI_TEST_QUEUE_WAIT, "detail": f"Status check failed: {e.__class__.__name__}"}

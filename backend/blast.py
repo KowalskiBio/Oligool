@@ -2,13 +2,23 @@
 BLAST search module using NCBI's BLAST REST API directly.
 Uses requests for more control over the submission/polling process.
 """
+import os
 import time
 import requests
 import xml.etree.ElementTree as ET
-from typing import List, Dict, Tuple, Optional
+from typing import Callable, List, Dict, Tuple, Optional
 
 
 BLAST_PUT_URL = "https://blast.ncbi.nlm.nih.gov/blast/Blast.cgi"
+
+
+def ncbi_identity() -> Dict[str, str]:
+    """`tool` and `email` parameters NCBI asks every BLAST API client to send.
+
+    Read at call time so values from the .env file (loaded by main.py) apply.
+    """
+    email = os.environ.get("NCBI_EMAIL") or os.environ.get("REPORT_NOTIFY_EMAIL", "rejtarv@sci.muni.cz")
+    return {"tool": "oligool", "email": email}
 
 
 def run_blast(
@@ -19,6 +29,7 @@ def run_blast(
     e_value: Optional[float] = None,
     perc_identity: Optional[float] = None,
     filter_matches: bool = False,
+    on_submit: Optional[Callable[[str], None]] = None,
 ) -> Tuple[List[Dict], Dict]:
     """
     Run NCBI BLAST search using the REST API and return top hits.
@@ -31,6 +42,8 @@ def run_blast(
         organism: Organism name or taxid to filter by (e.g. "human", "txid9606").
         e_value: E-value threshold.
         perc_identity: Percent identity threshold (0-100).
+        on_submit: Called with the RID as soon as NCBI accepts the job, so callers
+            can show it before the search finishes (or times out).
 
     Returns:
         Tuple[List[Dict], Dict]:
@@ -59,6 +72,7 @@ def run_blast(
         "HITLIST_SIZE": str(max_hits),
         "FORMAT_TYPE": "XML",
         "MEGABLAST": "on",  # Optimization: Use MEGABLAST for faster, high-identity matches
+        **ncbi_identity(),
     }
     if api_key:
         params["API_KEY"] = api_key
@@ -94,6 +108,8 @@ def run_blast(
         raise RuntimeError("Failed to submit BLAST job: no RID returned")
 
     print(f"[BLAST] Job submitted. RID={rid}, estimated wait={rtoe}s")
+    if on_submit:
+        on_submit(rid)
 
     # Step 2: Poll for results
     # Wait the estimated time first
@@ -107,6 +123,7 @@ def run_blast(
             "CMD": "Get",
             "FORMAT_OBJECT": "SearchInfo",
             "RID": rid,
+            **ncbi_identity(),
         }
         check_resp = requests.get(BLAST_PUT_URL, params=check_params)
         check_resp.raise_for_status()
@@ -128,6 +145,7 @@ def run_blast(
         "CMD": "Get",
         "FORMAT_TYPE": "XML",
         "RID": rid,
+        **ncbi_identity(),
     }
     result_resp = requests.get(BLAST_PUT_URL, params=result_params)
     result_resp.raise_for_status()
