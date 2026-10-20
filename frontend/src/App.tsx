@@ -211,6 +211,28 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
     ? parseInt(customHits, 10) || 50
     : maxHitsPreset === 'all' ? 5000 : parseInt(maxHitsPreset, 10);
 
+  type NcbiCheck = { ok: boolean; seconds: number; detail: string } | null;
+  const [ncbiTest, setNcbiTest] = useState<{
+    running: boolean;
+    error: string | null;
+    result: { eutils: NcbiCheck; blast_submit: NcbiCheck; blast_queue: NcbiCheck } | null;
+  }>({ running: false, error: null, result: null });
+
+  const runNcbiTest = async () => {
+    setNcbiTest({ running: true, error: null, result: null });
+    try {
+      const response = await fetch(((import.meta.env.VITE_API_BASE as string) || "") + '/ncbi/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ api_key: apiKey }),
+      });
+      if (!response.ok) throw new Error(`Server error ${response.status}`);
+      setNcbiTest({ running: false, error: null, result: await response.json() });
+    } catch (err) {
+      setNcbiTest({ running: false, error: err instanceof Error ? err.message : 'Test failed', result: null });
+    }
+  };
+
   const handleApiKeyChange = (val: string) => {
     setApiKey(val);
     if (val.trim()) {
@@ -917,6 +939,47 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                         <p className="text-[13px] text-zinc-500 dark:text-zinc-400">
                           Increases BLAST rate limit (3 → 10 req/s). Get from <a href="https://www.ncbi.nlm.nih.gov/account/settings/" target="_blank" rel="noopener noreferrer" className="text-accent-700 underline">NCBI Settings</a>.
                         </p>
+                        <div className="flex items-center gap-3">
+                          <button
+                            type="button"
+                            className="btn-secondary"
+                            onClick={runNcbiTest}
+                            disabled={ncbiTest.running}
+                          >
+                            {ncbiTest.running ? 'Testing…' : 'Test NCBI'}
+                          </button>
+                          <span className="text-[13px] text-zinc-500 dark:text-zinc-400">
+                            {ncbiTest.running
+                              ? 'Running a tiny BLAST search, up to about a minute.'
+                              : 'Checks the key and how long the BLAST queue takes.'}
+                          </span>
+                        </div>
+                        {ncbiTest.error && (
+                          <p className="text-[13px] text-red-600 dark:text-red-400">{ncbiTest.error}</p>
+                        )}
+                        {ncbiTest.result && (
+                          <ul className="space-y-1 text-[13px]">
+                            {([
+                              ['NCBI E-utilities', ncbiTest.result.eutils],
+                              ['BLAST submit', ncbiTest.result.blast_submit],
+                              ['BLAST queue', ncbiTest.result.blast_queue],
+                            ] as const).map(([label, check]) => (
+                              <li key={label} className="flex gap-2">
+                                <span
+                                  className={`w-3 shrink-0 font-semibold ${
+                                    !check ? 'text-zinc-400' : check.ok ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
+                                  }`}
+                                >
+                                  {!check ? '·' : check.ok ? '✓' : '✗'}
+                                </span>
+                                <span className="text-zinc-700 dark:text-zinc-300 font-medium w-32 shrink-0">{label}</span>
+                                <span className="text-zinc-500 dark:text-zinc-400">
+                                  {check ? check.detail : 'Skipped.'}
+                                </span>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
                       </div>
                       <div className="space-y-3">
                         <div className="flex items-center gap-3">
