@@ -41,7 +41,10 @@ if command -v npm >/dev/null 2>&1; then
   (cd frontend && npm install && npm run build)
 fi
 
-if command -v systemctl >/dev/null 2>&1 && systemctl list-unit-files | grep -q '^oligool\.service'; then
+# Do not pipe `systemctl list-unit-files` into `grep -q` here: grep exits on the
+# first match, systemctl dies of SIGPIPE, and under pipefail the whole check is
+# false, so the restart was silently skipped.
+if command -v systemctl >/dev/null 2>&1 && systemctl cat oligool.service >/dev/null 2>&1; then
   sudo systemctl restart oligool.service
 fi
 
