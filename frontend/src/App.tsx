@@ -223,8 +223,15 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
   })();
   const ncbiBlastUrl = 'https://blast.ncbi.nlm.nih.gov/Blast.cgi?PROGRAM=blastn&PAGE_TYPE=BlastSearch&LINK_LOC=blasthome'
     + (queryForNcbi ? `&QUERY=${encodeURIComponent(queryForNcbi)}` : '');
-  const searchDisabled = step !== 'input' || !input.trim()
-    || (blastSource === 'import' && !importRid.trim() && !importXml);
+  // Why the Search / Import button is disabled, shown next to it so a greyed-out button explains itself
+  const searchBlockedReason = !input.trim()
+    ? (blastSource === 'import'
+      ? 'Paste the query sequence you searched on NCBI. NCBI does not return it with the results.'
+      : 'Enter a query sequence.')
+    : blastSource === 'import' && !importRid.trim() && !importXml
+      ? 'Enter a RID or choose an XML file.'
+      : '';
+  const searchDisabled = step !== 'input' || !!searchBlockedReason;
 
   const maxHits = maxHitsPreset === 'custom'
     ? parseInt(customHits, 10) || 50
@@ -1525,7 +1532,7 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                     >
                       NCBI BLAST website
                     </a>
-                    {queryForNcbi ? ' (opens with your query filled in)' : ''}, then paste the RID shown at the top of the results page.
+                    {queryForNcbi ? ' (opens with your query filled in)' : ''}, then paste the RID shown at the top of the results page. Keep the same sequence in the Query Sequence box above: NCBI returns only the aligned parts, not the full query.
                     Organism and E-value are set on the website. NCBI keeps results for about 36 hours; after that, use Download All &gt; XML on the results page and upload the file.
                   </p>
                   <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1691,7 +1698,10 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                 </div>
               </div>
 
-              <div className="flex gap-3">
+              <div className="flex items-center gap-3 flex-wrap justify-end">
+                {step === 'input' && searchBlockedReason && (
+                  <span className="text-[13px] text-zinc-500 dark:text-zinc-400 max-w-xs text-right">{searchBlockedReason}</span>
+                )}
                 {step !== 'input' && (
                   <button
                     onClick={handleReset}
