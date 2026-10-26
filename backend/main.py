@@ -10,7 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Literal, Optional
 from backend.alignment import run_msa
-from backend.blast import ncbi_identity, run_blast
+from backend.blast import ncbi_identity, run_blast, import_blast_results, clean_query
 from backend.genbank import fetch_genbank_features
 import json
 import threading as _threading
@@ -154,100 +154,73 @@ class BlastHit(BaseModel):
     rank: Optional[int] = None
 
 
-@app.post("/search")
-async def search_and_align(request: SearchRequest):
-    """
-    Full pipeline: BLAST a query sequence, then run MSA on the top hits.
-    Uses StreamingResponse to send blank spaces periodically, keeping Cloudflare alive 
-    during 100+ second calculations.
-    """
-    if not request.sequence.strip():
-        raise HTTPException(status_code=400, detail="Sequence cannot be empty.")
+def _align_blast_results(sequence: str, blast_hits: list, blast_meta: dict, filtered_hits: list) -> dict:
+    """Run MSA on the query plus BLAST hits and build the /search response payload."""
+    if not blast_hits and not filtered_hits:
+        return {"error": True, "detail": "No BLAST hits found.", "rid": blast_meta.get("rid")}
 
-    # Filled in by run_blast as soon as NCBI accepts the job, so the RID reaches the
-    # user while the search is still queued and is not lost if it later fails.
-    submitted = {}
+    # Prepare sequences for MSA (query + non-filtered hits + filtered hits)
+    lines = sequence.strip().split("\n")
+    if lines[0].startswith(">"):
+        query_id = lines[0][1:].strip()
+        query_seq = "".join(l.strip() for l in lines[1:] if not l.startswith(">"))
+    else:
+        query_id = "Query"
+        query_seq = sequence.strip().replace(" ", "").replace("\n", "")
 
-    def run_heavy_pipeline():
-        try:
-            # Step 1: Run BLAST
-            blast_hits, blast_meta, filtered_hits = run_blast(
-                request.sequence,
-                max_hits=request.max_hits,
-                api_key=request.api_key,
-                organism=request.organism,
-                e_value=request.e_value,
-                perc_identity=request.perc_identity,
-                filter_matches=request.filter_matches,
-                on_submit=lambda rid: submitted.update(rid=rid),
-            )
+    msa_input = [{"id": query_id, "seq": query_seq}]
+    # 100% matches go immediately after the query so they appear first in the MSA
+    for hit in filtered_hits:
+        full_id = f"{hit['accession']} {hit['description']}"
+        msa_input.append({"id": full_id, "seq": hit["sequence"]})
+    for hit in blast_hits:
+        full_id = f"{hit['accession']} {hit['description']}"
+        msa_input.append({"id": full_id, "seq": hit["sequence"]})
 
-            if not blast_hits and not filtered_hits:
-                return {"error": True, "detail": "No BLAST hits found.", "rid": submitted.get("rid")}
+    alignment = run_msa(msa_input)
 
-            # Step 2: Prepare sequences for MSA (query + non-filtered hits + filtered hits)
-            lines = request.sequence.strip().split("\n")
-            if lines[0].startswith(">"):
-                query_id = lines[0][1:].strip()
-                query_seq = "".join(l.strip() for l in lines[1:] if not l.startswith(">"))
-            else:
-                query_id = "Query"
-                query_seq = request.sequence.strip().replace(" ", "").replace("\n", "")
-
-            msa_input = [{"id": query_id, "seq": query_seq}]
-            # 100% matches go immediately after the query so they appear first in the MSA
-            for hit in filtered_hits:
-                full_id = f"{hit['accession']} {hit['description']}"
-                msa_input.append({"id": full_id, "seq": hit["sequence"]})
-            for hit in blast_hits:
-                full_id = f"{hit['accession']} {hit['description']}"
-                msa_input.append({"id": full_id, "seq": hit["sequence"]})
-
-            # Step 3: Run MSA
-            alignment = run_msa(msa_input)
-
-            # Build hit summary for the frontend
-            hit_summary = [
-                {
-                    "accession": h["accession"],
-                    "description": h["description"],
-                    "evalue": h["evalue"],
-                    "identity": h["identity"],
-                    "query_cover": h["query_cover"],
-                    "sstart": h.get("sstart"),
-                    "send": h.get("send"),
-                    "rank": h.get("rank"),
-                }
-                for h in blast_hits
-            ]
-
-            filtered_summary = [
-                {
-                    "accession": h["accession"],
-                    "description": h["description"],
-                    "evalue": h["evalue"],
-                    "identity": h["identity"],
-                    "query_cover": h["query_cover"],
-                    "sstart": h.get("sstart"),
-                    "send": h.get("send"),
-                    "rank": h.get("rank"),
-                }
-                for h in filtered_hits
-            ]
-
-            return {
-                "blast_hits": hit_summary,
-                "filtered_hits": filtered_summary,
-                "blast_meta": blast_meta,
-                "alignment": alignment,
-                "num_hits": len(blast_hits),
+    def summarize(hits):
+        return [
+            {
+                "accession": h["accession"],
+                "description": h["description"],
+                "evalue": h["evalue"],
+                "identity": h["identity"],
+                "query_cover": h["query_cover"],
+                "sstart": h.get("sstart"),
+                "send": h.get("send"),
+                "rank": h.get("rank"),
             }
+            for h in hits
+        ]
+
+    return {
+        "blast_hits": summarize(blast_hits),
+        "filtered_hits": summarize(filtered_hits),
+        "blast_meta": blast_meta,
+        "alignment": alignment,
+        "num_hits": len(blast_hits),
+    }
+
+
+def _keepalive_json_response(work, submitted: Optional[dict] = None) -> StreamingResponse:
+    """
+    Run blocking `work()` on a thread and stream its JSON result.
+    Sends blank spaces periodically, keeping Cloudflare alive during 100+ second calculations.
+    `submitted` is filled in by run_blast as soon as NCBI accepts the job, so the RID reaches
+    the user while the search is still queued and is not lost if it later fails.
+    """
+    submitted = submitted if submitted is not None else {}
+
+    def safe_work():
+        try:
+            return work()
         except Exception as e:
             return {"error": True, "detail": str(e), "rid": submitted.get("rid")}
 
     async def generate_response():
         # Schedule the heavy blocking work on a background thread
-        task = asyncio.create_task(asyncio.to_thread(run_heavy_pipeline))
+        task = asyncio.create_task(asyncio.to_thread(safe_work))
         rid_sent = False
         ticks = 0
 
@@ -266,12 +239,77 @@ async def search_and_align(request: SearchRequest):
             if done:
                 break
 
-
         # Send the finalized, perfectly formatted JSON string at the very end
         result = task.result()
         yield json.dumps(result).encode("utf-8")
 
     return StreamingResponse(generate_response(), media_type="application/json")
+
+
+@app.post("/search")
+async def search_and_align(request: SearchRequest):
+    """Full pipeline: BLAST a query sequence, then run MSA on the top hits."""
+    if not request.sequence.strip():
+        raise HTTPException(status_code=400, detail="Sequence cannot be empty.")
+
+    submitted = {}
+
+    def run_heavy_pipeline():
+        blast_hits, blast_meta, filtered_hits = run_blast(
+            request.sequence,
+            max_hits=request.max_hits,
+            api_key=request.api_key,
+            organism=request.organism,
+            e_value=request.e_value,
+            perc_identity=request.perc_identity,
+            filter_matches=request.filter_matches,
+            on_submit=lambda rid: submitted.update(rid=rid),
+        )
+        return _align_blast_results(request.sequence, blast_hits, blast_meta, filtered_hits)
+
+    return _keepalive_json_response(run_heavy_pipeline, submitted)
+
+
+class ImportBlastRequest(BaseModel):
+    sequence: str
+    rid: Optional[str] = None
+    xml: Optional[str] = None
+    max_hits: int = 50
+    api_key: str = ""
+    perc_identity: Optional[float] = None
+    filter_matches: bool = False
+
+
+@app.post("/import-blast")
+async def import_blast_and_align(request: ImportBlastRequest):
+    """
+    Same as /search, but takes the results of a BLAST run done elsewhere (NCBI website):
+    either its RID, fetched from NCBI without queueing a new search, or a downloaded XML file.
+    """
+    if not request.sequence.strip():
+        raise HTTPException(status_code=400, detail="Sequence cannot be empty.")
+    if not (request.rid or "").strip() and not (request.xml or "").strip():
+        raise HTTPException(status_code=400, detail="Provide a BLAST RID or an XML results file.")
+
+    def run_import_pipeline():
+        blast_hits, blast_meta, filtered_hits = import_blast_results(
+            rid=(request.rid or "").strip() or None,
+            xml_text=request.xml,
+            max_hits=request.max_hits,
+            api_key=request.api_key,
+            perc_identity=request.perc_identity,
+            filter_matches=request.filter_matches,
+        )
+        query_len = len(clean_query(request.sequence))
+        if blast_meta["query_len"] and blast_meta["query_len"] != query_len:
+            # Not fatal: a query subrange set on NCBI changes the length too
+            blast_meta["warning"] = (
+                f"The BLAST results are for a {blast_meta['query_len']} bp query, but the sequence "
+                f"in Oligool is {query_len} bp. Check that the RID or file belongs to this sequence."
+            )
+        return _align_blast_results(request.sequence, blast_hits, blast_meta, filtered_hits)
+
+    return _keepalive_json_response(run_import_pipeline)
 
 
 class NcbiTestRequest(BaseModel):

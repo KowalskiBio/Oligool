@@ -3,6 +3,7 @@ BLAST search module using NCBI's BLAST REST API directly.
 Uses requests for more control over the submission/polling process.
 """
 import os
+import re
 import time
 import requests
 import xml.etree.ElementTree as ET
@@ -10,6 +11,7 @@ from typing import Callable, List, Dict, Tuple, Optional
 
 
 BLAST_PUT_URL = "https://blast.ncbi.nlm.nih.gov/blast/Blast.cgi"
+RID_PATTERN = re.compile(r"^[A-Z0-9]{8,14}$")
 
 
 def ncbi_identity() -> Dict[str, str]:
@@ -50,16 +52,7 @@ def run_blast(
             - List of hits (accession, description, evalue, identity, query_cover, sequence)
             - Metadata dict (rid, rtoe, query_len)
     """
-    # Clean the sequence: handle FASTA format
-    lines = sequence.strip().split("\n")
-    if lines[0].startswith(">"):
-        seq_lines = [l.strip() for l in lines[1:] if not l.startswith(">")]
-    else:
-        seq_lines = [l.strip() for l in lines]
-    clean_seq = "".join(seq_lines).replace(" ", "").upper()
-
-    if not clean_seq:
-        raise RuntimeError("No sequence data found in input.")
+    clean_seq = clean_query(sequence)
 
     print(f"[BLAST] Submitting {len(clean_seq)} bp query to NCBI...")
 
@@ -141,28 +134,11 @@ def run_blast(
         raise RuntimeError(f"BLAST search timed out after {max_polls * 10} seconds.")
 
     # Step 3: Fetch results in XML format
-    result_params = {
-        "CMD": "Get",
-        "FORMAT_TYPE": "XML",
-        "RID": rid,
-        **ncbi_identity(),
-    }
-    result_resp = requests.get(BLAST_PUT_URL, params=result_params)
-    result_resp.raise_for_status()
+    xml_text = fetch_blast_xml(rid)
 
     # Step 4: Parse the XML
-    hits, query_len = _parse_blast_xml(result_resp.text)
-
-    # Post-filter by % identity if requested
-    if perc_identity is not None:
-        print(f"[BLAST] Filtering by % identity >= {perc_identity}")
-        hits = [h for h in hits if h["identity"] >= perc_identity]
-
-    filtered_hits = []
-    if filter_matches:
-        print(f"[BLAST] Filtering out 100% exact matches")
-        filtered_hits = [h for h in hits if h["identity"] >= 100.0]
-        hits = [h for h in hits if h["identity"] < 100.0]
+    hits, query_len = _parse_blast_xml(xml_text)
+    hits, filtered_hits = filter_hits(hits, perc_identity, filter_matches)
 
     print(f"[BLAST] Returning {len(hits)} hits ({len(filtered_hits)} filtered)")
     metadata = {
@@ -173,6 +149,133 @@ def run_blast(
     return hits, metadata, filtered_hits
 
 
+def clean_query(sequence: str) -> str:
+    """Strip a FASTA header, whitespace and line breaks from a query sequence."""
+    lines = sequence.strip().split("\n")
+    if lines[0].startswith(">"):
+        seq_lines = [l.strip() for l in lines[1:] if not l.startswith(">")]
+    else:
+        seq_lines = [l.strip() for l in lines]
+    clean_seq = "".join(seq_lines).replace(" ", "").upper()
+
+    if not clean_seq:
+        raise RuntimeError("No sequence data found in input.")
+    return clean_seq
+
+
+def filter_hits(
+    hits: List[Dict],
+    perc_identity: Optional[float] = None,
+    filter_matches: bool = False,
+) -> Tuple[List[Dict], List[Dict]]:
+    """Apply the % identity floor and split off 100% matches. Returns (hits, filtered_hits)."""
+    if perc_identity is not None:
+        print(f"[BLAST] Filtering by % identity >= {perc_identity}")
+        hits = [h for h in hits if h["identity"] >= perc_identity]
+
+    filtered_hits = []
+    if filter_matches:
+        print(f"[BLAST] Filtering out 100% exact matches")
+        filtered_hits = [h for h in hits if h["identity"] >= 100.0]
+        hits = [h for h in hits if h["identity"] < 100.0]
+    return hits, filtered_hits
+
+
+def fetch_blast_xml(rid: str, api_key: str = "") -> str:
+    """Fetch finished results for an existing RID as BLAST XML."""
+    params = {
+        "CMD": "Get",
+        "FORMAT_TYPE": "XML",
+        "RID": rid,
+        **ncbi_identity(),
+    }
+    if api_key:
+        params["API_KEY"] = api_key
+    resp = requests.get(BLAST_PUT_URL, params=params, timeout=120)
+    resp.raise_for_status()
+    return resp.text
+
+
+def check_rid_status(rid: str, api_key: str = "") -> str:
+    """Return the NCBI status of a RID: READY, WAITING, FAILED or UNKNOWN (expired or invalid)."""
+    params = {
+        "CMD": "Get",
+        "FORMAT_OBJECT": "SearchInfo",
+        "RID": rid,
+        **ncbi_identity(),
+    }
+    if api_key:
+        params["API_KEY"] = api_key
+    resp = requests.get(BLAST_PUT_URL, params=params, timeout=30)
+    resp.raise_for_status()
+    for status in ("READY", "WAITING", "FAILED", "UNKNOWN"):
+        if f"Status={status}" in resp.text:
+            return status
+    return "UNKNOWN"
+
+
+def import_blast_results(
+    rid: Optional[str] = None,
+    xml_text: Optional[str] = None,
+    max_hits: int = 50,
+    api_key: str = "",
+    perc_identity: Optional[float] = None,
+    filter_matches: bool = False,
+) -> Tuple[List[Dict], Dict, List[Dict]]:
+    """
+    Load results of a BLAST search run elsewhere (e.g. on the NCBI website),
+    either by fetching its RID or from a downloaded XML file.
+    Returns the same (hits, metadata, filtered_hits) shape as run_blast.
+    """
+    if rid:
+        rid = rid.strip().upper()
+        if not RID_PATTERN.match(rid):
+            raise RuntimeError(f"'{rid}' does not look like a BLAST RID (e.g. 6H1AB2CD016).")
+        print(f"[BLAST] Importing results for RID={rid}")
+        status = check_rid_status(rid, api_key)
+        if status == "WAITING":
+            raise RuntimeError(f"BLAST search {rid} is still running on NCBI. Wait until the results page shows hits, then import again.")
+        if status == "FAILED":
+            raise RuntimeError(f"BLAST search {rid} failed on NCBI servers.")
+        if status == "UNKNOWN":
+            raise RuntimeError(f"NCBI does not know RID {rid}. Results expire about 36 hours after the search; download the XML file from the results page instead.")
+        xml_text = fetch_blast_xml(rid, api_key)
+    elif not xml_text or not xml_text.strip():
+        raise RuntimeError("Provide a BLAST RID or an XML results file.")
+
+    if "<BlastXML2" in xml_text[:2000]:
+        raise RuntimeError("This is a BLAST XML2 file. On the NCBI results page choose Download All > XML (not XML2).")
+
+    hits, query_len = _parse_blast_xml(xml_text)
+    info = _parse_blast_header(xml_text)
+
+    hits = hits[:max_hits]
+    hits, filtered_hits = filter_hits(hits, perc_identity, filter_matches)
+
+    print(f"[BLAST] Imported {len(hits)} hits ({len(filtered_hits)} filtered)")
+    metadata = {
+        "rid": rid or "",
+        "rtoe": 0,
+        "query_len": query_len,
+        "program": info.get("program", ""),
+        "database": info.get("database", ""),
+        "imported": True,
+    }
+    return hits, metadata, filtered_hits
+
+
+def _parse_blast_header(xml_text: str) -> Dict[str, str]:
+    """Read program and database from a BLAST XML header."""
+    try:
+        root = ET.fromstring(xml_text)
+    except ET.ParseError:
+        return {}
+    return {
+        "program": _get_text(root, "BlastOutput_program"),
+        "database": _get_text(root, "BlastOutput_db"),
+    }
+
+
 def _parse_blast_xml(xml_text: str) -> Tuple[List[Dict], int]:
     """Parse BLAST XML output and extract hit information."""
     hits = []
@@ -181,6 +284,8 @@ def _parse_blast_xml(xml_text: str) -> Tuple[List[Dict], int]:
         root = ET.fromstring(xml_text)
     except ET.ParseError:
         raise RuntimeError("Failed to parse BLAST XML response.")
+    if root.tag != "BlastOutput":
+        raise RuntimeError("Not a BLAST XML result (expected a <BlastOutput> document).")
 
     # Find query length
     query_len_el = root.find(".//BlastOutput_query-len")
@@ -188,7 +293,10 @@ def _parse_blast_xml(xml_text: str) -> Tuple[List[Dict], int]:
 
     # Iterate through hits
     rank = 0
-    for hit in root.findall(".//Hit"):
+    # Only the first query is used; a multi-query search would otherwise mix hits
+    iteration = root.find(".//Iteration")
+    hit_parent = iteration if iteration is not None else root
+    for hit in hit_parent.findall(".//Hit"):
         rank += 1
         hit_accession = _get_text(hit, "Hit_accession")
         hit_def = _get_text(hit, "Hit_def")

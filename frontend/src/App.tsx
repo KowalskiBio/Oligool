@@ -4,7 +4,7 @@ import QueryViewer, { type QueryViewerHandle, type ImportedSession } from './com
 import BlastResults from './components/BlastResults';
 import GameArcade from './components/GameArcade';
 import UserReport from './components/UserReport';
-import { downloadSession, parseSessionText, OLIGOOL_SESSION_APP, OLIGOOL_SESSION_VERSION, type OligoolSession, type FlankingPanelState, type FlankingPrimerSelection } from './utils/session';
+import { downloadSession, parseSessionText, OLIGOOL_SESSION_APP, OLIGOOL_SESSION_VERSION, type OligoolSession, type BlastMeta, type FlankingPanelState, type FlankingPrimerSelection } from './utils/session';
 import { parseSequenceHeader } from './utils/dna';
 import ResultsNav from './components/ResultsNav';
 import { getStructureRenderer, setStructureRenderer, getStructureColor, setStructureColor, type StructureRendererMode, type StructureColorMode } from './utils/structureRenderer';
@@ -37,7 +37,7 @@ function App() {
   const [blastHits, setBlastHits] = useState<BlastHit[]>([]);
   const [filteredHits, setFilteredHits] = useState<BlastHit[]>([]);
   const [showMatches, setShowMatches] = useState(false);
-  const [blastMeta, setBlastMeta] = useState<{ rid: string; rtoe: number; query_len: number } | null>(null);
+  const [blastMeta, setBlastMeta] = useState<BlastMeta | null>(null);
   const [alignment, setAlignment] = useState('');
   const [selectedSequence, setSelectedSequence] = useState<{ id: string; seq: string; start: number; end: number; fullSeq?: string; ungappedOffset?: number } | null>(null);
   const [error, setError] = useState('');
@@ -74,6 +74,10 @@ function App() {
   const [eValue, setEValue] = useState(() => localStorage.getItem('e_value') || '0.05');
   const [percIdentity, setPercIdentity] = useState(() => localStorage.getItem('perc_identity') || '0');
   const [filterMatches, setFilterMatches] = useState(() => localStorage.getItem('filter_matches') === 'true');
+  // 'run': Oligool submits the BLAST job; 'import': results of a search the user ran on the NCBI website
+  const [blastSource, setBlastSource] = useState<'run' | 'import'>(() => localStorage.getItem('blast_source') === 'import' ? 'import' : 'run');
+  const [importRid, setImportRid] = useState('');
+  const [importXml, setImportXml] = useState<{ name: string; text: string } | null>(null);
 
   const [wallpaperUrl, setWallpaperUrl] = useState(() => localStorage.getItem('wallpaper_url') || '');
   const [wallpaperOpacity, setWallpaperOpacity] = useState(() => {
@@ -174,6 +178,7 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
   useEffect(() => { localStorage.setItem('e_value', eValue); }, [eValue]);
   useEffect(() => { localStorage.setItem('perc_identity', percIdentity); }, [percIdentity]);
   useEffect(() => { localStorage.setItem('filter_matches', filterMatches.toString()); }, [filterMatches]);
+  useEffect(() => { localStorage.setItem('blast_source', blastSource); }, [blastSource]);
   useEffect(() => { localStorage.setItem('max_hits_preset', maxHitsPreset); }, [maxHitsPreset]);
   useEffect(() => { localStorage.setItem('custom_hits', customHits); }, [customHits]);
   useEffect(() => { localStorage.setItem('job_name', jobName); }, [jobName]);
@@ -209,6 +214,17 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
     window.addEventListener('idt-mg-change', handler);
     return () => window.removeEventListener('idt-mg-change', handler);
   }, []);
+
+  // Raw query for prefilling NCBI web BLAST; long queries are left out to keep the URL sane
+  const queryForNcbi = (() => {
+    const lines = input.trim().split('\n');
+    const seq = (lines[0]?.startsWith('>') ? lines.slice(1) : lines).join('').replace(/\s/g, '');
+    return seq.length > 0 && seq.length <= 6000 ? seq : '';
+  })();
+  const ncbiBlastUrl = 'https://blast.ncbi.nlm.nih.gov/Blast.cgi?PROGRAM=blastn&PAGE_TYPE=BlastSearch&LINK_LOC=blasthome'
+    + (queryForNcbi ? `&QUERY=${encodeURIComponent(queryForNcbi)}` : '');
+  const searchDisabled = step !== 'input' || !input.trim()
+    || (blastSource === 'import' && !importRid.trim() && !importXml);
 
   const maxHits = maxHitsPreset === 'custom'
     ? parseInt(customHits, 10) || 50
@@ -333,10 +349,24 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
         throw new Error('Please enter a sequence.');
       }
 
-      const response = await fetch(((import.meta.env.VITE_API_BASE as string) || "") + '/search', {
+      const isImport = blastSource === 'import';
+      if (isImport && !importRid.trim() && !importXml) {
+        throw new Error('Enter the RID of your NCBI BLAST search or upload its XML file.');
+      }
+
+      const response = await fetch(((import.meta.env.VITE_API_BASE as string) || "") + (isImport ? '/import-blast' : '/search'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+        body: JSON.stringify(isImport ? {
+          sequence,
+          // A typed RID wins over an uploaded file
+          rid: importRid.trim() || undefined,
+          xml: importRid.trim() ? undefined : importXml?.text,
+          max_hits: maxHits,
+          api_key: apiKey.trim(),
+          perc_identity: parseFloat(percIdentity) || undefined,
+          filter_matches: filterMatches,
+        } : {
           sequence,
           max_hits: maxHits,
           api_key: apiKey.trim(),
@@ -1457,8 +1487,96 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
               value={genbankHeader}
               onChange={(e) => setGenbankHeader(e.target.value)}
             />
+            {/* BLAST source */}
+            <div className="mt-4 border-t border-zinc-200 dark:border-zinc-800 pt-4">
+              <div className="flex items-center gap-2 flex-wrap">
+                <label className="text-[13px] font-medium text-zinc-500 dark:text-zinc-400">BLAST:</label>
+                <div className="flex rounded-md overflow-hidden border border-zinc-300 dark:border-zinc-700">
+                  {([
+                    { value: 'run', label: 'Run in Oligool' },
+                    { value: 'import', label: 'Import from NCBI website' },
+                  ] as const).map((opt, i) => (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => setBlastSource(opt.value)}
+                      disabled={step !== 'input'}
+                      className={`px-2.5 py-1 text-[13px] font-medium transition-colors disabled:opacity-50 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent-700 dark:focus-visible:outline-accent-300 ${i > 0 ? 'border-l border-zinc-300 dark:border-zinc-700' : ''
+                        } ${blastSource === opt.value
+                          ? 'bg-accent-700/10 dark:bg-accent-300/10 text-accent-800 dark:text-accent-200'
+                          : 'bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700'
+                        }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {blastSource === 'import' && (
+                <div className="mt-3 rounded-md border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-800/40 p-3">
+                  <p className="text-[13px] text-zinc-600 dark:text-zinc-400">
+                    Run blastn on the{' '}
+                    <a
+                      href={ncbiBlastUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-accent-700 dark:text-accent-300 underline"
+                    >
+                      NCBI BLAST website
+                    </a>
+                    {queryForNcbi ? ' (opens with your query filled in)' : ''}, then paste the RID shown at the top of the results page.
+                    Organism and E-value are set on the website. NCBI keeps results for about 36 hours; after that, use Download All &gt; XML on the results page and upload the file.
+                  </p>
+                  <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label htmlFor="import-rid" className="block text-[13px] font-semibold text-zinc-500 dark:text-zinc-400 mb-1">RID</label>
+                      <input
+                        id="import-rid"
+                        type="text"
+                        value={importRid}
+                        onChange={(e) => setImportRid(e.target.value)}
+                        disabled={step !== 'input'}
+                        placeholder="e.g. 6H1AB2CD016"
+                        spellCheck={false}
+                        className="input font-mono text-[13px] uppercase placeholder-zinc-400 dark:placeholder-zinc-500"
+                      />
+                    </div>
+                    <div>
+                      <label htmlFor="import-xml" className="block text-[13px] font-semibold text-zinc-500 dark:text-zinc-400 mb-1">or XML file</label>
+                      <div className="flex items-center gap-2">
+                        <input
+                          id="import-xml"
+                          type="file"
+                          accept=".xml,text/xml,application/xml"
+                          disabled={step !== 'input'}
+                          onChange={async (e) => {
+                            const file = e.target.files?.[0];
+                            e.target.value = ''; // allow re-picking the same file
+                            if (!file) return;
+                            setImportXml({ name: file.name, text: await file.text() });
+                          }}
+                          className="block w-full text-[13px] text-zinc-600 dark:text-zinc-300 file:mr-2 file:px-2.5 file:py-1 file:rounded-md file:border file:border-zinc-300 dark:file:border-zinc-700 file:bg-white dark:file:bg-zinc-800 file:text-[13px] file:font-medium file:text-zinc-700 dark:file:text-zinc-200"
+                        />
+                      </div>
+                      {importXml && (
+                        <p className="mt-1 text-[13px] text-zinc-600 dark:text-zinc-400 flex items-center gap-2">
+                          <span className="font-mono truncate">{importXml.name}</span>
+                          <button type="button" onClick={() => setImportXml(null)} className="text-accent-700 dark:text-accent-300 underline shrink-0">Remove</button>
+                        </p>
+                      )}
+                      {importXml && importRid.trim() && (
+                        <p className="mt-1 text-[13px] text-amber-700 dark:text-amber-300">The RID is used; clear it to import the file.</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
             {/* ... filters ... */}
-            <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4 border-t border-zinc-200 dark:border-zinc-800 pt-4">
+            <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4">
+              {blastSource === 'run' && (<>
               {/* Organism Filter */}
               <div>
                 <label className="block text-[13px] font-semibold text-zinc-500 dark:text-zinc-400 mb-1">Organism (Optional)</label>
@@ -1485,6 +1603,7 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                   className="input px-2 py-1 text-[13px] font-mono tabular-nums"
                 />
               </div>
+              </>)}
 
               {/* % Identity Threshold */}
               <div>
@@ -1591,13 +1710,13 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                 )}
                 <button
                   onClick={handleSearch}
-                  disabled={step !== 'input' || !input.trim()}
-                  className={`px-5 py-2 text-sm font-medium rounded-md text-white transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent-700 dark:focus-visible:outline-accent-300 ${step !== 'input' || !input.trim()
+                  disabled={searchDisabled}
+                  className={`px-5 py-2 text-sm font-medium rounded-md text-white transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent-700 dark:focus-visible:outline-accent-300 ${searchDisabled
                     ? 'bg-zinc-300 dark:bg-zinc-800 dark:text-zinc-500 cursor-not-allowed'
                     : 'bg-zinc-900 hover:bg-zinc-700 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300'
                     }`}
                 >
-                  Search &amp; Align
+                  {blastSource === 'import' ? <>Import &amp; Align</> : <>Search &amp; Align</>}
                 </button>
               </div>
             </div>
@@ -1610,7 +1729,9 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
               <div className="flex flex-col items-center justify-center gap-2 mb-8 animate-pulse duration-1000">
                 <div className="flex items-center gap-3 text-zinc-500 dark:text-zinc-400 font-mono text-sm">
                   <div className="w-5 h-5 border-2 border-zinc-300 dark:border-zinc-600 border-t-zinc-700 dark:border-t-zinc-300 rounded-full animate-spin"></div>
-                  {step === 'blasting' ? 'Running BLAST search and collecting homologs...' : 'Finalizing MAFFT alignment...'}
+                  {step === 'blasting'
+                    ? (blastSource === 'import' ? 'Loading BLAST results from NCBI...' : 'Running BLAST search and collecting homologs...')
+                    : 'Finalizing MAFFT alignment...'}
                   <span className="font-semibold text-accent-700 ml-2">
                     {Math.floor(elapsedSeconds / 60)}:{(elapsedSeconds % 60).toString().padStart(2, '0')} elapsed
                   </span>
@@ -1698,11 +1819,20 @@ const [flankingPanelState, setFlankingPanelState] = useState<FlankingPanelState 
                   {(jobName && jobName !== 'Query') ? jobName : 'Search Analysis'} Completed
                 </h3>
                 <div className="mt-1 text-[13px] text-zinc-500 dark:text-zinc-400 font-mono tabular-nums flex flex-wrap gap-x-4 gap-y-1">
-                  <span>RID: <a href={`https://blast.ncbi.nlm.nih.gov/Blast.cgi?CMD=Get&RID=${blastMeta.rid}`} target="_blank" rel="noopener noreferrer" className="text-zinc-700 dark:text-zinc-300 underline">{blastMeta.rid}</a></span>
+                  <span>RID: {blastMeta.rid
+                    ? <a href={`https://blast.ncbi.nlm.nih.gov/Blast.cgi?CMD=Get&RID=${blastMeta.rid}`} target="_blank" rel="noopener noreferrer" className="text-zinc-700 dark:text-zinc-300 underline">{blastMeta.rid}</a>
+                    : <span className="text-zinc-700 dark:text-zinc-300">none (XML file)</span>}</span>
                   <span>Len: <span className="text-zinc-700 dark:text-zinc-300">{blastMeta.query_len} bp</span></span>
                   <span>Hits: <span className="text-zinc-700 dark:text-zinc-300">{blastHits.length}</span></span>
-                  <span>Time: <span className="text-zinc-700 dark:text-zinc-300">~{blastMeta.rtoe}s</span></span>
+                  {blastMeta.imported ? (
+                    <span>Source: <span className="text-zinc-700 dark:text-zinc-300">NCBI web{blastMeta.program ? `, ${blastMeta.program}` : ''}{blastMeta.database ? ` / ${blastMeta.database}` : ''}</span></span>
+                  ) : (
+                    <span>Time: <span className="text-zinc-700 dark:text-zinc-300">~{blastMeta.rtoe}s</span></span>
+                  )}
                 </div>
+                {blastMeta.warning && (
+                  <p className="mt-1 text-[13px] text-amber-700 dark:text-amber-300">{blastMeta.warning}</p>
+                )}
               </div>
               <div className="flex items-center gap-3">
                 <button

@@ -27,6 +27,11 @@ export interface BlastMeta {
     rid: string;
     rtoe: number;
     query_len: number;
+    /** Set when results were imported from an NCBI web search (RID or XML file). */
+    imported?: boolean;
+    program?: string;
+    database?: string;
+    warning?: string;
 }
 
 /** Absolute (1-indexed, gapped-column) coordinates locking the current oligo pair. */
